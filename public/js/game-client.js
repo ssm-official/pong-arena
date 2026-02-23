@@ -1,15 +1,18 @@
 // ===========================================
 // Game Client — Canvas rendering + input
 // ===========================================
-// Server-authoritative positions. Your paddle snaps to server state
-// (no lerp = no artificial delay). Opponent paddle + ball use lerp
-// to smooth out network jitter. Server sends at 60fps.
+// Your paddle: client-side prediction with offset reconciliation.
+//   - Moves instantly on input (no waiting for server round-trip)
+//   - Server updates adjust the offset so prediction stays in sync
+//   - Both players see nearly identical positions
+// Opponent paddle + ball: server state with lerp (smooth jitter).
 
 const GameClient = (() => {
   const CANVAS_W = 800;
   const CANVAS_H = 600;
   const PADDLE_W = 14;
   const PADDLE_H = 110;
+  const PADDLE_SPEED = 10;
   const BALL_SIZE = 12;
   const SERVER_TICK_MS = 1000 / 60;
   const REMOTE_LERP = 0.4;
@@ -25,21 +28,21 @@ const GameClient = (() => {
   let lastFrameTime = 0;
   let skinConfig = { paddle: '#a855f7', ball: '#ffffff', background: '#0f0f2a' };
 
-  // Your paddle: direct from server, no smoothing
-  let myPaddleY = CANVAS_H / 2 - PADDLE_H / 2;
+  // --- Your paddle: prediction with offset reconciliation ---
+  let serverMyY = CANVAS_H / 2 - PADDLE_H / 2;  // last known server position
+  let myOffset = 0;  // prediction offset (local movement since last server update)
 
-  // Opponent paddle: lerped for smooth display
+  // --- Opponent paddle: lerped ---
   let remoteTargetY = CANVAS_H / 2 - PADDLE_H / 2;
   let remoteDisplayY = CANVAS_H / 2 - PADDLE_H / 2;
 
-  // Ball: lerped
+  // --- Ball: lerped ---
   let ballTarget = { x: CANVAS_W / 2, y: CANVAS_H / 2 };
   let ballDisplay = { x: CANVAS_W / 2, y: CANVAS_H / 2 };
 
   let displayScore = { p1: 0, p2: 0 };
   let isPaused = false;
 
-  // Input tracking
   const keys = {};
   let currentInput = 'stop';
 
@@ -54,7 +57,8 @@ const GameClient = (() => {
     gameId = gId;
     amPlayer1 = (myWallet === player1Wallet);
     const mid = CANVAS_H / 2 - PADDLE_H / 2;
-    myPaddleY = mid;
+    serverMyY = mid;
+    myOffset = 0;
     remoteTargetY = mid;
     remoteDisplayY = mid;
     ballTarget = { x: CANVAS_W / 2, y: CANVAS_H / 2 };
@@ -72,13 +76,23 @@ const GameClient = (() => {
     displayScore = state.score;
     isPaused = state.paused;
 
-    // YOUR paddle: snap directly to server position (no lerp, no delay)
-    myPaddleY = amPlayer1 ? state.paddle1.y : state.paddle2.y;
+    // --- Reconcile your paddle prediction ---
+    const newServerY = amPlayer1 ? state.paddle1.y : state.paddle2.y;
+    // Subtract the server's movement from our offset.
+    // If server moved 10px down and we predicted 10px down, offset stays ~0.
+    // If server hasn't received our input yet (moved 0), offset stays as-is.
+    myOffset -= (newServerY - serverMyY);
+    serverMyY = newServerY;
 
-    // Opponent paddle: set target for lerp
+    // If offset is unreasonably large (bad latency spike), decay it fast
+    if (Math.abs(myOffset) > 50) {
+      myOffset *= 0.3;
+    }
+
+    // Opponent paddle target
     remoteTargetY = amPlayer1 ? state.paddle2.y : state.paddle1.y;
 
-    // Ball: set target for lerp
+    // Ball target
     ballTarget.x = state.ball.x;
     ballTarget.y = state.ball.y;
   }
@@ -88,7 +102,6 @@ const GameClient = (() => {
     lastFrameTime = 0;
     animFrameId = requestAnimationFrame(renderLoop);
 
-    // Send input heartbeat every 33ms (~30fps) for reliability
     if (inputInterval) clearInterval(inputInterval);
     inputInterval = setInterval(() => {
       if (window.socket && gameId) {
@@ -106,20 +119,28 @@ const GameClient = (() => {
     if (!lastFrameTime) lastFrameTime = timestamp;
     const delta = timestamp - lastFrameTime;
     lastFrameTime = timestamp;
-
     const ticks = Math.min(delta / SERVER_TICK_MS, 4);
 
-    // Lerp opponent paddle and ball (frame-rate independent)
-    const rLerp = 1 - Math.pow(1 - REMOTE_LERP, ticks);
-    const bLerp = 1 - Math.pow(1 - BALL_LERP, ticks);
+    // --- Your paddle: add local prediction to offset ---
+    if (currentInput === 'up') {
+      myOffset -= PADDLE_SPEED * ticks;
+    } else if (currentInput === 'down') {
+      myOffset += PADDLE_SPEED * ticks;
+    }
 
+    // Display = server position + prediction offset, clamped to bounds
+    const myDisplayY = Math.max(0, Math.min(CANVAS_H - PADDLE_H, serverMyY + myOffset));
+
+    // --- Opponent paddle: lerp ---
+    const rLerp = 1 - Math.pow(1 - REMOTE_LERP, ticks);
     remoteDisplayY = lerp(remoteDisplayY, remoteTargetY, rLerp);
+
+    // --- Ball: lerp ---
+    const bLerp = 1 - Math.pow(1 - BALL_LERP, ticks);
     ballDisplay.x = lerp(ballDisplay.x, ballTarget.x, bLerp);
     ballDisplay.y = lerp(ballDisplay.y, ballTarget.y, bLerp);
 
-    // Your paddle: no lerp, just use myPaddleY directly from server
-
-    render();
+    render(myDisplayY);
     animFrameId = requestAnimationFrame(renderLoop);
   }
 
@@ -127,7 +148,7 @@ const GameClient = (() => {
     return a + (b - a) * t;
   }
 
-  function render() {
+  function render(myDisplayY) {
     if (!ctx) return;
 
     ctx.fillStyle = skinConfig.background;
@@ -150,10 +171,9 @@ const GameClient = (() => {
     ctx.fillText(displayScore.p1, CANVAS_W / 4, CANVAS_H / 2 + 50);
     ctx.fillText(displayScore.p2, (CANVAS_W * 3) / 4, CANVAS_H / 2 + 50);
 
-    // Paddle positions
-    const p1Y = amPlayer1 ? myPaddleY : remoteDisplayY;
-    const p2Y = amPlayer1 ? remoteDisplayY : myPaddleY;
-
+    // Paddles
+    const p1Y = amPlayer1 ? myDisplayY : remoteDisplayY;
+    const p2Y = amPlayer1 ? remoteDisplayY : myDisplayY;
     drawPaddle(10, p1Y, amPlayer1);
     drawPaddle(CANVAS_W - PADDLE_W - 10, p2Y, !amPlayer1);
 
@@ -211,7 +231,6 @@ const GameClient = (() => {
     ctx.fillText('Get Ready!', CANVAS_W / 2, CANVAS_H / 2 + 90);
   }
 
-  // ---- Input Handling ----
   function setupInput() {
     document.addEventListener('keydown', (e) => {
       if (!gameId) return;
@@ -221,7 +240,6 @@ const GameClient = (() => {
       keys[e.key] = true;
       sendInput();
     });
-
     document.addEventListener('keyup', (e) => {
       if (!gameId) return;
       keys[e.key] = false;
@@ -247,6 +265,7 @@ const GameClient = (() => {
     gameId = null;
     currentInput = 'stop';
     lastFrameTime = 0;
+    myOffset = 0;
     Object.keys(keys).forEach(k => keys[k] = false);
   }
 
