@@ -15,8 +15,8 @@ const GameClient = (() => {
   const PADDLE_SPEED = 10;
   const BALL_SIZE = 12;
   const SERVER_TICK_MS = 1000 / 60;
-  const REMOTE_LERP = 0.4;
-  const BALL_LERP = 0.5;
+  const REMOTE_LERP = 0.6;   // faster catch-up for opponent paddle
+  const BALL_LERP = 0.7;     // ball should track server closely
 
   let canvas = null;
   let ctx = null;
@@ -89,10 +89,8 @@ const GameClient = (() => {
     myOffset -= (newServerY - serverMyY);
     serverMyY = newServerY;
 
-    // If offset is unreasonably large (bad latency spike), decay it fast
-    if (Math.abs(myOffset) > 50) {
-      myOffset *= 0.3;
-    }
+    // Smoothly decay offset toward zero (reconcile prediction with server)
+    myOffset *= 0.85;
 
     // Opponent paddle target
     remoteTargetY = amPlayer1 ? state.paddle2.y : state.paddle1.y;

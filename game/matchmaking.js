@@ -110,10 +110,15 @@ function setupMatchmaking(io, socket, onlineUsers, activeGames) {
       activeGames.set(gameId, game);
       await Match.findOneAndUpdate({ gameId }, { status: 'in-progress' });
 
-      io.to(pending.player1.socketId).emit('game-countdown', { gameId, seconds: 3 });
-      io.to(pending.player2.socketId).emit('game-countdown', { gameId, seconds: 3 });
+      const countdownData = {
+        gameId, seconds: 10, tier: pending.tier,
+        player1: { wallet: pending.player1.wallet, username: pending.player1.username },
+        player2: { wallet: pending.player2.wallet, username: pending.player2.username },
+      };
+      io.to(pending.player1.socketId).emit('game-countdown', countdownData);
+      io.to(pending.player2.socketId).emit('game-countdown', countdownData);
 
-      setTimeout(() => game.start(), 3000);
+      setTimeout(() => game.start(), 10000);
     }
   });
 
@@ -172,10 +177,15 @@ async function createMatch(io, player1, player2, tier, activeGames) {
     const game = new PongEngine(gameId, player1, player2, tier, io, activeGames);
     activeGames.set(gameId, game);
 
-    io.to(player1.socketId).emit('game-countdown', { gameId, seconds: 3 });
-    io.to(player2.socketId).emit('game-countdown', { gameId, seconds: 3 });
+    const countdownData = {
+      gameId, seconds: 10, tier,
+      player1: { wallet: player1.wallet, username: player1.username },
+      player2: { wallet: player2.wallet, username: player2.username },
+    };
+    io.to(player1.socketId).emit('game-countdown', countdownData);
+    io.to(player2.socketId).emit('game-countdown', countdownData);
 
-    setTimeout(() => game.start(), 3000);
+    setTimeout(() => game.start(), 10000);
     return;
   }
 

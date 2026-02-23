@@ -523,30 +523,51 @@ function pickSide(side) {
   }
 }
 
-// Socket: Game countdown
+// Socket: Game countdown (10s intermission)
 socket.on('game-countdown', (data) => {
   showMatchmakingState('game');
   GameClient.setGameInfo(data.gameId, null); // will be set on game-start
 
-  // Reset side picker to left (default) and show it
+  // Reset side picker to left (default)
   isMirrored = false;
   GameClient.setMirrored(false);
   pickSide('left');
-  document.getElementById('side-picker').classList.remove('hidden');
+
+  // Show intermission overlay with opponent info + side picker
+  const intermission = document.getElementById('intermission-info');
+  const sidePicker = document.getElementById('side-picker');
+  if (intermission && data.player1 && data.player2) {
+    const me = currentUser.wallet === data.player1.wallet ? data.player1 : data.player2;
+    const opp = currentUser.wallet === data.player1.wallet ? data.player2 : data.player1;
+    document.getElementById('intermission-you').textContent = me.username;
+    document.getElementById('intermission-opp').textContent = opp.username;
+    document.getElementById('intermission-tier').textContent =
+      (data.tier || '').toUpperCase() + ' TIER';
+    intermission.classList.remove('hidden');
+    if (sidePicker) sidePicker.classList.remove('hidden');
+  }
 
   let sec = data.seconds;
-  const countdownInterval = setInterval(() => {
+  const countdownEl = document.getElementById('intermission-countdown');
+  function updateCountdown() {
     GameClient.renderCountdown(sec);
+    if (countdownEl) countdownEl.textContent = sec;
     sec--;
-    if (sec < 0) clearInterval(countdownInterval);
-  }, 1000);
+    if (sec < 0) {
+      clearInterval(countdownInterval);
+      if (intermission) intermission.classList.add('hidden');
+    }
+  }
+  updateCountdown();
+  const countdownInterval = setInterval(updateCountdown, 1000);
 });
 
 // Socket: Game starts
 socket.on('game-start', (data) => {
   currentGameId = data.gameId;
   showMatchmakingState('game');
-  document.getElementById('side-picker').classList.add('hidden');
+  const intermission = document.getElementById('intermission-info');
+  if (intermission) intermission.classList.add('hidden');
   GameClient.setGameInfo(data.gameId, data.player1.wallet);
 
   // Swap player name labels based on side choice
@@ -619,7 +640,8 @@ socket.on('game-forfeit', (data) => {
 function backToMatchmaking() {
   currentGameId = null;
   isMirrored = false;
-  document.getElementById('side-picker').classList.add('hidden');
+  const intermission = document.getElementById('intermission-info');
+  if (intermission) intermission.classList.add('hidden');
   showMatchmakingState('select');
 }
 

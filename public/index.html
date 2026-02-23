@@ -176,18 +176,39 @@
           </div>
         </div>
 
-        <!-- Side Picker (shown during countdown) -->
-        <div id="side-picker" class="hidden text-center py-4">
-          <p class="text-gray-400 text-sm mb-3">Choose your side</p>
-          <div class="flex justify-center gap-3">
-            <button onclick="pickSide('left')" id="btn-side-left"
-              class="bg-purple-600 hover:bg-purple-700 px-5 py-2 rounded-lg text-sm font-medium transition border-2 border-purple-500">
-              Left Side
-            </button>
-            <button onclick="pickSide('right')" id="btn-side-right"
-              class="bg-gray-700 hover:bg-gray-600 px-5 py-2 rounded-lg text-sm font-medium transition border-2 border-transparent">
-              Right Side
-            </button>
+        <!-- Intermission (10s before game starts) -->
+        <div id="intermission-info" class="hidden text-center py-6">
+          <div class="bg-arena-card rounded-xl px-8 py-6 max-w-lg mx-auto glow-border">
+            <p id="intermission-tier" class="text-xs text-purple-400 uppercase tracking-widest mb-4">LOW TIER</p>
+            <div class="flex items-center justify-center gap-6 mb-4">
+              <div>
+                <p class="text-lg font-bold text-purple-400" id="intermission-you">You</p>
+                <p class="text-xs text-gray-500">YOU</p>
+              </div>
+              <span class="text-2xl font-bold text-gray-600">VS</span>
+              <div>
+                <p class="text-lg font-bold text-pink-400" id="intermission-opp">Opponent</p>
+                <p class="text-xs text-gray-500">OPPONENT</p>
+              </div>
+            </div>
+            <div class="mb-4">
+              <span class="text-4xl font-bold text-white" id="intermission-countdown">10</span>
+              <p class="text-gray-500 text-xs mt-1">Game starts in...</p>
+            </div>
+            <!-- Side Picker -->
+            <div id="side-picker" class="hidden pt-3 border-t border-gray-800">
+              <p class="text-gray-400 text-sm mb-3">Choose your side</p>
+              <div class="flex justify-center gap-3">
+                <button onclick="pickSide('left')" id="btn-side-left"
+                  class="bg-purple-600 hover:bg-purple-700 px-5 py-2 rounded-lg text-sm font-medium transition border-2 border-purple-500">
+                  Left Side
+                </button>
+                <button onclick="pickSide('right')" id="btn-side-right"
+                  class="bg-gray-700 hover:bg-gray-600 px-5 py-2 rounded-lg text-sm font-medium transition border-2 border-transparent">
+                  Right Side
+                </button>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -316,8 +337,8 @@
   <!-- ============ SCRIPTS ============ -->
   <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@solana/web3.js@1.87.6/lib/index.iife.min.js"></script>
-  <script src="/js/wallet.js?v=13"></script>
-  <script src="/js/game-client.js?v=13"></script>
-  <script src="/js/app.js?v=13"></script>
+  <script src="/js/wallet.js?v=14"></script>
+  <script src="/js/game-client.js?v=14"></script>
+  <script src="/js/app.js?v=14"></script>
 </body>
 </html>
