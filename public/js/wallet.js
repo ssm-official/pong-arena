@@ -56,45 +56,37 @@ const WalletManager = (() => {
 
   /**
    * Sign and send a serialized transaction (for escrow/purchases).
-   * Returns the transaction signature.
+   * Uses Phantom's signAndSendTransaction with raw bytes via the request method.
+   * Returns the transaction signature string.
    */
   async function signAndSendTransaction(serializedTxBase64) {
     if (!provider) throw new Error('Wallet not connected');
 
-    // Deserialize the transaction
+    // Decode base64 to Uint8Array
     const txBytes = Uint8Array.from(atob(serializedTxBase64), c => c.charCodeAt(0));
 
-    // Use provider to sign and send
-    const { signature } = await provider.signAndSendTransaction(
-      // Phantom expects a Transaction-like object or raw bytes
-      // We'll create a versioned transaction from the bytes
-      (() => {
-        // Create a transaction object that Phantom can handle
-        const tx = { serialize: () => txBytes };
-        return tx;
-      })()
-    );
+    // Use Phantom's lower-level request API which accepts raw transaction bytes
+    const { signature } = await provider.request({
+      method: 'signAndSendTransaction',
+      params: {
+        message: serializedTxBase64,  // Phantom accepts base64 directly
+      }
+    });
 
     return signature;
   }
 
   /**
-   * Simpler approach: sign transaction, return signed bytes for manual submission.
+   * Fallback: sign transaction without sending.
    */
   async function signTransaction(serializedTxBase64) {
     if (!provider) throw new Error('Wallet not connected');
-    const txBytes = Uint8Array.from(atob(serializedTxBase64), c => c.charCodeAt(0));
-
-    // Phantom's signTransaction expects a Transaction object.
-    // We need @solana/web3.js on client for deserialization.
-    // For MVP, we use signAndSendTransaction which handles it.
     const { signature } = await provider.request({
       method: 'signAndSendTransaction',
       params: {
-        message: btoa(String.fromCharCode(...txBytes)),
+        message: serializedTxBase64,
       }
     });
-
     return signature;
   }
 

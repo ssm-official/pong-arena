@@ -425,6 +425,11 @@ socket.on('match-found', (data) => {
 
   document.getElementById('escrow-opponent').textContent = data.opponent.username;
   document.getElementById('escrow-stake').textContent = formatPong(data.stake) + ' $PONG';
+
+  // Reset escrow button state
+  const btn = document.getElementById('btn-escrow-submit');
+  if (btn) { btn.disabled = false; btn.textContent = 'Approve & Stake'; }
+
   showMatchmakingState('escrow');
 });
 
@@ -432,6 +437,14 @@ async function submitEscrow() {
   try {
     // Sign the escrow transaction
     const txSignature = await WalletManager.signAndSendTransaction(pendingEscrowTx);
+
+    // Show verifying state while server confirms on-chain
+    const btn = document.getElementById('btn-escrow-submit');
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = 'Verifying on-chain...';
+    }
+
     socket.emit('escrow-submit', { gameId: currentGameId, txSignature });
   } catch (err) {
     alert('Escrow failed: ' + err.message);

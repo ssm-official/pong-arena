@@ -111,17 +111,23 @@ async function buildEscrowTransaction(playerWallet, tier) {
  * Verify an escrow transaction was confirmed on-chain.
  */
 async function verifyEscrowTx(txSignature, expectedAmount, playerWallet) {
-  try {
-    const tx = await connection.getTransaction(txSignature, {
-      commitment: 'confirmed',
-      maxSupportedTransactionVersion: 0
-    });
-    if (!tx) return false;
-    if (tx.meta.err) return false;
-    return true;
-  } catch {
-    return false;
+  // The transaction may not be confirmed yet — retry up to 12 times (30s total)
+  for (let attempt = 0; attempt < 12; attempt++) {
+    try {
+      const tx = await connection.getTransaction(txSignature, {
+        commitment: 'confirmed',
+        maxSupportedTransactionVersion: 0
+      });
+      if (tx) {
+        return !tx.meta.err;
+      }
+    } catch {
+      // RPC error, retry
+    }
+    // Wait 2.5 seconds before next attempt
+    await new Promise(r => setTimeout(r, 2500));
   }
+  return false;
 }
 
 /**
