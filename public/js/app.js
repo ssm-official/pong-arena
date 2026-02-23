@@ -11,6 +11,62 @@ let pendingEscrowTx = null;
 let isMirrored = false;
 let chosenSide = 'left'; // which side the player wants their paddle on
 
+// --- $PONG Price in USD ---
+const PONG_TOKEN_MINT = 'GVLfSudckNc8L1MGWUJP5vXUgFNtYJqjytLR7xm3pump';
+let pongPriceUsd = 0; // price per 1 $PONG
+let priceLastFetched = 0;
+const PRICE_REFRESH_MS = 60000; // refresh every 60s
+// Human-readable PONG amounts per tier
+const TIER_PONG_AMOUNTS = { low: 10000, medium: 50000, high: 200000 };
+
+async function fetchPongPrice() {
+  try {
+    const res = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${PONG_TOKEN_MINT}`);
+    const data = await res.json();
+    if (data.pairs && data.pairs.length > 0) {
+      pongPriceUsd = parseFloat(data.pairs[0].priceUsd) || 0;
+      priceLastFetched = Date.now();
+      updateAllUsdDisplays();
+    }
+  } catch (err) {
+    console.error('Failed to fetch $PONG price:', err);
+  }
+}
+
+function formatUsd(amount) {
+  if (amount < 0.01) return '<$0.01';
+  if (amount < 1) return '$' + amount.toFixed(2);
+  if (amount < 1000) return '$' + amount.toFixed(2);
+  return '$' + amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function getTierUsd(tier) {
+  return TIER_PONG_AMOUNTS[tier] * pongPriceUsd;
+}
+
+function updateAllUsdDisplays() {
+  // Update tier selection buttons
+  const lowUsd = document.getElementById('tier-usd-low');
+  const medUsd = document.getElementById('tier-usd-medium');
+  const highUsd = document.getElementById('tier-usd-high');
+  if (lowUsd) lowUsd.textContent = formatUsd(getTierUsd('low'));
+  if (medUsd) medUsd.textContent = formatUsd(getTierUsd('medium'));
+  if (highUsd) highUsd.textContent = formatUsd(getTierUsd('high'));
+
+  // Update in-game stake display if visible
+  updateGameStakeDisplay();
+}
+
+// Periodically refresh price
+function startPriceRefresh() {
+  fetchPongPrice();
+  setInterval(() => {
+    if (Date.now() - priceLastFetched > PRICE_REFRESH_MS) {
+      fetchPongPrice();
+    }
+  }, PRICE_REFRESH_MS);
+}
+
 /** Return Authorization header using cached session token. No wallet popup. */
 function getAuthHeader() {
   return 'Bearer ' + sessionToken;
@@ -110,6 +166,9 @@ function showApp() {
   // Init game canvas
   const canvas = document.getElementById('game-canvas');
   GameClient.init(canvas, currentUser.wallet);
+
+  // Start fetching $PONG price for USD display
+  startPriceRefresh();
 }
 
 function updateNav() {
@@ -402,9 +461,12 @@ async function loadHistory() {
 
 function joinQueue(tier) {
   socket.emit('queue-join', { tier });
+  currentGameTier = tier;
   showMatchmakingState('queue');
+  const pongAmt = tier === 'low' ? '10K' : tier === 'medium' ? '50K' : '200K';
+  const usdAmt = pongPriceUsd > 0 ? ` (${formatUsd(getTierUsd(tier))})` : '';
   document.getElementById('queue-tier-display').textContent =
-    `${tier.toUpperCase()} tier — ${tier === 'low' ? '10K' : tier === 'medium' ? '50K' : '200K'} $PONG`;
+    `${tier.toUpperCase()} tier — ${pongAmt} $PONG${usdAmt}`;
 }
 
 function leaveQueue() {
@@ -422,6 +484,19 @@ function showMatchmakingState(state) {
 
 // Track which player we are in the current match
 let myPlayerSlot = null; // 'p1' or 'p2'
+let currentGameTier = null; // 'low', 'medium', 'high'
+
+function updateGameStakeDisplay() {
+  const el = document.getElementById('game-stake-display');
+  if (!el || !currentGameTier) return;
+  const pongAmt = TIER_PONG_AMOUNTS[currentGameTier];
+  const usdAmt = getTierUsd(currentGameTier);
+  if (pongPriceUsd > 0) {
+    el.textContent = `${formatUsd(usdAmt)} (${(pongAmt / 1000).toFixed(0)}K $PONG each)`;
+  } else {
+    el.textContent = `${(pongAmt / 1000).toFixed(0)}K $PONG each`;
+  }
+}
 
 // Socket: Match found → show escrow prompt
 socket.on('match-found', (data) => {
@@ -429,8 +504,13 @@ socket.on('match-found', (data) => {
   pendingEscrowTx = data.escrowTransaction;
   myPlayerSlot = data.yourSlot; // server tells us if we're p1 or p2
 
+  currentGameTier = data.tier;
   document.getElementById('escrow-opponent').textContent = data.opponent.username;
-  document.getElementById('escrow-stake').textContent = formatPong(data.stake) + ' $PONG';
+  const pongText = formatPong(data.stake) + ' $PONG';
+  const usdText = pongPriceUsd > 0 ? formatUsd(TIER_PONG_AMOUNTS[data.tier] * pongPriceUsd) : '';
+  document.getElementById('escrow-stake').innerHTML = usdText
+    ? `<span class="text-2xl">${usdText}</span> <span class="text-sm text-gray-400">(${pongText})</span>`
+    : pongText;
 
   // Reset escrow UI
   const btn = document.getElementById('btn-escrow-submit');
@@ -540,8 +620,10 @@ socket.on('game-countdown', (data) => {
     const opp = currentUser.wallet === data.player1.wallet ? data.player2 : data.player1;
     document.getElementById('intermission-you').textContent = me.username;
     document.getElementById('intermission-opp').textContent = opp.username;
+    currentGameTier = data.tier;
+    const tierUsd = pongPriceUsd > 0 ? ` — ${formatUsd(getTierUsd(data.tier))} each` : '';
     document.getElementById('intermission-tier').textContent =
-      (data.tier || '').toUpperCase() + ' TIER';
+      (data.tier || '').toUpperCase() + ' TIER' + tierUsd;
     intermission.classList.remove('hidden');
     if (sidePicker) sidePicker.classList.remove('hidden');
   }
@@ -587,6 +669,9 @@ socket.on('game-start', (data) => {
     leftLabel.textContent = data.player1.username;
     rightLabel.textContent = data.player2.username;
   }
+
+  // Show in-game stake display
+  updateGameStakeDisplay();
 
   GameClient.startRendering();
 });
@@ -639,12 +724,15 @@ socket.on('game-over', (data) => {
 // Socket: Payout complete
 socket.on('payout-complete', (data) => {
   const won = data.winner === currentUser.wallet;
+  const winPong = formatPong(data.winnerShare);
+  const burnPong = formatPong(data.burned);
+  const winUsd = pongPriceUsd > 0 ? ` (${formatUsd((data.winnerShare / 1e6) * pongPriceUsd)})` : '';
   if (won) {
     document.getElementById('gameover-payout').textContent =
-      `You won ${formatPong(data.winnerShare)} $PONG! (${formatPong(data.burned)} burned)`;
+      `You won ${winPong} $PONG${winUsd}! (${burnPong} burned)`;
   } else {
     document.getElementById('gameover-payout').textContent =
-      `Your stake was lost. ${formatPong(data.burned)} $PONG was burned.`;
+      `Your stake was lost. ${burnPong} $PONG was burned.`;
   }
   refreshUserData();
 });
@@ -664,6 +752,7 @@ socket.on('game-forfeit', (data) => {
 
 function backToMatchmaking() {
   currentGameId = null;
+  currentGameTier = null;
   isMirrored = false;
   chosenSide = 'left';
   const intermission = document.getElementById('intermission-info');

@@ -2,7 +2,8 @@
 // Game Client — Canvas rendering + input
 // ===========================================
 // Your paddle: client-side prediction (offset reconciliation).
-// Opponent paddle + ball: fast lerp from server state.
+// Opponent + ball: interpolation between two most recent server states.
+//   Renders one tick behind for perfectly smooth constant-speed motion.
 // All positions rounded to integers.
 
 const GameClient = (() => {
@@ -29,15 +30,12 @@ const GameClient = (() => {
   let serverMyY = CANVAS_H / 2 - PADDLE_H / 2;
   let myOffset = 0;
 
-  // --- Opponent paddle: fast lerp ---
-  let remoteTargetY = CANVAS_H / 2 - PADDLE_H / 2;
-  let remoteDisplayY = CANVAS_H / 2 - PADDLE_H / 2;
-
-  // --- Ball: fast lerp ---
-  let ballTargetX = CANVAS_W / 2;
-  let ballTargetY = CANVAS_H / 2;
-  let ballDisplayX = CANVAS_W / 2;
-  let ballDisplayY = CANVAS_H / 2;
+  // --- Interpolation buffer for opponent + ball ---
+  // We store the two most recent server snapshots and interpolate between them.
+  // This gives perfectly smooth constant-speed motion at exactly 1 tick of latency.
+  let prevSnap = null;  // previous server state
+  let currSnap = null;  // most recent server state
+  let snapElapsed = 0;  // ms since currSnap arrived
 
   let displayScore = { p1: 0, p2: 0 };
   let isPaused = false;
@@ -58,12 +56,9 @@ const GameClient = (() => {
     const mid = CANVAS_H / 2 - PADDLE_H / 2;
     serverMyY = mid;
     myOffset = 0;
-    remoteTargetY = mid;
-    remoteDisplayY = mid;
-    ballTargetX = CANVAS_W / 2;
-    ballTargetY = CANVAS_H / 2;
-    ballDisplayX = CANVAS_W / 2;
-    ballDisplayY = CANVAS_H / 2;
+    prevSnap = null;
+    currSnap = null;
+    snapElapsed = 0;
     lastFrameTime = 0;
   }
 
@@ -85,16 +80,18 @@ const GameClient = (() => {
     const newServerY = amPlayer1 ? state.paddle1.y : state.paddle2.y;
     myOffset -= (newServerY - serverMyY);
     serverMyY = newServerY;
-    // Gentle decay to prevent float drift
     myOffset *= 0.97;
-    // Cap so paddle stays close to server (ball collisions look correct)
     if (myOffset > 30) myOffset = 30;
     if (myOffset < -30) myOffset = -30;
 
-    // --- Opponent + ball targets (lerped in renderLoop) ---
-    remoteTargetY = amPlayer1 ? state.paddle2.y : state.paddle1.y;
-    ballTargetX = state.ball.x;
-    ballTargetY = state.ball.y;
+    // --- Push new snapshot into interpolation buffer ---
+    prevSnap = currSnap;
+    currSnap = {
+      remoteY: amPlayer1 ? state.paddle2.y : state.paddle1.y,
+      ballX: state.ball.x,
+      ballY: state.ball.y,
+    };
+    snapElapsed = 0;
   }
 
   function startRendering() {
@@ -131,15 +128,27 @@ const GameClient = (() => {
       Math.max(0, Math.min(CANVAS_H - PADDLE_H, serverMyY + myOffset))
     );
 
-    // --- Opponent + ball: fast lerp (frame-rate independent) ---
-    // 0.92 per server tick → 99% in 2 ticks (33ms) — imperceptible delay
-    const t = 1 - Math.pow(0.08, ticks);
-    remoteDisplayY += (remoteTargetY - remoteDisplayY) * t;
-    ballDisplayX += (ballTargetX - ballDisplayX) * t;
-    ballDisplayY += (ballTargetY - ballDisplayY) * t;
+    // --- Interpolate opponent + ball between two server snapshots ---
+    snapElapsed += delta;
+    let oppY, bx, by;
 
-    render(myY, Math.round(remoteDisplayY),
-           Math.round(ballDisplayX), Math.round(ballDisplayY));
+    if (prevSnap && currSnap) {
+      // Interpolation factor: 0 = prevSnap, 1 = currSnap
+      const t = Math.min(snapElapsed / SERVER_TICK_MS, 1);
+      oppY = prevSnap.remoteY + (currSnap.remoteY - prevSnap.remoteY) * t;
+      bx = prevSnap.ballX + (currSnap.ballX - prevSnap.ballX) * t;
+      by = prevSnap.ballY + (currSnap.ballY - prevSnap.ballY) * t;
+    } else if (currSnap) {
+      oppY = currSnap.remoteY;
+      bx = currSnap.ballX;
+      by = currSnap.ballY;
+    } else {
+      oppY = CANVAS_H / 2 - PADDLE_H / 2;
+      bx = CANVAS_W / 2;
+      by = CANVAS_H / 2;
+    }
+
+    render(myY, Math.round(oppY), Math.round(bx), Math.round(by));
     animFrameId = requestAnimationFrame(renderLoop);
   }
 
@@ -180,7 +189,7 @@ const GameClient = (() => {
       drawPaddle(CANVAS_W - PADDLE_W - 10, p1Y, amPlayer1);
     }
 
-    // Ball — mirror x position
+    // Ball
     const drawBx = mirrored ? (CANVAS_W - bx - BALL_SIZE) : bx;
     ctx.fillStyle = skinConfig.ball;
     ctx.shadowColor = skinConfig.ball;
@@ -270,6 +279,8 @@ const GameClient = (() => {
     currentInput = 'stop';
     lastFrameTime = 0;
     myOffset = 0;
+    prevSnap = null;
+    currSnap = null;
     Object.keys(keys).forEach(k => keys[k] = false);
   }
 

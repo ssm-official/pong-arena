@@ -115,19 +115,22 @@
             <button onclick="joinQueue('low')"
               class="tier-btn bg-arena-card border border-green-800 hover:border-green-500 rounded-xl p-4 text-center transition">
               <div class="text-green-400 text-lg font-bold">Low</div>
-              <div class="text-2xl font-bold mt-1">10K $PONG</div>
+              <div id="tier-usd-low" class="text-2xl font-bold mt-1 text-white">--</div>
+              <div class="text-gray-400 text-sm mt-0.5">10K $PONG</div>
               <div class="text-gray-500 text-xs mt-1">Casual</div>
             </button>
             <button onclick="joinQueue('medium')"
               class="tier-btn bg-arena-card border border-yellow-800 hover:border-yellow-500 rounded-xl p-4 text-center transition">
               <div class="text-yellow-400 text-lg font-bold">Medium</div>
-              <div class="text-2xl font-bold mt-1">50K $PONG</div>
+              <div id="tier-usd-medium" class="text-2xl font-bold mt-1 text-white">--</div>
+              <div class="text-gray-400 text-sm mt-0.5">50K $PONG</div>
               <div class="text-gray-500 text-xs mt-1">Competitive</div>
             </button>
             <button onclick="joinQueue('high')"
               class="tier-btn bg-arena-card border border-red-800 hover:border-red-500 rounded-xl p-4 text-center transition">
               <div class="text-red-400 text-lg font-bold">High</div>
-              <div class="text-2xl font-bold mt-1">200K $PONG</div>
+              <div id="tier-usd-high" class="text-2xl font-bold mt-1 text-white">--</div>
+              <div class="text-gray-400 text-sm mt-0.5">200K $PONG</div>
               <div class="text-gray-500 text-xs mt-1">High Roller</div>
             </button>
           </div>
@@ -214,6 +217,9 @@
 
         <!-- Game Canvas -->
         <div id="game-ui" class="hidden">
+          <div class="text-center mb-1">
+            <span id="game-stake-display" class="text-xs text-yellow-400 bg-yellow-900/30 px-3 py-0.5 rounded-full"></span>
+          </div>
           <div class="flex justify-between items-center mb-2 px-2">
             <div class="text-sm" id="game-left-label"><span id="game-p1-name" class="text-purple-400 font-bold"></span></div>
             <div class="text-2xl font-bold">
@@ -340,8 +346,8 @@
   <!-- ============ SCRIPTS ============ -->
   <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@solana/web3.js@1.87.6/lib/index.iife.min.js"></script>
-  <script src="/js/wallet.js?v=18"></script>
-  <script src="/js/game-client.js?v=18"></script>
-  <script src="/js/app.js?v=18"></script>
+  <script src="/js/wallet.js?v=19"></script>
+  <script src="/js/game-client.js?v=19"></script>
+  <script src="/js/app.js?v=19"></script>
 </body>
 </html>
