@@ -1,26 +1,38 @@
 // ===========================================
 // Game Client — Canvas rendering + input
 // ===========================================
-// Receives state from server, renders to canvas.
-// Sends input to server via socket.
+// Client-side prediction for your paddle (instant response).
+// Smooth interpolation for opponent paddle + ball.
 
 const GameClient = (() => {
   const CANVAS_W = 800;
   const CANVAS_H = 600;
   const PADDLE_W = 14;
   const PADDLE_H = 110;
+  const PADDLE_SPEED = 10; // must match server
   const BALL_SIZE = 12;
+  const LERP_SPEED = 0.35; // interpolation factor for remote objects
 
   let canvas = null;
   let ctx = null;
-  let currentState = null;
+  let serverState = null;  // latest state from server
   let myWallet = null;
   let amPlayer1 = false;
   let gameId = null;
   let animFrameId = null;
-  let currentInput = 'stop';
   let inputInterval = null;
   let skinConfig = { paddle: '#a855f7', ball: '#ffffff', background: '#0f0f2a' };
+
+  // Client-side predicted positions
+  let localPaddleY = CANVAS_H / 2 - PADDLE_H / 2;
+  let remotePaddleY = CANVAS_H / 2 - PADDLE_H / 2;
+  let displayBall = { x: CANVAS_W / 2, y: CANVAS_H / 2 };
+  let displayScore = { p1: 0, p2: 0 };
+  let isPaused = false;
+
+  // Input tracking
+  const keys = {};
+  let currentInput = 'stop';
 
   function init(canvasElement, wallet) {
     canvas = canvasElement;
@@ -32,6 +44,9 @@ const GameClient = (() => {
   function setGameInfo(gId, player1Wallet) {
     gameId = gId;
     amPlayer1 = (myWallet === player1Wallet);
+    localPaddleY = CANVAS_H / 2 - PADDLE_H / 2;
+    remotePaddleY = CANVAS_H / 2 - PADDLE_H / 2;
+    displayBall = { x: CANVAS_W / 2, y: CANVAS_H / 2 };
   }
 
   function setSkins(config) {
@@ -41,14 +56,30 @@ const GameClient = (() => {
   }
 
   function updateState(state) {
-    currentState = state;
+    serverState = state;
+
+    // Update score immediately
+    displayScore = state.score;
+    isPaused = state.paused;
+
+    // Snap local paddle to server if too far off (correction)
+    const myServerY = amPlayer1 ? state.paddle1.y : state.paddle2.y;
+    const diff = Math.abs(localPaddleY - myServerY);
+    if (diff > PADDLE_SPEED * 3) {
+      // Big desync — snap closer
+      localPaddleY = lerp(localPaddleY, myServerY, 0.5);
+    }
+
+    // Update remote paddle target (will be interpolated in render)
+    const remoteServerY = amPlayer1 ? state.paddle2.y : state.paddle1.y;
+    remotePaddleY = remoteServerY;
   }
 
   function startRendering() {
     if (animFrameId) cancelAnimationFrame(animFrameId);
     renderLoop();
 
-    // Send input state every 50ms for responsiveness (resends in case of packet loss)
+    // Resend input every 50ms as heartbeat
     if (inputInterval) clearInterval(inputInterval);
     inputInterval = setInterval(() => {
       if (window.socket && gameId && currentInput !== 'stop') {
@@ -58,31 +89,46 @@ const GameClient = (() => {
   }
 
   function stopRendering() {
-    if (animFrameId) {
-      cancelAnimationFrame(animFrameId);
-      animFrameId = null;
-    }
-    if (inputInterval) {
-      clearInterval(inputInterval);
-      inputInterval = null;
-    }
+    if (animFrameId) { cancelAnimationFrame(animFrameId); animFrameId = null; }
+    if (inputInterval) { clearInterval(inputInterval); inputInterval = null; }
   }
 
+  // Smooth display paddle for remote player
+  let displayRemotePaddleY = CANVAS_H / 2 - PADDLE_H / 2;
+
   function renderLoop() {
+    // --- Client-side prediction: move local paddle instantly ---
+    if (currentInput === 'up') {
+      localPaddleY = Math.max(0, localPaddleY - PADDLE_SPEED);
+    } else if (currentInput === 'down') {
+      localPaddleY = Math.min(CANVAS_H - PADDLE_H, localPaddleY + PADDLE_SPEED);
+    }
+
+    // --- Interpolate remote paddle ---
+    displayRemotePaddleY = lerp(displayRemotePaddleY, remotePaddleY, LERP_SPEED);
+
+    // --- Interpolate ball ---
+    if (serverState) {
+      displayBall.x = lerp(displayBall.x, serverState.ball.x, LERP_SPEED);
+      displayBall.y = lerp(displayBall.y, serverState.ball.y, LERP_SPEED);
+    }
+
     render();
     animFrameId = requestAnimationFrame(renderLoop);
   }
 
-  function render() {
-    if (!ctx || !currentState) return;
+  function lerp(current, target, factor) {
+    return current + (target - current) * factor;
+  }
 
-    const state = currentState;
+  function render() {
+    if (!ctx) return;
 
     // Background
     ctx.fillStyle = skinConfig.background;
     ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
 
-    // Center line (dashed)
+    // Center line
     ctx.setLineDash([8, 8]);
     ctx.strokeStyle = '#2d2d5e';
     ctx.lineWidth = 2;
@@ -92,28 +138,33 @@ const GameClient = (() => {
     ctx.stroke();
     ctx.setLineDash([]);
 
-    // Score (large, behind everything)
+    // Score
     ctx.fillStyle = 'rgba(255,255,255,0.08)';
     ctx.font = 'bold 140px monospace';
     ctx.textAlign = 'center';
-    ctx.fillText(state.score.p1, CANVAS_W / 4, CANVAS_H / 2 + 50);
-    ctx.fillText(state.score.p2, (CANVAS_W * 3) / 4, CANVAS_H / 2 + 50);
+    ctx.fillText(displayScore.p1, CANVAS_W / 4, CANVAS_H / 2 + 50);
+    ctx.fillText(displayScore.p2, (CANVAS_W * 3) / 4, CANVAS_H / 2 + 50);
 
-    // Paddles with rounded corners and glow
-    drawPaddle(10, state.paddle1.y, amPlayer1);
-    drawPaddle(CANVAS_W - PADDLE_W - 10, state.paddle2.y, !amPlayer1);
+    // Determine paddle positions based on which player we are
+    const p1Y = amPlayer1 ? localPaddleY : displayRemotePaddleY;
+    const p2Y = amPlayer1 ? displayRemotePaddleY : localPaddleY;
 
-    // Ball with glow
+    // Left paddle (player 1)
+    drawPaddle(10, p1Y, amPlayer1);
+    // Right paddle (player 2)
+    drawPaddle(CANVAS_W - PADDLE_W - 10, p2Y, !amPlayer1);
+
+    // Ball
     ctx.fillStyle = skinConfig.ball;
     ctx.shadowColor = skinConfig.ball;
     ctx.shadowBlur = 15;
     ctx.beginPath();
-    ctx.arc(state.ball.x + BALL_SIZE / 2, state.ball.y + BALL_SIZE / 2, BALL_SIZE / 2, 0, Math.PI * 2);
+    ctx.arc(displayBall.x + BALL_SIZE / 2, displayBall.y + BALL_SIZE / 2, BALL_SIZE / 2, 0, Math.PI * 2);
     ctx.fill();
     ctx.shadowBlur = 0;
 
-    // Pause overlay between points
-    if (state.paused) {
+    // Pause overlay
+    if (isPaused) {
       ctx.fillStyle = 'rgba(0,0,0,0.3)';
       ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
       ctx.fillStyle = '#a855f7';
@@ -129,7 +180,6 @@ const GameClient = (() => {
     ctx.shadowColor = isMe ? skinConfig.paddle : 'transparent';
     ctx.shadowBlur = isMe ? 18 : 0;
 
-    // Rounded rectangle
     const r = 6;
     ctx.beginPath();
     ctx.moveTo(x + r, y);
@@ -161,27 +211,24 @@ const GameClient = (() => {
 
   // ---- Input Handling ----
   function setupInput() {
-    const keys = {};
-
     document.addEventListener('keydown', (e) => {
       if (!gameId) return;
       if (['w', 'W', 's', 'S', 'ArrowUp', 'ArrowDown'].includes(e.key)) {
-        e.preventDefault(); // prevent page scroll
+        e.preventDefault();
       }
       keys[e.key] = true;
-      updateInput(keys);
+      sendInput();
     });
 
     document.addEventListener('keyup', (e) => {
       if (!gameId) return;
       keys[e.key] = false;
-      updateInput(keys);
+      sendInput();
     });
   }
 
-  function updateInput(keys) {
+  function sendInput() {
     let dir = 'stop';
-
     if (keys['w'] || keys['W'] || keys['ArrowUp']) dir = 'up';
     if (keys['s'] || keys['S'] || keys['ArrowDown']) dir = 'down';
 
@@ -196,8 +243,9 @@ const GameClient = (() => {
   function cleanup() {
     stopRendering();
     gameId = null;
-    currentState = null;
+    serverState = null;
     currentInput = 'stop';
+    Object.keys(keys).forEach(k => keys[k] = false);
   }
 
   return {

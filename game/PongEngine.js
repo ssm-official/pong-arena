@@ -47,6 +47,7 @@ class PongEngine {
     };
 
     this.interval = null;
+    this.tickCount = 0; // used to broadcast at 30fps instead of 60
   }
 
   start() {
@@ -93,7 +94,7 @@ class PongEngine {
         this.state.paused = false;
         this.launchBall();
       }
-      this.broadcastState();
+      this.broadcastState(true);
       return;
     }
 
@@ -151,14 +152,14 @@ class PongEngine {
       this.state.score.p2++;
       if (this.state.score.p2 >= WIN_SCORE) { this.endGame(this.player2.wallet); return; }
       this.resetBall();
-      this.broadcastState();
+      this.broadcastState(true);
       return;
     }
     if (ball.x > CANVAS_W) {
       this.state.score.p1++;
       if (this.state.score.p1 >= WIN_SCORE) { this.endGame(this.player1.wallet); return; }
       this.resetBall();
-      this.broadcastState();
+      this.broadcastState(true);
       return;
     }
 
@@ -184,7 +185,10 @@ class PongEngine {
     this.state.ball.vy = Math.sin(angle) * BALL_SPEED_INITIAL;
   }
 
-  broadcastState() {
+  broadcastState(force = false) {
+    // Send at 30fps (every other tick) unless forced (score, pause changes)
+    this.tickCount++;
+    if (!force && this.tickCount % 2 !== 0) return;
     this.emit('game-state', {
       gameId: this.gameId,
       state: this.state,
