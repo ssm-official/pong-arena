@@ -4,10 +4,15 @@
 // Handles UI state, API calls, socket events, tab navigation.
 
 let currentUser = null;  // { wallet, username, pfp, bio, stats, ... }
-let authData = null;     // { wallet, signature, timestamp } — refreshed as needed
+let sessionToken = null; // Bearer token from server — sign once, use everywhere
 let onlineUsers = [];    // array of online wallet addresses
 let currentGameId = null;
 let pendingEscrowTx = null;
+
+/** Return Authorization header using cached session token. No wallet popup. */
+function getAuthHeader() {
+  return 'Bearer ' + sessionToken;
+}
 
 // ---- Socket.io ----
 const socket = io();
@@ -30,10 +35,11 @@ socket.on('connect', () => {
 async function connectWallet() {
   try {
     const wallet = await WalletManager.connect();
-    authData = await WalletManager.signAuthMessage();
+    const authData = await WalletManager.signAuthMessage();
 
-    // Try login
+    // Try login — server returns session token (sign once!)
     const res = await apiPost('/api/auth/login', authData);
+    sessionToken = res.token;
 
     if (res.status === 'existing') {
       currentUser = res.user;
@@ -54,12 +60,15 @@ async function registerUser() {
   if (!username) return showRegError('Username is required');
 
   try {
-    authData = await WalletManager.signAuthMessage();
-    const res = await apiPost('/api/auth/register', {
-      ...authData, username, pfp, bio
-    });
+    // Use existing session token from login step — no re-signing needed
+    const res = await fetch('/api/auth/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: getAuthHeader() },
+      body: JSON.stringify({ wallet: WalletManager.getWallet(), username, pfp, bio })
+    }).then(r => r.json());
 
     if (res.error) return showRegError(res.error);
+    sessionToken = res.token;
     currentUser = res.user;
     showApp();
   } catch (err) {
@@ -145,7 +154,6 @@ function loadProfile() {
 
 async function saveProfile() {
   try {
-    const auth = await WalletManager.getAuthHeader();
     const body = {
       username: document.getElementById('edit-username').value.trim(),
       pfp: document.getElementById('edit-pfp').value.trim(),
@@ -154,7 +162,7 @@ async function saveProfile() {
 
     const res = await fetch('/api/profile', {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json', Authorization: auth },
+      headers: { 'Content-Type': 'application/json', Authorization: getAuthHeader() },
       body: JSON.stringify(body)
     }).then(r => r.json());
 
@@ -184,7 +192,7 @@ function showProfileMsg(msg, color) {
 
 async function loadFriends() {
   try {
-    const auth = await WalletManager.getAuthHeader();
+    const auth = getAuthHeader();
     const [friendRes, requestRes] = await Promise.all([
       fetch('/api/friends', { headers: { Authorization: auth } }).then(r => r.json()),
       fetch('/api/friends/requests', { headers: { Authorization: auth } }).then(r => r.json()),
@@ -237,7 +245,7 @@ async function searchFriends() {
   if (q.length < 2) return;
 
   try {
-    const auth = await WalletManager.getAuthHeader();
+    const auth = getAuthHeader();
     const res = await fetch(`/api/friends/search?q=${encodeURIComponent(q)}`, {
       headers: { Authorization: auth }
     }).then(r => r.json());
@@ -261,28 +269,24 @@ async function searchFriends() {
 }
 
 async function addFriend(targetWallet) {
-  const auth = await WalletManager.getAuthHeader();
-  const res = await apiPostAuth('/api/friends/add', { targetWallet }, auth);
+  const res = await apiPostAuth('/api/friends/add', { targetWallet }, getAuthHeader());
   alert(res.message || res.error || 'Done');
   loadFriends();
 }
 
 async function acceptFriend(fromWallet) {
-  const auth = await WalletManager.getAuthHeader();
-  await apiPostAuth('/api/friends/accept', { fromWallet }, auth);
+  await apiPostAuth('/api/friends/accept', { fromWallet }, getAuthHeader());
   loadFriends();
 }
 
 async function declineFriend(fromWallet) {
-  const auth = await WalletManager.getAuthHeader();
-  await apiPostAuth('/api/friends/decline', { fromWallet }, auth);
+  await apiPostAuth('/api/friends/decline', { fromWallet }, getAuthHeader());
   loadFriends();
 }
 
 async function removeFriend(friendWallet) {
   if (!confirm('Remove this friend?')) return;
-  const auth = await WalletManager.getAuthHeader();
-  await apiPostAuth('/api/friends/remove', { friendWallet }, auth);
+  await apiPostAuth('/api/friends/remove', { friendWallet }, getAuthHeader());
   loadFriends();
 }
 
@@ -292,7 +296,7 @@ async function removeFriend(friendWallet) {
 
 async function loadShop() {
   try {
-    const auth = await WalletManager.getAuthHeader();
+    const auth = getAuthHeader();
     const res = await fetch('/api/shop', { headers: { Authorization: auth } }).then(r => r.json());
 
     const grid = document.getElementById('shop-grid');
@@ -324,7 +328,7 @@ async function loadShop() {
 
 async function buySkin(skinId) {
   try {
-    const auth = await WalletManager.getAuthHeader();
+    const auth = getAuthHeader();
 
     // Step 1: Get transaction to sign
     const buyRes = await apiPostAuth('/api/shop/buy', { skinId }, auth);
@@ -347,8 +351,7 @@ async function buySkin(skinId) {
 
 async function equipSkin(skinId) {
   try {
-    const auth = await WalletManager.getAuthHeader();
-    await apiPostAuth('/api/shop/equip', { skinId }, auth);
+    await apiPostAuth('/api/shop/equip', { skinId }, getAuthHeader());
     loadShop();
   } catch (err) {
     alert('Failed to equip: ' + err.message);
@@ -361,7 +364,7 @@ async function equipSkin(skinId) {
 
 async function loadHistory() {
   try {
-    const auth = await WalletManager.getAuthHeader();
+    const auth = getAuthHeader();
     const res = await fetch('/api/profile/history', { headers: { Authorization: auth } }).then(r => r.json());
 
     const container = document.getElementById('history-list');
@@ -570,7 +573,7 @@ async function apiPostAuth(url, body, authHeader) {
 
 async function refreshUserData() {
   try {
-    const auth = await WalletManager.getAuthHeader();
+    const auth = getAuthHeader();
     const res = await fetch('/api/profile', { headers: { Authorization: auth } }).then(r => r.json());
     if (res.user) currentUser = res.user;
   } catch (err) {

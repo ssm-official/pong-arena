@@ -109,10 +109,12 @@ const WalletManager = (() => {
     return `${wallet}:${signature}:${timestamp}`;
   }
 
+  function getWallet() { return publicKey; }
+
   return {
     connect, disconnect, signAuthMessage,
     signAndSendTransaction, signTransaction,
-    getPublicKey, isConnected, getAuthHeader,
+    getPublicKey, isConnected, getAuthHeader, getWallet,
   };
 })();
 

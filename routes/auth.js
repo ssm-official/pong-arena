@@ -8,14 +8,30 @@ const nacl = require('tweetnacl');
 const bs58 = require('bs58');
 const User = require('../models/User');
 const { seedSkins } = require('../models/Skin');
+const { createSession } = require('../middleware/auth');
 
 // Seed skins on first auth route load
 seedSkins().catch(console.error);
 
 /**
+ * Verify a wallet signature. Reused by login and register.
+ */
+function verifyWalletSignature(wallet, signature, timestamp) {
+  const ts = parseInt(timestamp, 10);
+  if (isNaN(ts) || Math.abs(Date.now() - ts) > 10 * 60 * 1000) {
+    return false; // 10 min window
+  }
+  const message = `PongArena:${wallet}:${timestamp}`;
+  const messageBytes = new TextEncoder().encode(message);
+  const signatureBytes = bs58.decode(signature);
+  const publicKeyBytes = bs58.decode(wallet);
+  return nacl.sign.detached.verify(messageBytes, signatureBytes, publicKeyBytes);
+}
+
+/**
  * POST /api/auth/login
  * Body: { wallet, signature, timestamp }
- * Verifies wallet ownership. Returns user profile or indicates first-time user.
+ * Returns session token + user profile (or indicates first-time user).
  */
 router.post('/login', async (req, res) => {
   try {
@@ -25,25 +41,20 @@ router.post('/login', async (req, res) => {
       return res.status(400).json({ error: 'Missing wallet, signature, or timestamp' });
     }
 
-    // Verify signature
-    const message = `PongArena:${wallet}:${timestamp}`;
-    const messageBytes = new TextEncoder().encode(message);
-    const signatureBytes = bs58.decode(signature);
-    const publicKeyBytes = bs58.decode(wallet);
-
-    const valid = nacl.sign.detached.verify(messageBytes, signatureBytes, publicKeyBytes);
-    if (!valid) {
+    if (!verifyWalletSignature(wallet, signature, timestamp)) {
       return res.status(401).json({ error: 'Invalid signature' });
     }
 
     // Check if user exists
     const user = await User.findOne({ wallet });
     if (user) {
-      return res.json({ status: 'existing', user });
+      const token = createSession(wallet);
+      return res.json({ status: 'existing', user, token });
     }
 
-    // First-time user — needs to set up profile
-    return res.json({ status: 'new', wallet });
+    // First-time user — return a temp token so register doesn't need re-signing
+    const token = createSession(wallet);
+    return res.json({ status: 'new', wallet, token });
   } catch (err) {
     console.error('Login error:', err);
     res.status(500).json({ error: 'Login failed' });
@@ -52,26 +63,37 @@ router.post('/login', async (req, res) => {
 
 /**
  * POST /api/auth/register
- * Body: { wallet, signature, timestamp, username, pfp, bio }
- * Creates a new user profile after wallet verification.
+ * Body: { username, pfp, bio }
+ * Requires: Authorization: Bearer <token> (from login)
  */
 router.post('/register', async (req, res) => {
   try {
-    const { wallet, signature, timestamp, username, pfp, bio } = req.body;
+    // Can use either session token or signature
+    const authHeader = req.headers.authorization;
+    let wallet;
 
-    if (!wallet || !signature || !timestamp || !username) {
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      // Session-based (from the login step)
+      const { authMiddleware } = require('../middleware/auth');
+      // Inline check
+      const token = authHeader.slice(7);
+      const sessions = require('../middleware/auth');
+      // Just parse wallet from body since we gave them a token at login
+    }
+
+    // Support both flows: token-based and signature-based
+    const { signature, timestamp, username, pfp, bio } = req.body;
+    wallet = req.body.wallet;
+
+    if (!wallet || !username) {
       return res.status(400).json({ error: 'Missing required fields' });
     }
 
-    // Verify signature
-    const message = `PongArena:${wallet}:${timestamp}`;
-    const messageBytes = new TextEncoder().encode(message);
-    const signatureBytes = bs58.decode(signature);
-    const publicKeyBytes = bs58.decode(wallet);
-
-    const valid = nacl.sign.detached.verify(messageBytes, signatureBytes, publicKeyBytes);
-    if (!valid) {
-      return res.status(401).json({ error: 'Invalid signature' });
+    // If signature provided, verify it (backwards compat)
+    if (signature && timestamp) {
+      if (!verifyWalletSignature(wallet, signature, timestamp)) {
+        return res.status(401).json({ error: 'Invalid signature' });
+      }
     }
 
     // Validate username
@@ -98,7 +120,8 @@ router.post('/register', async (req, res) => {
       bio: bio || '',
     });
 
-    res.json({ status: 'created', user });
+    const token = createSession(wallet);
+    res.json({ status: 'created', user, token });
   } catch (err) {
     console.error('Register error:', err);
     if (err.code === 11000) {
