@@ -1,11 +1,9 @@
 // ===========================================
 // Game Client — Canvas rendering + input
 // ===========================================
-// Server-authoritative: ALL positions come from server state.
-// Both paddles, ball interpolated with lerp for smooth display.
-// Your paddle uses a faster lerp so it feels responsive.
-// No client-side prediction — ensures both players see the same thing
-// and collision always matches what's on screen.
+// Server-authoritative positions. Your paddle snaps to server state
+// (no lerp = no artificial delay). Opponent paddle + ball use lerp
+// to smooth out network jitter. Server sends at 60fps.
 
 const GameClient = (() => {
   const CANVAS_W = 800;
@@ -14,15 +12,11 @@ const GameClient = (() => {
   const PADDLE_H = 110;
   const BALL_SIZE = 12;
   const SERVER_TICK_MS = 1000 / 60;
-
-  // Lerp factors per server tick — your paddle is faster for responsiveness
-  const MY_PADDLE_LERP = 0.55;
-  const REMOTE_PADDLE_LERP = 0.35;
+  const REMOTE_LERP = 0.4;
   const BALL_LERP = 0.5;
 
   let canvas = null;
   let ctx = null;
-  let serverState = null;
   let myWallet = null;
   let amPlayer1 = false;
   let gameId = null;
@@ -31,12 +25,17 @@ const GameClient = (() => {
   let lastFrameTime = 0;
   let skinConfig = { paddle: '#a855f7', ball: '#ffffff', background: '#0f0f2a' };
 
-  // Display positions — all driven by server, smoothed with lerp
-  let displayP1Y = CANVAS_H / 2 - PADDLE_H / 2;
-  let displayP2Y = CANVAS_H / 2 - PADDLE_H / 2;
-  let targetP1Y = CANVAS_H / 2 - PADDLE_H / 2;
-  let targetP2Y = CANVAS_H / 2 - PADDLE_H / 2;
-  let displayBall = { x: CANVAS_W / 2, y: CANVAS_H / 2 };
+  // Your paddle: direct from server, no smoothing
+  let myPaddleY = CANVAS_H / 2 - PADDLE_H / 2;
+
+  // Opponent paddle: lerped for smooth display
+  let remoteTargetY = CANVAS_H / 2 - PADDLE_H / 2;
+  let remoteDisplayY = CANVAS_H / 2 - PADDLE_H / 2;
+
+  // Ball: lerped
+  let ballTarget = { x: CANVAS_W / 2, y: CANVAS_H / 2 };
+  let ballDisplay = { x: CANVAS_W / 2, y: CANVAS_H / 2 };
+
   let displayScore = { p1: 0, p2: 0 };
   let isPaused = false;
 
@@ -55,9 +54,11 @@ const GameClient = (() => {
     gameId = gId;
     amPlayer1 = (myWallet === player1Wallet);
     const mid = CANVAS_H / 2 - PADDLE_H / 2;
-    displayP1Y = targetP1Y = mid;
-    displayP2Y = targetP2Y = mid;
-    displayBall = { x: CANVAS_W / 2, y: CANVAS_H / 2 };
+    myPaddleY = mid;
+    remoteTargetY = mid;
+    remoteDisplayY = mid;
+    ballTarget = { x: CANVAS_W / 2, y: CANVAS_H / 2 };
+    ballDisplay = { x: CANVAS_W / 2, y: CANVAS_H / 2 };
     lastFrameTime = 0;
   }
 
@@ -68,13 +69,18 @@ const GameClient = (() => {
   }
 
   function updateState(state) {
-    serverState = state;
     displayScore = state.score;
     isPaused = state.paused;
 
-    // Set targets from server — lerp will smooth the display
-    targetP1Y = state.paddle1.y;
-    targetP2Y = state.paddle2.y;
+    // YOUR paddle: snap directly to server position (no lerp, no delay)
+    myPaddleY = amPlayer1 ? state.paddle1.y : state.paddle2.y;
+
+    // Opponent paddle: set target for lerp
+    remoteTargetY = amPlayer1 ? state.paddle2.y : state.paddle1.y;
+
+    // Ball: set target for lerp
+    ballTarget.x = state.ball.x;
+    ballTarget.y = state.ball.y;
   }
 
   function startRendering() {
@@ -82,13 +88,13 @@ const GameClient = (() => {
     lastFrameTime = 0;
     animFrameId = requestAnimationFrame(renderLoop);
 
-    // Resend input every 50ms as heartbeat for packet loss
+    // Send input heartbeat every 33ms (~30fps) for reliability
     if (inputInterval) clearInterval(inputInterval);
     inputInterval = setInterval(() => {
-      if (window.socket && gameId && currentInput !== 'stop') {
+      if (window.socket && gameId) {
         window.socket.emit('paddle-move', { gameId, direction: currentInput });
       }
-    }, 50);
+    }, 33);
   }
 
   function stopRendering() {
@@ -101,36 +107,29 @@ const GameClient = (() => {
     const delta = timestamp - lastFrameTime;
     lastFrameTime = timestamp;
 
-    // How many server ticks worth of time passed this frame
-    const ticks = Math.min(delta / SERVER_TICK_MS, 4); // cap to prevent huge jumps
+    const ticks = Math.min(delta / SERVER_TICK_MS, 4);
 
-    // Frame-rate independent lerp: 1 - (1 - base)^ticks
-    const myLerp = 1 - Math.pow(1 - MY_PADDLE_LERP, ticks);
-    const remoteLerp = 1 - Math.pow(1 - REMOTE_PADDLE_LERP, ticks);
-    const ballLerp = 1 - Math.pow(1 - BALL_LERP, ticks);
+    // Lerp opponent paddle and ball (frame-rate independent)
+    const rLerp = 1 - Math.pow(1 - REMOTE_LERP, ticks);
+    const bLerp = 1 - Math.pow(1 - BALL_LERP, ticks);
 
-    // Interpolate both paddles toward server targets
-    displayP1Y = lerp(displayP1Y, targetP1Y, amPlayer1 ? myLerp : remoteLerp);
-    displayP2Y = lerp(displayP2Y, targetP2Y, amPlayer1 ? remoteLerp : myLerp);
+    remoteDisplayY = lerp(remoteDisplayY, remoteTargetY, rLerp);
+    ballDisplay.x = lerp(ballDisplay.x, ballTarget.x, bLerp);
+    ballDisplay.y = lerp(ballDisplay.y, ballTarget.y, bLerp);
 
-    // Interpolate ball
-    if (serverState) {
-      displayBall.x = lerp(displayBall.x, serverState.ball.x, ballLerp);
-      displayBall.y = lerp(displayBall.y, serverState.ball.y, ballLerp);
-    }
+    // Your paddle: no lerp, just use myPaddleY directly from server
 
     render();
     animFrameId = requestAnimationFrame(renderLoop);
   }
 
-  function lerp(current, target, factor) {
-    return current + (target - current) * factor;
+  function lerp(a, b, t) {
+    return a + (b - a) * t;
   }
 
   function render() {
     if (!ctx) return;
 
-    // Background
     ctx.fillStyle = skinConfig.background;
     ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
 
@@ -151,16 +150,19 @@ const GameClient = (() => {
     ctx.fillText(displayScore.p1, CANVAS_W / 4, CANVAS_H / 2 + 50);
     ctx.fillText(displayScore.p2, (CANVAS_W * 3) / 4, CANVAS_H / 2 + 50);
 
-    // Paddles
-    drawPaddle(10, displayP1Y, amPlayer1);
-    drawPaddle(CANVAS_W - PADDLE_W - 10, displayP2Y, !amPlayer1);
+    // Paddle positions
+    const p1Y = amPlayer1 ? myPaddleY : remoteDisplayY;
+    const p2Y = amPlayer1 ? remoteDisplayY : myPaddleY;
+
+    drawPaddle(10, p1Y, amPlayer1);
+    drawPaddle(CANVAS_W - PADDLE_W - 10, p2Y, !amPlayer1);
 
     // Ball
     ctx.fillStyle = skinConfig.ball;
     ctx.shadowColor = skinConfig.ball;
     ctx.shadowBlur = 15;
     ctx.beginPath();
-    ctx.arc(displayBall.x + BALL_SIZE / 2, displayBall.y + BALL_SIZE / 2, BALL_SIZE / 2, 0, Math.PI * 2);
+    ctx.arc(ballDisplay.x + BALL_SIZE / 2, ballDisplay.y + BALL_SIZE / 2, BALL_SIZE / 2, 0, Math.PI * 2);
     ctx.fill();
     ctx.shadowBlur = 0;
 
@@ -176,8 +178,7 @@ const GameClient = (() => {
   }
 
   function drawPaddle(x, y, isMe) {
-    const color = isMe ? skinConfig.paddle : '#6b7280';
-    ctx.fillStyle = color;
+    ctx.fillStyle = isMe ? skinConfig.paddle : '#6b7280';
     ctx.shadowColor = isMe ? skinConfig.paddle : 'transparent';
     ctx.shadowBlur = isMe ? 18 : 0;
 
@@ -244,7 +245,6 @@ const GameClient = (() => {
   function cleanup() {
     stopRendering();
     gameId = null;
-    serverState = null;
     currentInput = 'stop';
     lastFrameTime = 0;
     Object.keys(keys).forEach(k => keys[k] = false);
