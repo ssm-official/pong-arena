@@ -64,22 +64,13 @@ const GameClient = (() => {
   function updateState(state) {
     serverState = state;
 
-    // Update score immediately
     displayScore = state.score;
     isPaused = state.paused;
 
-    // Gently correct local paddle toward server truth
-    const myServerY = amPlayer1 ? state.paddle1.y : state.paddle2.y;
-    const diff = Math.abs(localPaddleY - myServerY);
-    if (diff > PADDLE_SPEED * 5) {
-      // Large desync — blend toward server
-      localPaddleY = lerp(localPaddleY, myServerY, 0.4);
-    } else if (diff > PADDLE_SPEED * 2) {
-      // Small desync — nudge gently
-      localPaddleY = lerp(localPaddleY, myServerY, 0.15);
-    }
+    // Local paddle: no correction — client owns its own paddle display.
+    // Server is authoritative for physics/collision only.
 
-    // Update remote paddle target (will be interpolated in render)
+    // Remote paddle: set target for interpolation
     remotePaddleY = amPlayer1 ? state.paddle2.y : state.paddle1.y;
   }
 
