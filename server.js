@@ -86,22 +86,29 @@ io.on('connection', (socket) => {
 
     // Update socketId in any active game (handles reconnection)
     for (const [gameId, game] of activeGames) {
-      if (game.player1.wallet === wallet) {
-        game.player1.socketId = socket.id;
-        if (game.isDisconnected(wallet)) {
-          game.clearDisconnect(wallet);
-          io.to(game.player2.socketId).emit('opponent-reconnected', { gameId });
-          console.log(`Player1 reconnected to game ${gameId}`);
-        }
+      const isP1 = game.player1.wallet === wallet;
+      const isP2 = game.player2.wallet === wallet;
+      if (!isP1 && !isP2) continue;
+
+      if (isP1) game.player1.socketId = socket.id;
+      if (isP2) game.player2.socketId = socket.id;
+
+      const wasDisconnected = game.isDisconnected(wallet);
+      if (wasDisconnected) {
+        game.clearDisconnect(wallet);
+        const oppSocketId = isP1 ? game.player2.socketId : game.player1.socketId;
+        io.to(oppSocketId).emit('opponent-reconnected', { gameId });
+        console.log(`${isP1 ? 'Player1' : 'Player2'} reconnected to game ${gameId}`);
       }
-      if (game.player2.wallet === wallet) {
-        game.player2.socketId = socket.id;
-        if (game.isDisconnected(wallet)) {
-          game.clearDisconnect(wallet);
-          io.to(game.player1.socketId).emit('opponent-reconnected', { gameId });
-          console.log(`Player2 reconnected to game ${gameId}`);
-        }
-      }
+
+      // Always send rejoin data so the client can restore game UI
+      socket.emit('rejoin-game', {
+        gameId,
+        player1: { wallet: game.player1.wallet, username: game.player1.username },
+        player2: { wallet: game.player2.wallet, username: game.player2.username },
+        tier: game.tier,
+        state: game.state,
+      });
     }
   });
 

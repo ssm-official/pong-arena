@@ -690,11 +690,23 @@ socket.on('game-state', (data) => {
   }
 });
 
-// Socket: Opponent disconnected (15s grace period)
+// Socket: Opponent disconnected (15s grace period with live countdown)
+let disconnectCountdownInterval = null;
 socket.on('opponent-disconnected', (data) => {
   if (data.gameId !== currentGameId) return;
   const banner = document.getElementById('disconnect-banner');
+  const countEl = document.getElementById('disconnect-countdown');
   if (banner) banner.classList.remove('hidden');
+
+  // Start live countdown
+  let remaining = 15;
+  if (countEl) countEl.textContent = remaining;
+  if (disconnectCountdownInterval) clearInterval(disconnectCountdownInterval);
+  disconnectCountdownInterval = setInterval(() => {
+    remaining--;
+    if (countEl) countEl.textContent = Math.max(remaining, 0);
+    if (remaining <= 0) clearInterval(disconnectCountdownInterval);
+  }, 1000);
 });
 
 // Socket: Opponent reconnected
@@ -702,6 +714,57 @@ socket.on('opponent-reconnected', (data) => {
   if (data.gameId !== currentGameId) return;
   const banner = document.getElementById('disconnect-banner');
   if (banner) banner.classList.add('hidden');
+  if (disconnectCountdownInterval) {
+    clearInterval(disconnectCountdownInterval);
+    disconnectCountdownInterval = null;
+  }
+});
+
+// Socket: Rejoin active game after reconnection
+socket.on('rejoin-game', (data) => {
+  console.log('Rejoining game:', data.gameId);
+  currentGameId = data.gameId;
+  currentGameTier = data.tier;
+  showMatchmakingState('game');
+
+  // Hide intermission if it was showing
+  const intermission = document.getElementById('intermission-info');
+  if (intermission) intermission.classList.add('hidden');
+
+  // Set up game client
+  GameClient.setGameInfo(data.gameId, data.player1.wallet);
+
+  // Restore mirroring based on chosen side
+  const amP1 = (currentUser.wallet === data.player1.wallet);
+  const myNaturalSide = amP1 ? 'left' : 'right';
+  isMirrored = (chosenSide !== myNaturalSide);
+  GameClient.setMirrored(isMirrored);
+
+  // Set player name labels
+  const leftLabel = document.getElementById('game-p1-name');
+  const rightLabel = document.getElementById('game-p2-name');
+  if (isMirrored) {
+    leftLabel.textContent = data.player2.username;
+    rightLabel.textContent = data.player1.username;
+  } else {
+    leftLabel.textContent = data.player1.username;
+    rightLabel.textContent = data.player2.username;
+  }
+
+  // Restore score
+  if (data.state) {
+    GameClient.updateState(data.state);
+    if (isMirrored) {
+      document.getElementById('game-score-p1').textContent = data.state.score.p2;
+      document.getElementById('game-score-p2').textContent = data.state.score.p1;
+    } else {
+      document.getElementById('game-score-p1').textContent = data.state.score.p1;
+      document.getElementById('game-score-p2').textContent = data.state.score.p2;
+    }
+  }
+
+  updateGameStakeDisplay();
+  GameClient.startRendering();
 });
 
 // Socket: Game over
@@ -709,6 +772,7 @@ socket.on('game-over', (data) => {
   GameClient.cleanup();
   const banner = document.getElementById('disconnect-banner');
   if (banner) banner.classList.add('hidden');
+  if (disconnectCountdownInterval) { clearInterval(disconnectCountdownInterval); disconnectCountdownInterval = null; }
   const won = data.winner === currentUser.wallet;
 
   document.getElementById('gameover-title').textContent = won ? 'VICTORY!' : 'DEFEAT';
@@ -742,6 +806,7 @@ socket.on('game-forfeit', (data) => {
   GameClient.cleanup();
   const banner = document.getElementById('disconnect-banner');
   if (banner) banner.classList.add('hidden');
+  if (disconnectCountdownInterval) { clearInterval(disconnectCountdownInterval); disconnectCountdownInterval = null; }
   const won = data.winner === currentUser.wallet;
   document.getElementById('gameover-title').textContent = won ? 'OPPONENT LEFT — YOU WIN!' : 'DISCONNECTED — FORFEIT';
   document.getElementById('gameover-title').className =
