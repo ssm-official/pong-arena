@@ -13,6 +13,16 @@ let pendingEscrowTx = null;
 const socket = io();
 window.socket = socket; // expose for game-client input
 
+// Re-register on reconnect (Railway can drop connections)
+socket.on('connect', () => {
+  if (currentUser) {
+    socket.emit('register', {
+      wallet: currentUser.wallet,
+      username: currentUser.username
+    });
+  }
+});
+
 // ===========================================
 // WALLET CONNECTION & AUTH
 // ===========================================
@@ -389,7 +399,7 @@ function joinQueue(tier) {
   socket.emit('queue-join', { tier });
   showMatchmakingState('queue');
   document.getElementById('queue-tier-display').textContent =
-    `${tier.toUpperCase()} tier — ${tier === 'low' ? '10' : tier === 'medium' ? '50' : '200'} $PONG`;
+    `${tier.toUpperCase()} tier — ${tier === 'low' ? '10K' : tier === 'medium' ? '50K' : '200K'} $PONG`;
 }
 
 function leaveQueue() {

@@ -37,9 +37,9 @@ const PONG_MINT = () => new PublicKey(process.env.PONG_MINT_ADDRESS);
 // Stake tiers: amounts in $PONG base units (6 decimals for pump.fun tokens)
 const PONG_DECIMALS = 6;
 const STAKE_TIERS = {
-  low:    10  * (10 ** PONG_DECIMALS),
-  medium: 50  * (10 ** PONG_DECIMALS),
-  high:   200 * (10 ** PONG_DECIMALS),
+  low:    10000  * (10 ** PONG_DECIMALS),
+  medium: 50000  * (10 ** PONG_DECIMALS),
+  high:   200000 * (10 ** PONG_DECIMALS),
 };
 
 /**
