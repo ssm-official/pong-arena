@@ -7,6 +7,10 @@ const { STAKE_TIERS, buildEscrowTransaction, verifyEscrowTx } = require('../sola
 const Match = require('../models/Match');
 const crypto = require('crypto');
 
+// Skip on-chain escrow for testing (set SKIP_ESCROW=true in env)
+const SKIP_ESCROW = process.env.SKIP_ESCROW === 'true';
+if (SKIP_ESCROW) console.log('⚠ SKIP_ESCROW mode: games start without token escrow');
+
 // Queues per tier: { low: [player, ...], medium: [...], high: [...] }
 const queues = { low: [], medium: [], high: [] };
 
@@ -135,10 +139,22 @@ async function createMatch(io, player1, player2, tier, activeGames) {
     player2Username: player2.username,
     tier,
     stakeAmount: STAKE_TIERS[tier],
-    status: 'pending-escrow'
+    status: SKIP_ESCROW ? 'in-progress' : 'pending-escrow'
   });
 
-  // Build escrow transactions for both players
+  // --- DEV MODE: skip escrow, start game immediately ---
+  if (SKIP_ESCROW) {
+    const game = new PongEngine(gameId, player1, player2, tier, io, activeGames);
+    activeGames.set(gameId, game);
+
+    io.to(player1.socketId).emit('game-countdown', { gameId, seconds: 3 });
+    io.to(player2.socketId).emit('game-countdown', { gameId, seconds: 3 });
+
+    setTimeout(() => game.start(), 3000);
+    return;
+  }
+
+  // --- PRODUCTION: build escrow transactions ---
   let p1Tx, p2Tx;
   try {
     p1Tx = await buildEscrowTransaction(player1.wallet, tier);
