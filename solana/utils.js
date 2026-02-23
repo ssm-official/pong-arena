@@ -13,10 +13,13 @@ const {
   createBurnInstruction,
   getAssociatedTokenAddress,
   createAssociatedTokenAccountInstruction,
-  TOKEN_PROGRAM_ID,
+  TOKEN_2022_PROGRAM_ID,
   ASSOCIATED_TOKEN_PROGRAM_ID,
 } = require('@solana/spl-token');
 const bs58 = require('bs58');
+
+// Pump.fun tokens use Token-2022 (Token Extensions), NOT the legacy Token Program
+const TOKEN_PROGRAM = TOKEN_2022_PROGRAM_ID;
 
 // Load env
 const RPC_URL = process.env.SOLANA_RPC_URL || 'https://api.devnet.solana.com';
@@ -43,6 +46,13 @@ const STAKE_TIERS = {
 };
 
 /**
+ * Get ATA address for a Token-2022 mint.
+ */
+function getATA(mint, owner) {
+  return getAssociatedTokenAddress(mint, owner, false, TOKEN_PROGRAM, ASSOCIATED_TOKEN_PROGRAM_ID);
+}
+
+/**
  * Check if a token account exists on-chain.
  */
 async function tokenAccountExists(address) {
@@ -57,7 +67,6 @@ async function tokenAccountExists(address) {
 /**
  * Build a transaction for a player to transfer $PONG to treasury (escrow).
  * Returns serialized transaction for the client to sign.
- * If the treasury ATA doesn't exist, the player pays to create it.
  */
 async function buildEscrowTransaction(playerWallet, tier) {
   const amount = STAKE_TIERS[tier];
@@ -67,9 +76,8 @@ async function buildEscrowTransaction(playerWallet, tier) {
   const treasury = getTreasuryKeypair();
   const mint = PONG_MINT();
 
-  // Compute ATA addresses locally (no RPC call)
-  const playerATA = await getAssociatedTokenAddress(mint, player);
-  const treasuryATA = await getAssociatedTokenAddress(mint, treasury.publicKey);
+  const playerATA = await getATA(mint, player);
+  const treasuryATA = await getATA(mint, treasury.publicKey);
 
   const tx = new Transaction();
 
@@ -81,7 +89,9 @@ async function buildEscrowTransaction(playerWallet, tier) {
         player,              // payer
         treasuryATA,         // ATA to create
         treasury.publicKey,  // owner of the ATA
-        mint
+        mint,
+        TOKEN_PROGRAM,
+        ASSOCIATED_TOKEN_PROGRAM_ID
       )
     );
   }
@@ -91,10 +101,10 @@ async function buildEscrowTransaction(playerWallet, tier) {
     createTransferInstruction(
       playerATA,
       treasuryATA,
-      player,        // signer = player
+      player,
       amount,
       [],
-      TOKEN_PROGRAM_ID
+      TOKEN_PROGRAM
     )
   );
 
@@ -113,7 +123,6 @@ async function buildEscrowTransaction(playerWallet, tier) {
 async function verifyEscrowTx(txSignature, expectedAmount, playerWallet) {
   console.log(`Verifying tx: ${txSignature} for ${playerWallet}`);
 
-  // Use getSignatureStatus — lightweight, no websocket needed
   for (let attempt = 0; attempt < 15; attempt++) {
     try {
       const res = await connection.getSignatureStatus(txSignature, {
@@ -151,20 +160,20 @@ async function refundPlayer(playerWallet, amount) {
   const mint = PONG_MINT();
   const player = new PublicKey(playerWallet);
 
-  const treasuryATA = await getAssociatedTokenAddress(mint, treasury.publicKey);
-  const playerATA = await getAssociatedTokenAddress(mint, player);
+  const treasuryATA = await getATA(mint, treasury.publicKey);
+  const playerATA = await getATA(mint, player);
 
   const tx = new Transaction();
 
   const playerATAExists = await tokenAccountExists(playerATA);
   if (!playerATAExists) {
     tx.add(createAssociatedTokenAccountInstruction(
-      treasury.publicKey, playerATA, player, mint
+      treasury.publicKey, playerATA, player, mint, TOKEN_PROGRAM, ASSOCIATED_TOKEN_PROGRAM_ID
     ));
   }
 
   tx.add(createTransferInstruction(
-    treasuryATA, playerATA, treasury.publicKey, amount, [], TOKEN_PROGRAM_ID
+    treasuryATA, playerATA, treasury.publicKey, amount, [], TOKEN_PROGRAM
   ));
 
   tx.feePayer = treasury.publicKey;
@@ -188,42 +197,28 @@ async function payoutWinner(winnerWallet, totalPot) {
   const winnerShare = Math.floor(totalPot * 0.9);
   const burnShare  = Math.floor(totalPot * 0.05);
 
-  const treasuryATA = await getAssociatedTokenAddress(mint, treasury.publicKey);
-  const winnerATA = await getAssociatedTokenAddress(mint, winner);
+  const treasuryATA = await getATA(mint, treasury.publicKey);
+  const winnerATA = await getATA(mint, winner);
 
   const tx = new Transaction();
 
-  // Create winner's ATA if it doesn't exist (treasury pays)
   const winnerATAExists = await tokenAccountExists(winnerATA);
   if (!winnerATAExists) {
     tx.add(
       createAssociatedTokenAccountInstruction(
-        treasury.publicKey, // payer
-        winnerATA,
-        winner,
-        mint
+        treasury.publicKey, winnerATA, winner, mint, TOKEN_PROGRAM, ASSOCIATED_TOKEN_PROGRAM_ID
       )
     );
   }
 
   // Transfer winnings to winner
   tx.add(createTransferInstruction(
-    treasuryATA,
-    winnerATA,
-    treasury.publicKey,
-    winnerShare,
-    [],
-    TOKEN_PROGRAM_ID
+    treasuryATA, winnerATA, treasury.publicKey, winnerShare, [], TOKEN_PROGRAM
   ));
 
   // Burn 5%
   tx.add(createBurnInstruction(
-    treasuryATA,
-    mint,
-    treasury.publicKey,
-    burnShare,
-    [],
-    TOKEN_PROGRAM_ID
+    treasuryATA, mint, treasury.publicKey, burnShare, [], TOKEN_PROGRAM
   ));
 
   tx.feePayer = treasury.publicKey;
@@ -244,8 +239,8 @@ async function buildSkinPurchaseTransaction(playerWallet, price) {
   const treasury = getTreasuryKeypair();
   const mint = PONG_MINT();
 
-  const playerATA = await getAssociatedTokenAddress(mint, player);
-  const treasuryATA = await getAssociatedTokenAddress(mint, treasury.publicKey);
+  const playerATA = await getATA(mint, player);
+  const treasuryATA = await getATA(mint, treasury.publicKey);
 
   const tx = new Transaction();
 
@@ -253,14 +248,14 @@ async function buildSkinPurchaseTransaction(playerWallet, price) {
   if (!treasuryExists) {
     tx.add(
       createAssociatedTokenAccountInstruction(
-        player, treasuryATA, treasury.publicKey, mint
+        player, treasuryATA, treasury.publicKey, mint, TOKEN_PROGRAM, ASSOCIATED_TOKEN_PROGRAM_ID
       )
     );
   }
 
   tx.add(
     createTransferInstruction(
-      playerATA, treasuryATA, player, price, [], TOKEN_PROGRAM_ID
+      playerATA, treasuryATA, player, price, [], TOKEN_PROGRAM
     )
   );
 
@@ -281,11 +276,11 @@ async function burnSkinRevenue(price) {
   const treasury = getTreasuryKeypair();
   const mint = PONG_MINT();
 
-  const treasuryATA = await getAssociatedTokenAddress(mint, treasury.publicKey);
+  const treasuryATA = await getATA(mint, treasury.publicKey);
 
   const tx = new Transaction().add(
     createBurnInstruction(
-      treasuryATA, mint, treasury.publicKey, burnAmount, [], TOKEN_PROGRAM_ID
+      treasuryATA, mint, treasury.publicKey, burnAmount, [], TOKEN_PROGRAM
     )
   );
 
