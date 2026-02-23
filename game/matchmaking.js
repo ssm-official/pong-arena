@@ -183,11 +183,20 @@ async function createMatch(io, player1, player2, tier, activeGames) {
   let p1Tx, p2Tx;
   try {
     p1Tx = await buildEscrowTransaction(player1.wallet, tier);
+  } catch (err) {
+    console.error('P1 escrow build failed:', err.message);
+    io.to(player1.socketId).emit('match-error', { error: err.message });
+    io.to(player2.socketId).emit('match-error', { error: 'Opponent cannot stake. Match cancelled.' });
+    await Match.findOneAndUpdate({ gameId }, { status: 'cancelled' });
+    return;
+  }
+  try {
     p2Tx = await buildEscrowTransaction(player2.wallet, tier);
   } catch (err) {
-    console.error('Failed to build escrow tx:', err.message, err.stack);
-    io.to(player1.socketId).emit('match-error', { error: 'Failed to create escrow transaction' });
-    io.to(player2.socketId).emit('match-error', { error: 'Failed to create escrow transaction' });
+    console.error('P2 escrow build failed:', err.message);
+    io.to(player2.socketId).emit('match-error', { error: err.message });
+    io.to(player1.socketId).emit('match-error', { error: 'Opponent cannot stake. Match cancelled.' });
+    await Match.findOneAndUpdate({ gameId }, { status: 'cancelled' });
     return;
   }
 

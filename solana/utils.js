@@ -65,6 +65,23 @@ async function tokenAccountExists(address) {
 }
 
 /**
+ * Check a player's $PONG token balance.
+ */
+async function getPlayerBalance(playerWallet) {
+  try {
+    const player = new PublicKey(playerWallet);
+    const mint = PONG_MINT();
+    const playerATA = await getATA(mint, player);
+    const exists = await tokenAccountExists(playerATA);
+    if (!exists) return 0;
+    const balance = await connection.getTokenAccountBalance(playerATA);
+    return parseInt(balance.value.amount, 10);
+  } catch {
+    return 0;
+  }
+}
+
+/**
  * Build a transaction for a player to transfer $PONG to treasury (escrow).
  * Returns serialized transaction for the client to sign.
  */
@@ -78,6 +95,14 @@ async function buildEscrowTransaction(playerWallet, tier) {
 
   const playerATA = await getATA(mint, player);
   const treasuryATA = await getATA(mint, treasury.publicKey);
+
+  // Check if player has enough tokens
+  const balance = await getPlayerBalance(playerWallet);
+  if (balance < amount) {
+    const needed = amount / (10 ** PONG_DECIMALS);
+    const has = balance / (10 ** PONG_DECIMALS);
+    throw new Error(`Insufficient $PONG. Need ${needed.toLocaleString()}, have ${has.toLocaleString()}`);
+  }
 
   const tx = new Transaction();
 

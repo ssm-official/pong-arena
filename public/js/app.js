@@ -581,7 +581,10 @@ socket.on('online-users', (users) => {
 // Socket: Errors
 socket.on('queue-error', (data) => alert(data.error));
 socket.on('escrow-error', (data) => alert(data.error));
-socket.on('match-error', (data) => alert(data.error));
+socket.on('match-error', (data) => {
+  alert(data.error);
+  showMatchmakingState('select');
+});
 socket.on('payout-error', (data) => console.error('Payout error:', data.error));
 
 // ===========================================
