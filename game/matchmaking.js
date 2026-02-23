@@ -3,7 +3,7 @@
 // ===========================================
 
 const { PongEngine } = require('./PongEngine');
-const { STAKE_TIERS, buildEscrowTransaction, verifyEscrowTx } = require('../solana/utils');
+const { STAKE_TIERS, buildEscrowTransaction, verifyEscrowTx, refundPlayer } = require('../solana/utils');
 const Match = require('../models/Match');
 const crypto = require('crypto');
 
@@ -69,10 +69,18 @@ function setupMatchmaking(io, socket, onlineUsers, activeGames) {
     const isP2 = socket.wallet === pending.player2.wallet;
     if (!isP1 && !isP2) return;
 
+    // Tell both players this player is verifying
+    const who = isP1 ? 'p1' : 'p2';
+    io.to(pending.player1.socketId).emit('escrow-status', { gameId, player: who, status: 'verifying' });
+    io.to(pending.player2.socketId).emit('escrow-status', { gameId, player: who, status: 'verifying' });
+
     // Verify tx on-chain
+    console.log(`Verifying escrow tx for ${socket.wallet}: ${txSignature}`);
     const verified = await verifyEscrowTx(txSignature, STAKE_TIERS[pending.tier], socket.wallet);
     if (!verified) {
-      return socket.emit('escrow-error', { error: 'Transaction not confirmed' });
+      io.to(pending.player1.socketId).emit('escrow-status', { gameId, player: who, status: 'failed' });
+      io.to(pending.player2.socketId).emit('escrow-status', { gameId, player: who, status: 'failed' });
+      return socket.emit('escrow-error', { error: 'Transaction failed on-chain. Make sure you have enough $PONG and SOL.' });
     }
 
     if (isP1) pending.p1Escrowed = true;
@@ -84,7 +92,9 @@ function setupMatchmaking(io, socket, onlineUsers, activeGames) {
       : { player2EscrowTx: txSignature };
     await Match.findOneAndUpdate({ gameId }, update);
 
-    socket.emit('escrow-confirmed', { gameId });
+    // Tell both players this player confirmed
+    io.to(pending.player1.socketId).emit('escrow-status', { gameId, player: who, status: 'confirmed' });
+    io.to(pending.player2.socketId).emit('escrow-status', { gameId, player: who, status: 'confirmed' });
 
     // If both players escrowed, start the game
     if (pending.p1Escrowed && pending.p2Escrowed) {
@@ -100,7 +110,6 @@ function setupMatchmaking(io, socket, onlineUsers, activeGames) {
       activeGames.set(gameId, game);
       await Match.findOneAndUpdate({ gameId }, { status: 'in-progress' });
 
-      // Short countdown before start
       io.to(pending.player1.socketId).emit('game-countdown', { gameId, seconds: 3 });
       io.to(pending.player2.socketId).emit('game-countdown', { gameId, seconds: 3 });
 
@@ -115,8 +124,24 @@ function setupMatchmaking(io, socket, onlineUsers, activeGames) {
     pendingEscrow.delete(gameId);
     await Match.findOneAndUpdate({ gameId }, { status: 'cancelled' });
 
-    io.to(pending.player1.socketId).emit('match-cancelled', { gameId, reason: 'Escrow cancelled' });
-    io.to(pending.player2.socketId).emit('match-cancelled', { gameId, reason: 'Escrow cancelled' });
+    // If the other player already escrowed, refund them
+    if (pending.p1Escrowed && socket.wallet !== pending.player1.wallet) {
+      refundPlayer(pending.player1.wallet, STAKE_TIERS[pending.tier]).catch(err => {
+        console.error('Refund P1 failed:', err.message);
+      });
+      io.to(pending.player1.socketId).emit('match-cancelled', { gameId, reason: 'Opponent cancelled. Your $PONG is being refunded.' });
+    } else {
+      io.to(pending.player1.socketId).emit('match-cancelled', { gameId, reason: 'Match cancelled' });
+    }
+
+    if (pending.p2Escrowed && socket.wallet !== pending.player2.wallet) {
+      refundPlayer(pending.player2.wallet, STAKE_TIERS[pending.tier]).catch(err => {
+        console.error('Refund P2 failed:', err.message);
+      });
+      io.to(pending.player2.socketId).emit('match-cancelled', { gameId, reason: 'Opponent cancelled. Your $PONG is being refunded.' });
+    } else {
+      io.to(pending.player2.socketId).emit('match-cancelled', { gameId, reason: 'Match cancelled' });
+    }
   });
 
   // Clean up on disconnect
@@ -179,6 +204,7 @@ async function createMatch(io, player1, player2, tier, activeGames) {
     tier,
     stake: STAKE_TIERS[tier],
     escrowTransaction: p1Tx.transaction,
+    yourSlot: 'p1',
   });
 
   io.to(player2.socketId).emit('match-found', {
@@ -187,6 +213,7 @@ async function createMatch(io, player1, player2, tier, activeGames) {
     tier,
     stake: STAKE_TIERS[tier],
     escrowTransaction: p2Tx.transaction,
+    yourSlot: 'p2',
   });
 
   // Timeout: cancel if escrow not completed in 60 seconds

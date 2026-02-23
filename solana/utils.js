@@ -111,23 +111,53 @@ async function buildEscrowTransaction(playerWallet, tier) {
  * Verify an escrow transaction was confirmed on-chain.
  */
 async function verifyEscrowTx(txSignature, expectedAmount, playerWallet) {
-  // The transaction may not be confirmed yet — retry up to 12 times (30s total)
-  for (let attempt = 0; attempt < 12; attempt++) {
-    try {
-      const tx = await connection.getTransaction(txSignature, {
-        commitment: 'confirmed',
-        maxSupportedTransactionVersion: 0
-      });
-      if (tx) {
-        return !tx.meta.err;
-      }
-    } catch {
-      // RPC error, retry
-    }
-    // Wait 2.5 seconds before next attempt
-    await new Promise(r => setTimeout(r, 2500));
+  try {
+    // Use confirmTransaction — much more reliable than polling getTransaction
+    const latestBlockhash = await connection.getLatestBlockhash('confirmed');
+    const result = await connection.confirmTransaction({
+      signature: txSignature,
+      blockhash: latestBlockhash.blockhash,
+      lastValidBlockHeight: latestBlockhash.lastValidBlockHeight,
+    }, 'confirmed');
+
+    return !result.value.err;
+  } catch (err) {
+    console.error('Escrow verify error:', err.message);
+    return false;
   }
-  return false;
+}
+
+/**
+ * Refund a player from treasury (if opponent cancels after they escrowed).
+ */
+async function refundPlayer(playerWallet, amount) {
+  const treasury = getTreasuryKeypair();
+  const mint = PONG_MINT();
+  const player = new PublicKey(playerWallet);
+
+  const treasuryATA = await getAssociatedTokenAddress(mint, treasury.publicKey);
+  const playerATA = await getAssociatedTokenAddress(mint, player);
+
+  const tx = new Transaction();
+
+  const playerATAExists = await tokenAccountExists(playerATA);
+  if (!playerATAExists) {
+    tx.add(createAssociatedTokenAccountInstruction(
+      treasury.publicKey, playerATA, player, mint
+    ));
+  }
+
+  tx.add(createTransferInstruction(
+    treasuryATA, playerATA, treasury.publicKey, amount, [], TOKEN_PROGRAM_ID
+  ));
+
+  tx.feePayer = treasury.publicKey;
+  tx.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
+  tx.sign(treasury);
+
+  const sig = await connection.sendRawTransaction(tx.serialize());
+  await connection.confirmTransaction(sig, 'confirmed');
+  return sig;
 }
 
 /**
@@ -259,6 +289,7 @@ module.exports = {
   buildEscrowTransaction,
   verifyEscrowTx,
   payoutWinner,
+  refundPlayer,
   buildSkinPurchaseTransaction,
   burnSkinRevenue,
 };

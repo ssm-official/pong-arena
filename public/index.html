@@ -146,11 +146,26 @@
             <h3 class="text-lg font-bold text-purple-400 mb-2">Match Found!</h3>
             <p class="text-gray-300 mb-1">Opponent: <span id="escrow-opponent" class="font-bold text-white"></span></p>
             <p class="text-gray-300 mb-4">Stake: <span id="escrow-stake" class="font-bold text-yellow-400"></span></p>
-            <p class="text-gray-500 text-sm mb-4">Sign the transaction to escrow your $PONG tokens. Game starts when both players confirm.</p>
+
+            <!-- Per-player confirmation status -->
+            <div class="flex justify-center gap-6 mb-4">
+              <div class="text-center">
+                <div id="escrow-you-icon" class="w-10 h-10 rounded-full bg-gray-700 flex items-center justify-center mx-auto mb-1 text-lg">?</div>
+                <p class="text-xs text-gray-400">You</p>
+                <p id="escrow-you-status" class="text-xs text-gray-500">Waiting...</p>
+              </div>
+              <div class="text-center">
+                <div id="escrow-opp-icon" class="w-10 h-10 rounded-full bg-gray-700 flex items-center justify-center mx-auto mb-1 text-lg">?</div>
+                <p class="text-xs text-gray-400">Opponent</p>
+                <p id="escrow-opp-status" class="text-xs text-gray-500">Waiting...</p>
+              </div>
+            </div>
+
+            <p id="escrow-msg" class="text-gray-500 text-sm mb-4">Approve the transaction in Phantom to stake your $PONG. Game starts when both players confirm.</p>
             <button id="btn-escrow-submit" onclick="submitEscrow()" class="bg-purple-600 hover:bg-purple-700 px-6 py-2 rounded-lg font-medium transition mr-2">
               Approve & Stake
             </button>
-            <button onclick="cancelEscrow()" class="bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded-lg text-sm transition">
+            <button id="btn-escrow-cancel" onclick="cancelEscrow()" class="bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded-lg text-sm transition">
               Cancel
             </button>
           </div>

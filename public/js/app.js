@@ -418,35 +418,76 @@ function showMatchmakingState(state) {
   document.getElementById('gameover-ui').classList.toggle('hidden', state !== 'gameover');
 }
 
+// Track which player we are in the current match
+let myPlayerSlot = null; // 'p1' or 'p2'
+
 // Socket: Match found → show escrow prompt
 socket.on('match-found', (data) => {
   currentGameId = data.gameId;
   pendingEscrowTx = data.escrowTransaction;
+  myPlayerSlot = data.yourSlot; // server tells us if we're p1 or p2
 
   document.getElementById('escrow-opponent').textContent = data.opponent.username;
   document.getElementById('escrow-stake').textContent = formatPong(data.stake) + ' $PONG';
 
-  // Reset escrow button state
+  // Reset escrow UI
   const btn = document.getElementById('btn-escrow-submit');
   if (btn) { btn.disabled = false; btn.textContent = 'Approve & Stake'; }
+  setEscrowIcon('escrow-you-icon', 'escrow-you-status', '?', 'Waiting...', 'bg-gray-700');
+  setEscrowIcon('escrow-opp-icon', 'escrow-opp-status', '?', 'Waiting...', 'bg-gray-700');
+  document.getElementById('escrow-msg').textContent = 'Approve the transaction in Phantom to stake your $PONG.';
 
   showMatchmakingState('escrow');
 });
 
+function setEscrowIcon(iconId, statusId, icon, text, bgClass) {
+  const iconEl = document.getElementById(iconId);
+  const statusEl = document.getElementById(statusId);
+  iconEl.textContent = icon;
+  iconEl.className = `w-10 h-10 rounded-full flex items-center justify-center mx-auto mb-1 text-lg ${bgClass}`;
+  statusEl.textContent = text;
+}
+
+// Socket: Per-player escrow status updates
+socket.on('escrow-status', (data) => {
+  if (data.gameId !== currentGameId) return;
+
+  const isMe = data.player === myPlayerSlot;
+  const iconId = isMe ? 'escrow-you-icon' : 'escrow-opp-icon';
+  const statusId = isMe ? 'escrow-you-status' : 'escrow-opp-status';
+
+  if (data.status === 'verifying') {
+    setEscrowIcon(iconId, statusId, '...', 'Verifying...', 'bg-yellow-900');
+  } else if (data.status === 'confirmed') {
+    setEscrowIcon(iconId, statusId, '\u2713', 'Confirmed!', 'bg-green-900');
+    if (isMe) {
+      document.getElementById('escrow-msg').textContent = 'You confirmed! Waiting for opponent...';
+      document.getElementById('btn-escrow-submit').classList.add('hidden');
+    }
+  } else if (data.status === 'failed') {
+    setEscrowIcon(iconId, statusId, '\u2717', 'Failed', 'bg-red-900');
+    if (isMe) {
+      const btn = document.getElementById('btn-escrow-submit');
+      btn.disabled = false;
+      btn.textContent = 'Retry';
+    }
+  }
+});
+
 async function submitEscrow() {
   try {
-    // Sign the escrow transaction
+    const btn = document.getElementById('btn-escrow-submit');
+    if (btn) { btn.disabled = true; btn.textContent = 'Sign in Phantom...'; }
+
+    // Sign the escrow transaction via Phantom
     const txSignature = await WalletManager.signAndSendTransaction(pendingEscrowTx);
 
-    // Show verifying state while server confirms on-chain
-    const btn = document.getElementById('btn-escrow-submit');
-    if (btn) {
-      btn.disabled = true;
-      btn.textContent = 'Verifying on-chain...';
-    }
+    if (btn) { btn.textContent = 'Verifying on-chain...'; }
 
     socket.emit('escrow-submit', { gameId: currentGameId, txSignature });
   } catch (err) {
+    const btn = document.getElementById('btn-escrow-submit');
+    if (btn) { btn.disabled = false; btn.textContent = 'Retry'; }
     alert('Escrow failed: ' + err.message);
   }
 }
@@ -455,10 +496,6 @@ function cancelEscrow() {
   socket.emit('escrow-cancel', { gameId: currentGameId });
   showMatchmakingState('select');
 }
-
-socket.on('escrow-confirmed', () => {
-  // Waiting for opponent's escrow...
-});
 
 socket.on('match-cancelled', (data) => {
   alert(data.reason || 'Match cancelled');
