@@ -569,10 +569,12 @@ socket.on('game-start', (data) => {
   if (intermission) intermission.classList.add('hidden');
   GameClient.setGameInfo(data.gameId, data.player1.wallet);
 
-  // Compute mirroring: p1 is naturally left, p2 is naturally right.
-  // Mirror when chosen side doesn't match natural side.
+  // Compute mirroring: p1 is naturally on the LEFT, p2 on the RIGHT.
+  // Mirror when your chosen side doesn't match your natural side.
   const amP1 = (currentUser.wallet === data.player1.wallet);
-  isMirrored = (chosenSide === 'left') !== amP1;
+  const myNaturalSide = amP1 ? 'left' : 'right';
+  isMirrored = (chosenSide !== myNaturalSide);
+  console.log('Side picker:', { chosenSide, amP1, myNaturalSide, isMirrored });
   GameClient.setMirrored(isMirrored);
 
   // Set player name labels to match the visual layout
