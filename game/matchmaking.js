@@ -144,7 +144,7 @@ async function createMatch(io, player1, player2, tier, activeGames) {
     p1Tx = await buildEscrowTransaction(player1.wallet, tier);
     p2Tx = await buildEscrowTransaction(player2.wallet, tier);
   } catch (err) {
-    console.error('Failed to build escrow tx:', err.message);
+    console.error('Failed to build escrow tx:', err.message, err.stack);
     io.to(player1.socketId).emit('match-error', { error: 'Failed to create escrow transaction' });
     io.to(player2.socketId).emit('match-error', { error: 'Failed to create escrow transaction' });
     return;

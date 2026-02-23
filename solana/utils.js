@@ -1,21 +1,20 @@
 // ===========================================
 // Solana Utilities — Token transfers, escrow, burn
 // ===========================================
-// All operations use DEVNET. For mainnet, change RPC and handle real tokens.
 
 const {
   Connection,
   PublicKey,
   Keypair,
   Transaction,
-  SystemProgram,
 } = require('@solana/web3.js');
 const {
-  getOrCreateAssociatedTokenAccount,
   createTransferInstruction,
   createBurnInstruction,
   getAssociatedTokenAddress,
+  createAssociatedTokenAccountInstruction,
   TOKEN_PROGRAM_ID,
+  ASSOCIATED_TOKEN_PROGRAM_ID,
 } = require('@solana/spl-token');
 const bs58 = require('bs58');
 
@@ -34,18 +33,31 @@ function getTreasuryKeypair() {
 }
 
 const PONG_MINT = () => new PublicKey(process.env.PONG_MINT_ADDRESS);
-const BURN_ADDRESS = () => new PublicKey(process.env.BURN_ADDRESS || '1nc1nerator11111111111111111111111111111111');
 
-// Stake tiers: amounts in $PONG base units (assuming 9 decimals like SOL)
+// Stake tiers: amounts in $PONG base units (6 decimals for pump.fun tokens)
+const PONG_DECIMALS = 6;
 const STAKE_TIERS = {
-  low:    10  * 1e9,  // 10 $PONG
-  medium: 50  * 1e9,  // 50 $PONG
-  high:   200 * 1e9,  // 200 $PONG
+  low:    10  * (10 ** PONG_DECIMALS),
+  medium: 50  * (10 ** PONG_DECIMALS),
+  high:   200 * (10 ** PONG_DECIMALS),
 };
+
+/**
+ * Check if a token account exists on-chain.
+ */
+async function tokenAccountExists(address) {
+  try {
+    const info = await connection.getAccountInfo(new PublicKey(address));
+    return info !== null;
+  } catch {
+    return false;
+  }
+}
 
 /**
  * Build a transaction for a player to transfer $PONG to treasury (escrow).
  * Returns serialized transaction for the client to sign.
+ * If the treasury ATA doesn't exist, the player pays to create it.
  */
 async function buildEscrowTransaction(playerWallet, tier) {
   const amount = STAKE_TIERS[tier];
@@ -55,17 +67,31 @@ async function buildEscrowTransaction(playerWallet, tier) {
   const treasury = getTreasuryKeypair();
   const mint = PONG_MINT();
 
-  // Get/create token accounts
+  // Compute ATA addresses locally (no RPC call)
   const playerATA = await getAssociatedTokenAddress(mint, player);
-  const treasuryATA = await getOrCreateAssociatedTokenAccount(
-    connection, treasury, mint, treasury.publicKey
-  );
+  const treasuryATA = await getAssociatedTokenAddress(mint, treasury.publicKey);
 
-  const tx = new Transaction().add(
+  const tx = new Transaction();
+
+  // If treasury ATA doesn't exist yet, add instruction to create it (player pays)
+  const treasuryExists = await tokenAccountExists(treasuryATA);
+  if (!treasuryExists) {
+    tx.add(
+      createAssociatedTokenAccountInstruction(
+        player,              // payer
+        treasuryATA,         // ATA to create
+        treasury.publicKey,  // owner of the ATA
+        mint
+      )
+    );
+  }
+
+  // Transfer $PONG from player to treasury
+  tx.add(
     createTransferInstruction(
       playerATA,
-      treasuryATA.address,
-      player,               // owner (signer = player)
+      treasuryATA,
+      player,        // signer = player
       amount,
       [],
       TOKEN_PROGRAM_ID
@@ -75,7 +101,6 @@ async function buildEscrowTransaction(playerWallet, tier) {
   tx.feePayer = player;
   tx.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
 
-  // Serialize for client to sign (partial sign not needed, player is sole signer)
   return {
     transaction: tx.serialize({ requireAllSignatures: false }).toString('base64'),
     amount
@@ -92,9 +117,7 @@ async function verifyEscrowTx(txSignature, expectedAmount, playerWallet) {
       maxSupportedTransactionVersion: 0
     });
     if (!tx) return false;
-    // Basic check: tx succeeded
     if (tx.meta.err) return false;
-    // In production, parse instructions to verify exact amount/destination
     return true;
   } catch {
     return false;
@@ -112,32 +135,38 @@ async function payoutWinner(winnerWallet, totalPot) {
 
   const winnerShare = Math.floor(totalPot * 0.9);
   const burnShare  = Math.floor(totalPot * 0.05);
-  // Remaining 5% stays in treasury
 
-  // Get token accounts
-  const treasuryATA = await getOrCreateAssociatedTokenAccount(
-    connection, treasury, mint, treasury.publicKey
-  );
-  const winnerATA = await getOrCreateAssociatedTokenAccount(
-    connection, treasury, mint, winner
-  );
+  const treasuryATA = await getAssociatedTokenAddress(mint, treasury.publicKey);
+  const winnerATA = await getAssociatedTokenAddress(mint, winner);
 
   const tx = new Transaction();
 
+  // Create winner's ATA if it doesn't exist (treasury pays)
+  const winnerATAExists = await tokenAccountExists(winnerATA);
+  if (!winnerATAExists) {
+    tx.add(
+      createAssociatedTokenAccountInstruction(
+        treasury.publicKey, // payer
+        winnerATA,
+        winner,
+        mint
+      )
+    );
+  }
+
   // Transfer winnings to winner
   tx.add(createTransferInstruction(
-    treasuryATA.address,
-    winnerATA.address,
+    treasuryATA,
+    winnerATA,
     treasury.publicKey,
     winnerShare,
     [],
     TOKEN_PROGRAM_ID
   ));
 
-  // Burn 5% (transfer to burn address or use burn instruction if treasury has authority)
-  // MVP: use burn instruction directly from treasury ATA
+  // Burn 5%
   tx.add(createBurnInstruction(
-    treasuryATA.address,
+    treasuryATA,
     mint,
     treasury.publicKey,
     burnShare,
@@ -156,8 +185,7 @@ async function payoutWinner(winnerWallet, totalPot) {
 }
 
 /**
- * Process a skin purchase: 90% burn, 10% to treasury.
- * The player sends $PONG to treasury, then treasury burns 90%.
+ * Build skin purchase transaction (player -> treasury).
  */
 async function buildSkinPurchaseTransaction(playerWallet, price) {
   const player = new PublicKey(playerWallet);
@@ -165,18 +193,22 @@ async function buildSkinPurchaseTransaction(playerWallet, price) {
   const mint = PONG_MINT();
 
   const playerATA = await getAssociatedTokenAddress(mint, player);
-  const treasuryATA = await getOrCreateAssociatedTokenAccount(
-    connection, treasury, mint, treasury.publicKey
-  );
+  const treasuryATA = await getAssociatedTokenAddress(mint, treasury.publicKey);
 
-  const tx = new Transaction().add(
+  const tx = new Transaction();
+
+  const treasuryExists = await tokenAccountExists(treasuryATA);
+  if (!treasuryExists) {
+    tx.add(
+      createAssociatedTokenAccountInstruction(
+        player, treasuryATA, treasury.publicKey, mint
+      )
+    );
+  }
+
+  tx.add(
     createTransferInstruction(
-      playerATA,
-      treasuryATA.address,
-      player,
-      price,
-      [],
-      TOKEN_PROGRAM_ID
+      playerATA, treasuryATA, player, price, [], TOKEN_PROGRAM_ID
     )
   );
 
@@ -197,18 +229,11 @@ async function burnSkinRevenue(price) {
   const treasury = getTreasuryKeypair();
   const mint = PONG_MINT();
 
-  const treasuryATA = await getOrCreateAssociatedTokenAccount(
-    connection, treasury, mint, treasury.publicKey
-  );
+  const treasuryATA = await getAssociatedTokenAddress(mint, treasury.publicKey);
 
   const tx = new Transaction().add(
     createBurnInstruction(
-      treasuryATA.address,
-      mint,
-      treasury.publicKey,
-      burnAmount,
-      [],
-      TOKEN_PROGRAM_ID
+      treasuryATA, mint, treasury.publicKey, burnAmount, [], TOKEN_PROGRAM_ID
     )
   );
 
@@ -224,6 +249,7 @@ async function burnSkinRevenue(price) {
 module.exports = {
   connection,
   STAKE_TIERS,
+  PONG_DECIMALS,
   buildEscrowTransaction,
   verifyEscrowTx,
   payoutWinner,

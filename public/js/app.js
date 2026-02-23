@@ -530,8 +530,8 @@ function shortenAddress(addr) {
   return addr.slice(0, 4) + '...' + addr.slice(-4);
 }
 
-function formatPong(lamports) {
-  return (lamports / 1e9).toFixed(2);
+function formatPong(baseUnits) {
+  return (baseUnits / 1e6).toFixed(2);
 }
 
 function esc(str) {

@@ -6,7 +6,7 @@ const express = require('express');
 const router = express.Router();
 const User = require('../models/User');
 const Skin = require('../models/Skin');
-const { buildSkinPurchaseTransaction, verifyEscrowTx, burnSkinRevenue } = require('../solana/utils');
+const { buildSkinPurchaseTransaction, verifyEscrowTx, burnSkinRevenue, PONG_DECIMALS } = require('../solana/utils');
 
 /**
  * GET /api/shop
@@ -49,7 +49,7 @@ router.post('/buy', async (req, res) => {
     }
 
     // Build purchase transaction (player -> treasury)
-    const priceBaseUnits = skin.price * 1e9; // convert to base units
+    const priceBaseUnits = skin.price * (10 ** PONG_DECIMALS);
     const { transaction } = await buildSkinPurchaseTransaction(req.wallet, priceBaseUnits);
 
     res.json({ transaction, skinId, price: priceBaseUnits });
@@ -75,7 +75,7 @@ router.post('/confirm', async (req, res) => {
     if (!skin) return res.status(404).json({ error: 'Skin not found' });
 
     // Verify on-chain
-    const priceBaseUnits = skin.price * 1e9;
+    const priceBaseUnits = skin.price * (10 ** PONG_DECIMALS);
     const verified = await verifyEscrowTx(txSignature, priceBaseUnits, req.wallet);
     if (!verified) {
       return res.status(400).json({ error: 'Transaction not confirmed on-chain' });

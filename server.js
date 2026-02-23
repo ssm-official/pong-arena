@@ -30,6 +30,7 @@ const io = new Server(server, {
 });
 
 // --------------- Middleware ---------------
+app.set('trust proxy', 1); // trust Railway's reverse proxy
 app.use(helmet({ contentSecurityPolicy: false })); // relaxed CSP for dev
 app.use(cors());
 app.use(express.json());
