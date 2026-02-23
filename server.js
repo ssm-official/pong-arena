@@ -83,6 +83,26 @@ io.on('connection', (socket) => {
     socket.wallet = wallet;
     socket.username = username;
     io.emit('online-users', Array.from(onlineUsers.keys()));
+
+    // Update socketId in any active game (handles reconnection)
+    for (const [gameId, game] of activeGames) {
+      if (game.player1.wallet === wallet) {
+        game.player1.socketId = socket.id;
+        if (game.isDisconnected(wallet)) {
+          game.clearDisconnect(wallet);
+          io.to(game.player2.socketId).emit('opponent-reconnected', { gameId });
+          console.log(`Player1 reconnected to game ${gameId}`);
+        }
+      }
+      if (game.player2.wallet === wallet) {
+        game.player2.socketId = socket.id;
+        if (game.isDisconnected(wallet)) {
+          game.clearDisconnect(wallet);
+          io.to(game.player1.socketId).emit('opponent-reconnected', { gameId });
+          console.log(`Player2 reconnected to game ${gameId}`);
+        }
+      }
+    }
   });
 
   // --- Matchmaking ---
@@ -101,11 +121,24 @@ io.on('connection', (socket) => {
       onlineUsers.delete(socket.wallet);
       io.emit('online-users', Array.from(onlineUsers.keys()));
 
-      // Forfeit any active game
+      // Mark disconnected in active games — 15s grace period before forfeit
+      const wallet = socket.wallet;
       for (const [gameId, game] of activeGames) {
-        if (game.hasPlayer(socket.wallet)) {
-          game.forfeit(socket.wallet);
-          activeGames.delete(gameId);
+        if (game.hasPlayer(wallet)) {
+          game.setDisconnect(wallet);
+
+          // Notify opponent
+          const oppSocketId = wallet === game.player1.wallet
+            ? game.player2.socketId : game.player1.socketId;
+          io.to(oppSocketId).emit('opponent-disconnected', { gameId });
+
+          setTimeout(() => {
+            // Only forfeit if still disconnected after grace period
+            if (activeGames.has(gameId) && game.isDisconnected(wallet)) {
+              game.forfeit(wallet);
+              activeGames.delete(gameId);
+            }
+          }, 15000);
         }
       }
     }

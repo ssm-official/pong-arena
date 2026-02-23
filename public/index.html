@@ -221,6 +221,9 @@
             </div>
             <div class="text-sm" id="game-right-label"><span id="game-p2-name" class="text-pink-400 font-bold"></span></div>
           </div>
+          <div id="disconnect-banner" class="hidden bg-red-900/80 text-red-200 text-center text-sm py-2 rounded-lg mb-2">
+            Opponent disconnected — waiting 15s for reconnect...
+          </div>
           <canvas id="game-canvas" width="800" height="600" class="mx-auto block"></canvas>
           <p class="text-center text-gray-500 text-xs mt-2">Controls: W/S or Arrow Keys</p>
         </div>
@@ -337,8 +340,8 @@
   <!-- ============ SCRIPTS ============ -->
   <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@solana/web3.js@1.87.6/lib/index.iife.min.js"></script>
-  <script src="/js/wallet.js?v=17"></script>
-  <script src="/js/game-client.js?v=17"></script>
-  <script src="/js/app.js?v=17"></script>
+  <script src="/js/wallet.js?v=18"></script>
+  <script src="/js/game-client.js?v=18"></script>
+  <script src="/js/app.js?v=18"></script>
 </body>
 </html>

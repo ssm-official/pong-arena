@@ -552,9 +552,9 @@ socket.on('game-countdown', (data) => {
     GameClient.renderCountdown(sec);
     if (countdownEl) countdownEl.textContent = sec;
     sec--;
-    if (sec < 0) {
+    if (sec <= 0) {
       clearInterval(countdownInterval);
-      if (intermission) intermission.classList.add('hidden');
+      // Don't hide intermission here — game-start handler does it
     }
   }
   updateCountdown();
@@ -605,9 +605,25 @@ socket.on('game-state', (data) => {
   }
 });
 
+// Socket: Opponent disconnected (15s grace period)
+socket.on('opponent-disconnected', (data) => {
+  if (data.gameId !== currentGameId) return;
+  const banner = document.getElementById('disconnect-banner');
+  if (banner) banner.classList.remove('hidden');
+});
+
+// Socket: Opponent reconnected
+socket.on('opponent-reconnected', (data) => {
+  if (data.gameId !== currentGameId) return;
+  const banner = document.getElementById('disconnect-banner');
+  if (banner) banner.classList.add('hidden');
+});
+
 // Socket: Game over
 socket.on('game-over', (data) => {
   GameClient.cleanup();
+  const banner = document.getElementById('disconnect-banner');
+  if (banner) banner.classList.add('hidden');
   const won = data.winner === currentUser.wallet;
 
   document.getElementById('gameover-title').textContent = won ? 'VICTORY!' : 'DEFEAT';
@@ -636,6 +652,8 @@ socket.on('payout-complete', (data) => {
 // Socket: Forfeit
 socket.on('game-forfeit', (data) => {
   GameClient.cleanup();
+  const banner = document.getElementById('disconnect-banner');
+  if (banner) banner.classList.add('hidden');
   const won = data.winner === currentUser.wallet;
   document.getElementById('gameover-title').textContent = won ? 'OPPONENT LEFT — YOU WIN!' : 'DISCONNECTED — FORFEIT';
   document.getElementById('gameover-title').className =

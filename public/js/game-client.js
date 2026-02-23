@@ -2,8 +2,7 @@
 // Game Client — Canvas rendering + input
 // ===========================================
 // Your paddle: client-side prediction (offset reconciliation).
-// Ball: client-side extrapolation using server velocity.
-// Opponent: fast lerp from server state.
+// Opponent paddle + ball: fast lerp from server state.
 // All positions rounded to integers.
 
 const GameClient = (() => {
@@ -30,16 +29,15 @@ const GameClient = (() => {
   let serverMyY = CANVAS_H / 2 - PADDLE_H / 2;
   let myOffset = 0;
 
-  // --- Opponent paddle ---
+  // --- Opponent paddle: fast lerp ---
   let remoteTargetY = CANVAS_H / 2 - PADDLE_H / 2;
   let remoteDisplayY = CANVAS_H / 2 - PADDLE_H / 2;
 
-  // --- Ball: extrapolated from server state ---
-  let ballBaseX = CANVAS_W / 2;
-  let ballBaseY = CANVAS_H / 2;
-  let ballVX = 0;
-  let ballVY = 0;
-  let ticksSinceUpdate = 0;
+  // --- Ball: fast lerp ---
+  let ballTargetX = CANVAS_W / 2;
+  let ballTargetY = CANVAS_H / 2;
+  let ballDisplayX = CANVAS_W / 2;
+  let ballDisplayY = CANVAS_H / 2;
 
   let displayScore = { p1: 0, p2: 0 };
   let isPaused = false;
@@ -62,11 +60,10 @@ const GameClient = (() => {
     myOffset = 0;
     remoteTargetY = mid;
     remoteDisplayY = mid;
-    ballBaseX = CANVAS_W / 2;
-    ballBaseY = CANVAS_H / 2;
-    ballVX = 0;
-    ballVY = 0;
-    ticksSinceUpdate = 0;
+    ballTargetX = CANVAS_W / 2;
+    ballTargetY = CANVAS_H / 2;
+    ballDisplayX = CANVAS_W / 2;
+    ballDisplayY = CANVAS_H / 2;
     lastFrameTime = 0;
   }
 
@@ -88,21 +85,16 @@ const GameClient = (() => {
     const newServerY = amPlayer1 ? state.paddle1.y : state.paddle2.y;
     myOffset -= (newServerY - serverMyY);
     serverMyY = newServerY;
-    // Gentle decay to prevent float drift (~3%/tick)
+    // Gentle decay to prevent float drift
     myOffset *= 0.97;
-    // Hard cap so prediction can't run away
+    // Cap so paddle stays close to server (ball collisions look correct)
     if (myOffset > 30) myOffset = 30;
     if (myOffset < -30) myOffset = -30;
 
-    // --- Opponent paddle ---
+    // --- Opponent + ball targets (lerped in renderLoop) ---
     remoteTargetY = amPlayer1 ? state.paddle2.y : state.paddle1.y;
-
-    // --- Ball: reset extrapolation base ---
-    ballBaseX = state.ball.x;
-    ballBaseY = state.ball.y;
-    ballVX = state.ball.vx || 0;
-    ballVY = state.ball.vy || 0;
-    ticksSinceUpdate = 0;
+    ballTargetX = state.ball.x;
+    ballTargetY = state.ball.y;
   }
 
   function startRendering() {
@@ -115,7 +107,7 @@ const GameClient = (() => {
       if (window.socket && gameId) {
         window.socket.emit('paddle-move', { gameId, direction: currentInput });
       }
-    }, 16); // ~60fps input rate
+    }, 16);
   }
 
   function stopRendering() {
@@ -139,24 +131,15 @@ const GameClient = (() => {
       Math.max(0, Math.min(CANVAS_H - PADDLE_H, serverMyY + myOffset))
     );
 
-    // --- Opponent: fast lerp ---
-    const t = 1 - Math.pow(0.08, ticks); // ~0.92 per server tick
+    // --- Opponent + ball: fast lerp (frame-rate independent) ---
+    // 0.92 per server tick → 99% in 2 ticks (33ms) — imperceptible delay
+    const t = 1 - Math.pow(0.08, ticks);
     remoteDisplayY += (remoteTargetY - remoteDisplayY) * t;
-    const oppY = Math.round(remoteDisplayY);
+    ballDisplayX += (ballTargetX - ballDisplayX) * t;
+    ballDisplayY += (ballTargetY - ballDisplayY) * t;
 
-    // --- Ball: extrapolate from last server position using velocity ---
-    ticksSinceUpdate += ticks;
-    let bx = ballBaseX + ballVX * ticksSinceUpdate;
-    let by = ballBaseY + ballVY * ticksSinceUpdate;
-
-    // Predict wall bounces (so ball doesn't go off-screen)
-    if (by < 0) { by = -by; }
-    if (by > CANVAS_H - BALL_SIZE) { by = 2 * (CANVAS_H - BALL_SIZE) - by; }
-
-    // Clamp to play area
-    bx = Math.max(-BALL_SIZE, Math.min(CANVAS_W + BALL_SIZE, bx));
-
-    render(myY, oppY, Math.round(bx), Math.round(by));
+    render(myY, Math.round(remoteDisplayY),
+           Math.round(ballDisplayX), Math.round(ballDisplayY));
     animFrameId = requestAnimationFrame(renderLoop);
   }
 
