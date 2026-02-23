@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Pong Arena — $PONG</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            arena: { bg: '#0a0a1a', card: '#111128', accent: '#7c3aed', glow: '#a855f7' }
+          }
+        }
+      }
+    };
+  </script>
+  <style>
+    body { background: #0a0a1a; font-family: 'Segoe UI', system-ui, sans-serif; }
+    .glow-border { box-shadow: 0 0 15px rgba(168, 85, 247, 0.3); }
+    .tab-active { border-bottom: 2px solid #a855f7; color: #a855f7; }
+    #game-canvas { background: #0f0f2a; border: 1px solid #2d2d5e; border-radius: 8px; }
+    .skin-card:hover { transform: translateY(-2px); transition: transform 0.2s; }
+    @keyframes pulse-glow { 0%, 100% { box-shadow: 0 0 10px rgba(168, 85, 247, 0.4); } 50% { box-shadow: 0 0 25px rgba(168, 85, 247, 0.8); } }
+    .queue-pulse { animation: pulse-glow 2s infinite; }
+  </style>
+</head>
+<body class="text-gray-100 min-h-screen">
+
+  <!-- ============ NAV BAR ============ -->
+  <nav class="bg-arena-card border-b border-purple-900/30 px-6 py-3 flex items-center justify-between">
+    <div class="flex items-center gap-3">
+      <span class="text-2xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
+        PONG ARENA
+      </span>
+      <span class="text-xs text-gray-500 bg-gray-800 px-2 py-0.5 rounded">DEVNET</span>
+    </div>
+    <div class="flex items-center gap-4">
+      <span id="nav-user" class="text-sm text-gray-400 hidden">
+        <img id="nav-pfp" src="" class="w-6 h-6 rounded-full inline mr-1" onerror="this.style.display='none'" />
+        <span id="nav-username"></span>
+      </span>
+      <button id="btn-connect" onclick="connectWallet()"
+        class="bg-purple-600 hover:bg-purple-700 px-4 py-2 rounded-lg text-sm font-medium transition">
+        Connect Phantom
+      </button>
+    </div>
+  </nav>
+
+  <!-- ============ MAIN CONTENT ============ -->
+  <div class="max-w-5xl mx-auto px-4 py-6">
+
+    <!-- Connect Prompt (shown when not logged in) -->
+    <div id="view-connect" class="text-center py-20">
+      <h1 class="text-4xl font-bold mb-4 bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
+        Welcome to Pong Arena
+      </h1>
+      <p class="text-gray-400 mb-8 max-w-md mx-auto">
+        Competitive 1v1 Pong with $PONG token stakes on Solana. Connect your Phantom wallet to play.
+      </p>
+      <button onclick="connectWallet()"
+        class="bg-purple-600 hover:bg-purple-700 px-8 py-3 rounded-xl text-lg font-medium transition glow-border">
+        Connect Wallet
+      </button>
+    </div>
+
+    <!-- Registration Form (first-time users) -->
+    <div id="view-register" class="hidden max-w-md mx-auto py-10">
+      <h2 class="text-2xl font-bold mb-6 text-center">Set Up Your Profile</h2>
+      <div class="bg-arena-card rounded-xl p-6 space-y-4 glow-border">
+        <div>
+          <label class="block text-sm text-gray-400 mb-1">Username *</label>
+          <input id="reg-username" type="text" maxlength="20" placeholder="CryptoGamer42"
+            class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:border-purple-500 focus:outline-none" />
+        </div>
+        <div>
+          <label class="block text-sm text-gray-400 mb-1">Profile Picture URL</label>
+          <input id="reg-pfp" type="text" placeholder="https://i.imgur.com/..."
+            class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:border-purple-500 focus:outline-none" />
+        </div>
+        <div>
+          <label class="block text-sm text-gray-400 mb-1">Bio</label>
+          <textarea id="reg-bio" maxlength="160" rows="2" placeholder="Pong champion since '72"
+            class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:border-purple-500 focus:outline-none"></textarea>
+        </div>
+        <button onclick="registerUser()" class="w-full bg-purple-600 hover:bg-purple-700 py-2 rounded-lg font-medium transition">
+          Create Profile
+        </button>
+        <p id="reg-error" class="text-red-400 text-sm hidden"></p>
+      </div>
+    </div>
+
+    <!-- Main App (logged in) -->
+    <div id="view-app" class="hidden">
+
+      <!-- Tabs -->
+      <div class="flex gap-6 border-b border-gray-800 mb-6">
+        <button onclick="switchTab('play')" class="tab-btn pb-2 text-sm font-medium text-gray-400 hover:text-white tab-active" data-tab="play">Play</button>
+        <button onclick="switchTab('profile')" class="tab-btn pb-2 text-sm font-medium text-gray-400 hover:text-white" data-tab="profile">Profile</button>
+        <button onclick="switchTab('friends')" class="tab-btn pb-2 text-sm font-medium text-gray-400 hover:text-white" data-tab="friends">Friends</button>
+        <button onclick="switchTab('shop')" class="tab-btn pb-2 text-sm font-medium text-gray-400 hover:text-white" data-tab="shop">Shop</button>
+        <button onclick="switchTab('history')" class="tab-btn pb-2 text-sm font-medium text-gray-400 hover:text-white" data-tab="history">History</button>
+      </div>
+
+      <!-- ===== PLAY TAB ===== -->
+      <div id="tab-play" class="tab-content">
+        <!-- Tier Selection -->
+        <div id="matchmaking-ui">
+          <h2 class="text-xl font-bold mb-4">Choose Your Stake</h2>
+          <div class="grid grid-cols-3 gap-4 mb-6">
+            <button onclick="joinQueue('low')"
+              class="tier-btn bg-arena-card border border-green-800 hover:border-green-500 rounded-xl p-4 text-center transition">
+              <div class="text-green-400 text-lg font-bold">Low</div>
+              <div class="text-2xl font-bold mt-1">10 $PONG</div>
+              <div class="text-gray-500 text-xs mt-1">Casual</div>
+            </button>
+            <button onclick="joinQueue('medium')"
+              class="tier-btn bg-arena-card border border-yellow-800 hover:border-yellow-500 rounded-xl p-4 text-center transition">
+              <div class="text-yellow-400 text-lg font-bold">Medium</div>
+              <div class="text-2xl font-bold mt-1">50 $PONG</div>
+              <div class="text-gray-500 text-xs mt-1">Competitive</div>
+            </button>
+            <button onclick="joinQueue('high')"
+              class="tier-btn bg-arena-card border border-red-800 hover:border-red-500 rounded-xl p-4 text-center transition">
+              <div class="text-red-400 text-lg font-bold">High</div>
+              <div class="text-2xl font-bold mt-1">200 $PONG</div>
+              <div class="text-gray-500 text-xs mt-1">High Roller</div>
+            </button>
+          </div>
+        </div>
+
+        <!-- Queue Waiting -->
+        <div id="queue-ui" class="hidden text-center py-8">
+          <div class="inline-block queue-pulse bg-arena-card rounded-xl px-8 py-6">
+            <div class="text-purple-400 text-lg mb-2">Searching for opponent...</div>
+            <div id="queue-tier-display" class="text-gray-400 text-sm mb-4"></div>
+            <button onclick="leaveQueue()" class="text-red-400 hover:text-red-300 text-sm underline">Cancel</button>
+          </div>
+        </div>
+
+        <!-- Escrow Prompt -->
+        <div id="escrow-ui" class="hidden text-center py-8">
+          <div class="bg-arena-card rounded-xl px-8 py-6 max-w-md mx-auto glow-border">
+            <h3 class="text-lg font-bold text-purple-400 mb-2">Match Found!</h3>
+            <p class="text-gray-300 mb-1">Opponent: <span id="escrow-opponent" class="font-bold text-white"></span></p>
+            <p class="text-gray-300 mb-4">Stake: <span id="escrow-stake" class="font-bold text-yellow-400"></span></p>
+            <p class="text-gray-500 text-sm mb-4">Sign the transaction to escrow your $PONG tokens. Game starts when both players confirm.</p>
+            <button onclick="submitEscrow()" class="bg-purple-600 hover:bg-purple-700 px-6 py-2 rounded-lg font-medium transition mr-2">
+              Approve & Stake
+            </button>
+            <button onclick="cancelEscrow()" class="bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded-lg text-sm transition">
+              Cancel
+            </button>
+          </div>
+        </div>
+
+        <!-- Game Canvas -->
+        <div id="game-ui" class="hidden">
+          <div class="flex justify-between items-center mb-2 px-2">
+            <div class="text-sm"><span id="game-p1-name" class="text-purple-400 font-bold"></span> (You)</div>
+            <div class="text-2xl font-bold">
+              <span id="game-score-p1">0</span> - <span id="game-score-p2">0</span>
+            </div>
+            <div class="text-sm"><span id="game-p2-name" class="text-pink-400 font-bold"></span></div>
+          </div>
+          <canvas id="game-canvas" width="800" height="600" class="mx-auto block"></canvas>
+          <p class="text-center text-gray-500 text-xs mt-2">Controls: W/S or Arrow Keys</p>
+        </div>
+
+        <!-- Game Over -->
+        <div id="gameover-ui" class="hidden text-center py-8">
+          <div class="bg-arena-card rounded-xl px-8 py-6 max-w-md mx-auto glow-border">
+            <h3 id="gameover-title" class="text-2xl font-bold mb-2"></h3>
+            <p id="gameover-score" class="text-gray-400 mb-2"></p>
+            <p id="gameover-payout" class="text-green-400 mb-4"></p>
+            <button onclick="backToMatchmaking()" class="bg-purple-600 hover:bg-purple-700 px-6 py-2 rounded-lg font-medium transition">
+              Play Again
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===== PROFILE TAB ===== -->
+      <div id="tab-profile" class="tab-content hidden">
+        <div class="max-w-lg mx-auto bg-arena-card rounded-xl p-6 glow-border">
+          <div class="flex items-center gap-4 mb-6">
+            <img id="profile-pfp" src="" class="w-16 h-16 rounded-full bg-gray-700" onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect fill=%22%23333%22 width=%22100%22 height=%22100%22/><text x=%2250%22 y=%2255%22 text-anchor=%22middle%22 fill=%22%23999%22 font-size=%2240%22>?</text></svg>'" />
+            <div>
+              <h2 id="profile-username" class="text-xl font-bold"></h2>
+              <p id="profile-wallet" class="text-gray-500 text-xs font-mono"></p>
+            </div>
+          </div>
+          <div class="grid grid-cols-3 gap-4 mb-6 text-center">
+            <div class="bg-gray-800 rounded-lg p-3">
+              <div id="stat-wins" class="text-xl font-bold text-green-400">0</div>
+              <div class="text-xs text-gray-500">Wins</div>
+            </div>
+            <div class="bg-gray-800 rounded-lg p-3">
+              <div id="stat-losses" class="text-xl font-bold text-red-400">0</div>
+              <div class="text-xs text-gray-500">Losses</div>
+            </div>
+            <div class="bg-gray-800 rounded-lg p-3">
+              <div id="stat-earnings" class="text-xl font-bold text-yellow-400">0</div>
+              <div class="text-xs text-gray-500">$PONG Earned</div>
+            </div>
+          </div>
+          <div class="space-y-3">
+            <div>
+              <label class="block text-sm text-gray-400 mb-1">Username</label>
+              <input id="edit-username" type="text" maxlength="20"
+                class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:border-purple-500 focus:outline-none" />
+            </div>
+            <div>
+              <label class="block text-sm text-gray-400 mb-1">Profile Picture URL</label>
+              <input id="edit-pfp" type="text"
+                class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:border-purple-500 focus:outline-none" />
+            </div>
+            <div>
+              <label class="block text-sm text-gray-400 mb-1">Bio</label>
+              <textarea id="edit-bio" maxlength="160" rows="2"
+                class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:border-purple-500 focus:outline-none"></textarea>
+            </div>
+            <button onclick="saveProfile()" class="bg-purple-600 hover:bg-purple-700 w-full py-2 rounded-lg font-medium transition">
+              Save Changes
+            </button>
+            <p id="profile-msg" class="text-sm hidden"></p>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===== FRIENDS TAB ===== -->
+      <div id="tab-friends" class="tab-content hidden">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <!-- Search & Add -->
+          <div>
+            <h3 class="text-lg font-bold mb-3">Find Players</h3>
+            <div class="flex gap-2 mb-4">
+              <input id="friend-search" type="text" placeholder="Search by username..."
+                class="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:border-purple-500 focus:outline-none" />
+              <button onclick="searchFriends()" class="bg-purple-600 hover:bg-purple-700 px-4 py-2 rounded-lg text-sm transition">Search</button>
+            </div>
+            <div id="search-results" class="space-y-2"></div>
+
+            <!-- Pending Requests -->
+            <h3 class="text-lg font-bold mb-3 mt-6">Friend Requests</h3>
+            <div id="friend-requests" class="space-y-2">
+              <p class="text-gray-500 text-sm">No pending requests</p>
+            </div>
+          </div>
+
+          <!-- Friend List -->
+          <div>
+            <h3 class="text-lg font-bold mb-3">Friends</h3>
+            <div id="friend-list" class="space-y-2">
+              <p class="text-gray-500 text-sm">No friends yet. Search to add players!</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===== SHOP TAB ===== -->
+      <div id="tab-shop" class="tab-content hidden">
+        <h2 class="text-xl font-bold mb-4">Skins Shop</h2>
+        <p class="text-gray-500 text-sm mb-4">Cosmetic only — no gameplay advantage. 90% of purchases are burned!</p>
+        <div id="shop-grid" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4"></div>
+      </div>
+
+      <!-- ===== HISTORY TAB ===== -->
+      <div id="tab-history" class="tab-content hidden">
+        <h2 class="text-xl font-bold mb-4">Match History</h2>
+        <div id="history-list" class="space-y-2">
+          <p class="text-gray-500 text-sm">No matches played yet.</p>
+        </div>
+      </div>
+
+    </div><!-- /view-app -->
+  </div><!-- /container -->
+
+  <!-- ============ SCRIPTS ============ -->
+  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+  <script src="/js/wallet.js"></script>
+  <script src="/js/game-client.js"></script>
+  <script src="/js/app.js"></script>
+</body>
+</html>
