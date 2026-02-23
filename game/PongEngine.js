@@ -29,7 +29,8 @@ class PongEngine {
     this.tier = tier;
     this.io = io;
     this.activeGames = activeGames;
-    this.pauseTicks = 0; // countdown for score pause
+    this.pauseTicks = 0;
+    this.tickCount = 0;
 
     this.state = {
       ball: { x: CANVAS_W / 2, y: CANVAS_H / 2, vx: 0, vy: 0 },
@@ -93,7 +94,7 @@ class PongEngine {
         this.state.paused = false;
         this.launchBall();
       }
-      this.broadcastState();
+      this.broadcastState(true); // force — pause state is important
       return;
     }
 
@@ -184,14 +185,14 @@ class PongEngine {
       this.state.score.p2++;
       if (this.state.score.p2 >= WIN_SCORE) { this.endGame(this.player2.wallet); return; }
       this.resetBall();
-      this.broadcastState();
+      this.broadcastState(true); // force — score change
       return;
     }
     if (ball.x > CANVAS_W) {
       this.state.score.p1++;
       if (this.state.score.p1 >= WIN_SCORE) { this.endGame(this.player1.wallet); return; }
       this.resetBall();
-      this.broadcastState();
+      this.broadcastState(true); // force — score change
       return;
     }
 
@@ -217,7 +218,12 @@ class PongEngine {
     this.state.ball.vy = Math.sin(angle) * BALL_SPEED_INITIAL;
   }
 
-  broadcastState() {
+  broadcastState(force) {
+    this.tickCount++;
+    // Send at 30fps (every other tick) to reduce network load.
+    // Client-side extrapolation fills gaps smoothly.
+    // Always send on score/pause (force=true).
+    if (!force && this.tickCount % 2 !== 0) return;
     this.emit('game-state', {
       gameId: this.gameId,
       state: this.state,

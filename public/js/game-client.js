@@ -1,9 +1,10 @@
 // ===========================================
 // Game Client — Canvas rendering + input
 // ===========================================
-// Your paddle: client-side prediction with offset reconciliation.
-// Opponent paddle + ball: very fast lerp (smooth network jitter).
-// All positions rounded to integers (no subpixel shaking).
+// Your paddle: client-side prediction (offset reconciliation).
+// Ball: client-side extrapolation using server velocity.
+// Opponent: fast lerp from server state.
+// All positions rounded to integers.
 
 const GameClient = (() => {
   const CANVAS_W = 800;
@@ -13,7 +14,6 @@ const GameClient = (() => {
   const PADDLE_SPEED = 6;
   const BALL_SIZE = 12;
   const SERVER_TICK_MS = 1000 / 60;
-  const SMOOTH = 0.92; // fast lerp for opponent + ball (99% in 2 frames)
 
   let canvas = null;
   let ctx = null;
@@ -26,7 +26,7 @@ const GameClient = (() => {
   let skinConfig = { paddle: '#a855f7', ball: '#ffffff', background: '#0f0f2a' };
   let mirrored = false;
 
-  // --- Your paddle ---
+  // --- Your paddle: offset reconciliation ---
   let serverMyY = CANVAS_H / 2 - PADDLE_H / 2;
   let myOffset = 0;
 
@@ -34,11 +34,12 @@ const GameClient = (() => {
   let remoteTargetY = CANVAS_H / 2 - PADDLE_H / 2;
   let remoteDisplayY = CANVAS_H / 2 - PADDLE_H / 2;
 
-  // --- Ball ---
-  let ballTargetX = CANVAS_W / 2;
-  let ballTargetY = CANVAS_H / 2;
-  let ballDisplayX = CANVAS_W / 2;
-  let ballDisplayY = CANVAS_H / 2;
+  // --- Ball: extrapolated from server state ---
+  let ballBaseX = CANVAS_W / 2;
+  let ballBaseY = CANVAS_H / 2;
+  let ballVX = 0;
+  let ballVY = 0;
+  let ticksSinceUpdate = 0;
 
   let displayScore = { p1: 0, p2: 0 };
   let isPaused = false;
@@ -61,10 +62,11 @@ const GameClient = (() => {
     myOffset = 0;
     remoteTargetY = mid;
     remoteDisplayY = mid;
-    ballTargetX = CANVAS_W / 2;
-    ballTargetY = CANVAS_H / 2;
-    ballDisplayX = CANVAS_W / 2;
-    ballDisplayY = CANVAS_H / 2;
+    ballBaseX = CANVAS_W / 2;
+    ballBaseY = CANVAS_H / 2;
+    ballVX = 0;
+    ballVY = 0;
+    ticksSinceUpdate = 0;
     lastFrameTime = 0;
   }
 
@@ -86,14 +88,21 @@ const GameClient = (() => {
     const newServerY = amPlayer1 ? state.paddle1.y : state.paddle2.y;
     myOffset -= (newServerY - serverMyY);
     serverMyY = newServerY;
-
-    // Gentle decay prevents drift from accumulating (loses ~3%/tick)
+    // Gentle decay to prevent float drift (~3%/tick)
     myOffset *= 0.97;
+    // Hard cap so prediction can't run away
+    if (myOffset > 30) myOffset = 30;
+    if (myOffset < -30) myOffset = -30;
 
-    // Opponent paddle + ball targets (lerped in renderLoop)
+    // --- Opponent paddle ---
     remoteTargetY = amPlayer1 ? state.paddle2.y : state.paddle1.y;
-    ballTargetX = state.ball.x;
-    ballTargetY = state.ball.y;
+
+    // --- Ball: reset extrapolation base ---
+    ballBaseX = state.ball.x;
+    ballBaseY = state.ball.y;
+    ballVX = state.ball.vx || 0;
+    ballVY = state.ball.vy || 0;
+    ticksSinceUpdate = 0;
   }
 
   function startRendering() {
@@ -106,7 +115,7 @@ const GameClient = (() => {
       if (window.socket && gameId) {
         window.socket.emit('paddle-move', { gameId, direction: currentInput });
       }
-    }, 33);
+    }, 16); // ~60fps input rate
   }
 
   function stopRendering() {
@@ -130,25 +139,29 @@ const GameClient = (() => {
       Math.max(0, Math.min(CANVAS_H - PADDLE_H, serverMyY + myOffset))
     );
 
-    // --- Opponent: very fast lerp (frame-rate independent) ---
-    const t = 1 - Math.pow(1 - SMOOTH, ticks);
+    // --- Opponent: fast lerp ---
+    const t = 1 - Math.pow(0.08, ticks); // ~0.92 per server tick
     remoteDisplayY += (remoteTargetY - remoteDisplayY) * t;
+    const oppY = Math.round(remoteDisplayY);
 
-    // --- Ball: very fast lerp ---
-    ballDisplayX += (ballTargetX - ballDisplayX) * t;
-    ballDisplayY += (ballTargetY - ballDisplayY) * t;
+    // --- Ball: extrapolate from last server position using velocity ---
+    ticksSinceUpdate += ticks;
+    let bx = ballBaseX + ballVX * ticksSinceUpdate;
+    let by = ballBaseY + ballVY * ticksSinceUpdate;
 
-    render(myY);
+    // Predict wall bounces (so ball doesn't go off-screen)
+    if (by < 0) { by = -by; }
+    if (by > CANVAS_H - BALL_SIZE) { by = 2 * (CANVAS_H - BALL_SIZE) - by; }
+
+    // Clamp to play area
+    bx = Math.max(-BALL_SIZE, Math.min(CANVAS_W + BALL_SIZE, bx));
+
+    render(myY, oppY, Math.round(bx), Math.round(by));
     animFrameId = requestAnimationFrame(renderLoop);
   }
 
-  function render(myDisplayY) {
+  function render(myDisplayY, oppY, bx, by) {
     if (!ctx) return;
-
-    // Round all positions to integers to prevent subpixel shaking
-    const oppY = Math.round(remoteDisplayY);
-    const bx = Math.round(mirrored ? (CANVAS_W - ballDisplayX - BALL_SIZE) : ballDisplayX);
-    const by = Math.round(ballDisplayY);
 
     ctx.fillStyle = skinConfig.background;
     ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
@@ -184,12 +197,13 @@ const GameClient = (() => {
       drawPaddle(CANVAS_W - PADDLE_W - 10, p1Y, amPlayer1);
     }
 
-    // Ball
+    // Ball — mirror x position
+    const drawBx = mirrored ? (CANVAS_W - bx - BALL_SIZE) : bx;
     ctx.fillStyle = skinConfig.ball;
     ctx.shadowColor = skinConfig.ball;
     ctx.shadowBlur = 10;
     ctx.beginPath();
-    ctx.arc(bx + BALL_SIZE / 2, by + BALL_SIZE / 2, BALL_SIZE / 2, 0, Math.PI * 2);
+    ctx.arc(drawBx + BALL_SIZE / 2, by + BALL_SIZE / 2, BALL_SIZE / 2, 0, Math.PI * 2);
     ctx.fill();
     ctx.shadowBlur = 0;
 
