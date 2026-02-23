@@ -4,19 +4,16 @@
 // Your paddle: client-side prediction with offset reconciliation.
 //   - Moves instantly on input (no waiting for server round-trip)
 //   - Server updates adjust the offset so prediction stays in sync
-//   - Both players see nearly identical positions
-// Opponent paddle + ball: server state with lerp (smooth jitter).
+// Opponent paddle + ball: snapped to server state (60fps = smooth).
 
 const GameClient = (() => {
   const CANVAS_W = 800;
   const CANVAS_H = 600;
   const PADDLE_W = 14;
   const PADDLE_H = 110;
-  const PADDLE_SPEED = 10;
+  const PADDLE_SPEED = 7;
   const BALL_SIZE = 12;
   const SERVER_TICK_MS = 1000 / 60;
-  const REMOTE_LERP = 0.6;   // faster catch-up for opponent paddle
-  const BALL_LERP = 0.7;     // ball should track server closely
 
   let canvas = null;
   let ctx = null;
@@ -27,19 +24,18 @@ const GameClient = (() => {
   let inputInterval = null;
   let lastFrameTime = 0;
   let skinConfig = { paddle: '#a855f7', ball: '#ffffff', background: '#0f0f2a' };
-  let mirrored = false; // if true, flip view so your paddle is on the right
+  let mirrored = false;
 
   // --- Your paddle: prediction with offset reconciliation ---
-  let serverMyY = CANVAS_H / 2 - PADDLE_H / 2;  // last known server position
-  let myOffset = 0;  // prediction offset (local movement since last server update)
+  let serverMyY = CANVAS_H / 2 - PADDLE_H / 2;
+  let myOffset = 0;
 
-  // --- Opponent paddle: lerped ---
-  let remoteTargetY = CANVAS_H / 2 - PADDLE_H / 2;
-  let remoteDisplayY = CANVAS_H / 2 - PADDLE_H / 2;
+  // --- Opponent paddle: direct from server ---
+  let remoteY = CANVAS_H / 2 - PADDLE_H / 2;
 
-  // --- Ball: lerped ---
-  let ballTarget = { x: CANVAS_W / 2, y: CANVAS_H / 2 };
-  let ballDisplay = { x: CANVAS_W / 2, y: CANVAS_H / 2 };
+  // --- Ball: direct from server ---
+  let ballX = CANVAS_W / 2;
+  let ballY = CANVAS_H / 2;
 
   let displayScore = { p1: 0, p2: 0 };
   let isPaused = false;
@@ -60,10 +56,9 @@ const GameClient = (() => {
     const mid = CANVAS_H / 2 - PADDLE_H / 2;
     serverMyY = mid;
     myOffset = 0;
-    remoteTargetY = mid;
-    remoteDisplayY = mid;
-    ballTarget = { x: CANVAS_W / 2, y: CANVAS_H / 2 };
-    ballDisplay = { x: CANVAS_W / 2, y: CANVAS_H / 2 };
+    remoteY = mid;
+    ballX = CANVAS_W / 2;
+    ballY = CANVAS_H / 2;
     lastFrameTime = 0;
   }
 
@@ -83,21 +78,20 @@ const GameClient = (() => {
 
     // --- Reconcile your paddle prediction ---
     const newServerY = amPlayer1 ? state.paddle1.y : state.paddle2.y;
-    // Subtract the server's movement from our offset.
-    // If server moved 10px down and we predicted 10px down, offset stays ~0.
-    // If server hasn't received our input yet (moved 0), offset stays as-is.
     myOffset -= (newServerY - serverMyY);
     serverMyY = newServerY;
 
-    // Smoothly decay offset toward zero (reconcile prediction with server)
-    myOffset *= 0.85;
+    // Hard cap: if offset drifts too far, snap back
+    if (Math.abs(myOffset) > 80) {
+      myOffset = 0;
+    }
 
-    // Opponent paddle target
-    remoteTargetY = amPlayer1 ? state.paddle2.y : state.paddle1.y;
+    // Opponent paddle: snap to server
+    remoteY = amPlayer1 ? state.paddle2.y : state.paddle1.y;
 
-    // Ball target
-    ballTarget.x = state.ball.x;
-    ballTarget.y = state.ball.y;
+    // Ball: snap to server
+    ballX = state.ball.x;
+    ballY = state.ball.y;
   }
 
   function startRendering() {
@@ -131,28 +125,12 @@ const GameClient = (() => {
       myOffset += PADDLE_SPEED * ticks;
     }
 
-    // Display = server position + prediction offset, clamped to bounds
+    // Display = server position + prediction offset, clamped
     const myDisplayY = Math.max(0, Math.min(CANVAS_H - PADDLE_H, serverMyY + myOffset));
-
-    // --- Opponent paddle: lerp ---
-    const rLerp = 1 - Math.pow(1 - REMOTE_LERP, ticks);
-    remoteDisplayY = lerp(remoteDisplayY, remoteTargetY, rLerp);
-
-    // --- Ball: lerp ---
-    const bLerp = 1 - Math.pow(1 - BALL_LERP, ticks);
-    ballDisplay.x = lerp(ballDisplay.x, ballTarget.x, bLerp);
-    ballDisplay.y = lerp(ballDisplay.y, ballTarget.y, bLerp);
 
     render(myDisplayY);
     animFrameId = requestAnimationFrame(renderLoop);
   }
-
-  function lerp(a, b, t) {
-    return a + (b - a) * t;
-  }
-
-  // Mirror an x coordinate horizontally
-  function mx(x) { return mirrored ? CANVAS_W - x : x; }
 
   function render(myDisplayY) {
     if (!ctx) return;
@@ -170,7 +148,7 @@ const GameClient = (() => {
     ctx.stroke();
     ctx.setLineDash([]);
 
-    // Score — when mirrored, swap left/right score positions
+    // Score — when mirrored, swap left/right
     ctx.fillStyle = 'rgba(255,255,255,0.08)';
     ctx.font = 'bold 140px monospace';
     ctx.textAlign = 'center';
@@ -179,27 +157,25 @@ const GameClient = (() => {
     ctx.fillText(leftScore, CANVAS_W / 4, CANVAS_H / 2 + 50);
     ctx.fillText(rightScore, (CANVAS_W * 3) / 4, CANVAS_H / 2 + 50);
 
-    // Paddle positions from server
-    const p1Y = amPlayer1 ? myDisplayY : remoteDisplayY;
-    const p2Y = amPlayer1 ? remoteDisplayY : myDisplayY;
+    // Paddle Y positions
+    const p1Y = amPlayer1 ? myDisplayY : remoteY;
+    const p2Y = amPlayer1 ? remoteY : myDisplayY;
 
     if (!mirrored) {
-      // Normal: p1 left, p2 right
       drawPaddle(10, p1Y, amPlayer1);
       drawPaddle(CANVAS_W - PADDLE_W - 10, p2Y, !amPlayer1);
     } else {
-      // Mirrored: p2 on left, p1 on right
       drawPaddle(10, p2Y, !amPlayer1);
       drawPaddle(CANVAS_W - PADDLE_W - 10, p1Y, amPlayer1);
     }
 
     // Ball — mirror x position
-    const bx = mirrored ? (CANVAS_W - ballDisplay.x - BALL_SIZE) : ballDisplay.x;
+    const bx = mirrored ? (CANVAS_W - ballX - BALL_SIZE) : ballX;
     ctx.fillStyle = skinConfig.ball;
     ctx.shadowColor = skinConfig.ball;
     ctx.shadowBlur = 15;
     ctx.beginPath();
-    ctx.arc(bx + BALL_SIZE / 2, ballDisplay.y + BALL_SIZE / 2, BALL_SIZE / 2, 0, Math.PI * 2);
+    ctx.arc(bx + BALL_SIZE / 2, ballY + BALL_SIZE / 2, BALL_SIZE / 2, 0, Math.PI * 2);
     ctx.fill();
     ctx.shadowBlur = 0;
 

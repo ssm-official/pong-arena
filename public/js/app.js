@@ -8,7 +8,8 @@ let sessionToken = null; // Bearer token from server — sign once, use everywhe
 let onlineUsers = [];    // array of online wallet addresses
 let currentGameId = null;
 let pendingEscrowTx = null;
-let isMirrored = false; // true = player chose right side
+let isMirrored = false;
+let chosenSide = 'left'; // which side the player wants their paddle on
 
 /** Return Authorization header using cached session token. No wallet popup. */
 function getAuthHeader() {
@@ -508,8 +509,7 @@ socket.on('match-cancelled', (data) => {
 // ===========================================
 
 function pickSide(side) {
-  isMirrored = (side === 'right');
-  GameClient.setMirrored(isMirrored);
+  chosenSide = side;
 
   // Update button styles
   const btnLeft = document.getElementById('btn-side-left');
@@ -529,8 +529,7 @@ socket.on('game-countdown', (data) => {
   GameClient.setGameInfo(data.gameId, null); // will be set on game-start
 
   // Reset side picker to left (default)
-  isMirrored = false;
-  GameClient.setMirrored(false);
+  chosenSide = 'left';
   pickSide('left');
 
   // Show intermission overlay with opponent info + side picker
@@ -570,7 +569,13 @@ socket.on('game-start', (data) => {
   if (intermission) intermission.classList.add('hidden');
   GameClient.setGameInfo(data.gameId, data.player1.wallet);
 
-  // Swap player name labels based on side choice
+  // Compute mirroring: p1 is naturally left, p2 is naturally right.
+  // Mirror when chosen side doesn't match natural side.
+  const amP1 = (currentUser.wallet === data.player1.wallet);
+  isMirrored = (chosenSide === 'left') !== amP1;
+  GameClient.setMirrored(isMirrored);
+
+  // Set player name labels to match the visual layout
   const leftLabel = document.getElementById('game-p1-name');
   const rightLabel = document.getElementById('game-p2-name');
   if (isMirrored) {
@@ -640,6 +645,7 @@ socket.on('game-forfeit', (data) => {
 function backToMatchmaking() {
   currentGameId = null;
   isMirrored = false;
+  chosenSide = 'left';
   const intermission = document.getElementById('intermission-info');
   if (intermission) intermission.classList.add('hidden');
   showMatchmakingState('select');
