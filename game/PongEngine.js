@@ -10,49 +10,46 @@ const { payoutWinner, STAKE_TIERS } = require('../solana/utils');
 
 const CANVAS_W = 800;
 const CANVAS_H = 600;
-const PADDLE_W = 12;
-const PADDLE_H = 100;
-const PADDLE_SPEED = 6;
-const BALL_SIZE = 10;
-const BALL_SPEED_INITIAL = 5;
-const BALL_SPEED_INCREMENT = 0.3;  // speed up after each hit
+const PADDLE_W = 14;
+const PADDLE_H = 110;
+const PADDLE_SPEED = 10;        // much faster paddles
+const BALL_SIZE = 12;
+const BALL_SPEED_INITIAL = 4;   // start a bit slower
+const BALL_SPEED_INCREMENT = 0.2;
+const BALL_MAX_SPEED = 12;
 const WIN_SCORE = 5;
-const TICK_RATE = 1000 / 60; // ~16ms
+const TICK_RATE = 1000 / 60;
+const SCORE_PAUSE_TICKS = 90;   // 1.5 second pause after scoring
 
 class PongEngine {
   constructor(gameId, player1, player2, tier, io, activeGames) {
     this.gameId = gameId;
-    this.player1 = player1; // { wallet, username, socketId }
+    this.player1 = player1;
     this.player2 = player2;
     this.tier = tier;
     this.io = io;
     this.activeGames = activeGames;
+    this.pauseTicks = 0; // countdown for score pause
 
-    // Game state
     this.state = {
-      ball: { x: CANVAS_W / 2, y: CANVAS_H / 2, vx: BALL_SPEED_INITIAL, vy: BALL_SPEED_INITIAL },
-      paddle1: { y: CANVAS_H / 2 - PADDLE_H / 2 }, // left
-      paddle2: { y: CANVAS_H / 2 - PADDLE_H / 2 }, // right
+      ball: { x: CANVAS_W / 2, y: CANVAS_H / 2, vx: 0, vy: 0 },
+      paddle1: { y: CANVAS_H / 2 - PADDLE_H / 2 },
+      paddle2: { y: CANVAS_H / 2 - PADDLE_H / 2 },
       score: { p1: 0, p2: 0 },
       status: 'playing',
       winner: null,
+      paused: false, // tells client to show "Get Ready" between points
     };
 
-    // Input state
     this.input = {
-      [player1.wallet]: 'stop', // 'up' | 'down' | 'stop'
+      [player1.wallet]: 'stop',
       [player2.wallet]: 'stop',
     };
-
-    // Randomize initial ball direction
-    this.state.ball.vx *= Math.random() > 0.5 ? 1 : -1;
-    this.state.ball.vy *= Math.random() > 0.5 ? 1 : -1;
 
     this.interval = null;
   }
 
   start() {
-    // Notify both players
     this.emit('game-start', {
       gameId: this.gameId,
       player1: { wallet: this.player1.wallet, username: this.player1.username },
@@ -61,7 +58,8 @@ class PongEngine {
       stake: STAKE_TIERS[this.tier],
     });
 
-    // Start game loop
+    // Start with a brief pause then launch ball
+    this.launchBall();
     this.interval = setInterval(() => this.tick(), TICK_RATE);
   }
 
@@ -78,7 +76,7 @@ class PongEngine {
   tick() {
     if (this.state.status !== 'playing') return;
 
-    // --- Move paddles based on input ---
+    // --- Always allow paddle movement, even during pause ---
     const p1Input = this.input[this.player1.wallet];
     const p2Input = this.input[this.player2.wallet];
 
@@ -87,79 +85,110 @@ class PongEngine {
     if (p2Input === 'up')   this.state.paddle2.y = Math.max(0, this.state.paddle2.y - PADDLE_SPEED);
     if (p2Input === 'down') this.state.paddle2.y = Math.min(CANVAS_H - PADDLE_H, this.state.paddle2.y + PADDLE_SPEED);
 
+    // --- Score pause countdown ---
+    if (this.pauseTicks > 0) {
+      this.pauseTicks--;
+      this.state.paused = true;
+      if (this.pauseTicks === 0) {
+        this.state.paused = false;
+        this.launchBall();
+      }
+      this.broadcastState();
+      return;
+    }
+
     // --- Move ball ---
     const ball = this.state.ball;
     ball.x += ball.vx;
     ball.y += ball.vy;
 
     // Top/bottom wall bounce
-    if (ball.y <= 0 || ball.y >= CANVAS_H - BALL_SIZE) {
-      ball.vy = -ball.vy;
-      ball.y = Math.max(0, Math.min(CANVAS_H - BALL_SIZE, ball.y));
+    if (ball.y <= 0) {
+      ball.vy = Math.abs(ball.vy);
+      ball.y = 0;
+    }
+    if (ball.y >= CANVAS_H - BALL_SIZE) {
+      ball.vy = -Math.abs(ball.vy);
+      ball.y = CANVAS_H - BALL_SIZE;
     }
 
     // Left paddle collision (player 1)
+    const p1Left = 10;
+    const p1Right = 10 + PADDLE_W;
     if (
-      ball.x <= PADDLE_W + 10 &&
+      ball.vx < 0 &&
+      ball.x <= p1Right &&
+      ball.x + BALL_SIZE >= p1Left &&
       ball.y + BALL_SIZE >= this.state.paddle1.y &&
-      ball.y <= this.state.paddle1.y + PADDLE_H &&
-      ball.vx < 0
+      ball.y <= this.state.paddle1.y + PADDLE_H
     ) {
-      ball.vx = -ball.vx + BALL_SPEED_INCREMENT;
-      ball.x = PADDLE_W + 10;
-      // Add spin based on where ball hits paddle
-      const hitPos = (ball.y - this.state.paddle1.y) / PADDLE_H;
-      ball.vy = (hitPos - 0.5) * 10;
+      const speed = Math.min(Math.abs(ball.vx) + BALL_SPEED_INCREMENT, BALL_MAX_SPEED);
+      ball.vx = speed;
+      ball.x = p1Right;
+      const hitPos = (ball.y + BALL_SIZE / 2 - this.state.paddle1.y) / PADDLE_H;
+      ball.vy = (hitPos - 0.5) * speed * 1.5;
     }
 
     // Right paddle collision (player 2)
+    const p2Left = CANVAS_W - 10 - PADDLE_W;
+    const p2Right = CANVAS_W - 10;
     if (
-      ball.x + BALL_SIZE >= CANVAS_W - PADDLE_W - 10 &&
+      ball.vx > 0 &&
+      ball.x + BALL_SIZE >= p2Left &&
+      ball.x <= p2Right &&
       ball.y + BALL_SIZE >= this.state.paddle2.y &&
-      ball.y <= this.state.paddle2.y + PADDLE_H &&
-      ball.vx > 0
+      ball.y <= this.state.paddle2.y + PADDLE_H
     ) {
-      ball.vx = -(ball.vx + BALL_SPEED_INCREMENT);
-      ball.x = CANVAS_W - PADDLE_W - 10 - BALL_SIZE;
-      const hitPos = (ball.y - this.state.paddle2.y) / PADDLE_H;
-      ball.vy = (hitPos - 0.5) * 10;
+      const speed = Math.min(Math.abs(ball.vx) + BALL_SPEED_INCREMENT, BALL_MAX_SPEED);
+      ball.vx = -speed;
+      ball.x = p2Left - BALL_SIZE;
+      const hitPos = (ball.y + BALL_SIZE / 2 - this.state.paddle2.y) / PADDLE_H;
+      ball.vy = (hitPos - 0.5) * speed * 1.5;
     }
 
     // --- Scoring ---
-    if (ball.x < 0) {
-      // Player 2 scores
+    if (ball.x + BALL_SIZE < 0) {
       this.state.score.p2++;
-      this.resetBall(-1);
-    } else if (ball.x > CANVAS_W) {
-      // Player 1 scores
+      if (this.state.score.p2 >= WIN_SCORE) { this.endGame(this.player2.wallet); return; }
+      this.resetBall();
+      this.broadcastState();
+      return;
+    }
+    if (ball.x > CANVAS_W) {
       this.state.score.p1++;
-      this.resetBall(1);
-    }
-
-    // --- Check win condition ---
-    if (this.state.score.p1 >= WIN_SCORE) {
-      this.endGame(this.player1.wallet);
-      return;
-    }
-    if (this.state.score.p2 >= WIN_SCORE) {
-      this.endGame(this.player2.wallet);
+      if (this.state.score.p1 >= WIN_SCORE) { this.endGame(this.player1.wallet); return; }
+      this.resetBall();
+      this.broadcastState();
       return;
     }
 
-    // --- Broadcast state to both players ---
+    this.broadcastState();
+  }
+
+  resetBall() {
+    // Center ball, zero velocity — pause before launching
+    this.state.ball = {
+      x: CANVAS_W / 2 - BALL_SIZE / 2,
+      y: CANVAS_H / 2 - BALL_SIZE / 2,
+      vx: 0,
+      vy: 0,
+    };
+    this.pauseTicks = SCORE_PAUSE_TICKS;
+    this.state.paused = true;
+  }
+
+  launchBall() {
+    const angle = (Math.random() - 0.5) * Math.PI / 3; // -30 to +30 degrees
+    const dir = Math.random() > 0.5 ? 1 : -1;
+    this.state.ball.vx = Math.cos(angle) * BALL_SPEED_INITIAL * dir;
+    this.state.ball.vy = Math.sin(angle) * BALL_SPEED_INITIAL;
+  }
+
+  broadcastState() {
     this.emit('game-state', {
       gameId: this.gameId,
       state: this.state,
     });
-  }
-
-  resetBall(direction) {
-    this.state.ball = {
-      x: CANVAS_W / 2,
-      y: CANVAS_H / 2,
-      vx: BALL_SPEED_INITIAL * direction,
-      vy: (Math.random() - 0.5) * 6,
-    };
   }
 
   async endGame(winnerWallet) {
@@ -177,12 +206,10 @@ class PongEngine {
       score: this.state.score,
     });
 
-    // Process payout on-chain
     try {
       const totalPot = STAKE_TIERS[this.tier] * 2;
       const result = await payoutWinner(winnerWallet, totalPot);
 
-      // Update match record
       await Match.findOneAndUpdate({ gameId: this.gameId }, {
         winner: winnerWallet,
         score: { player1: this.state.score.p1, player2: this.state.score.p2 },
@@ -191,7 +218,6 @@ class PongEngine {
         completedAt: new Date(),
       });
 
-      // Update user stats
       await User.findOneAndUpdate({ wallet: winnerWallet }, {
         $inc: { 'stats.wins': 1, 'stats.totalEarnings': result.winnerShare }
       });
@@ -211,7 +237,6 @@ class PongEngine {
       this.emit('payout-error', { gameId: this.gameId, error: err.message });
     }
 
-    // Clean up
     this.activeGames.delete(this.gameId);
   }
 
@@ -225,7 +250,6 @@ class PongEngine {
   }
 
   emit(event, data) {
-    // Send to both player sockets
     this.io.to(this.player1.socketId).emit(event, data);
     this.io.to(this.player2.socketId).emit(event, data);
   }
