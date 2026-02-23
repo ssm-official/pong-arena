@@ -93,7 +93,7 @@ const WalletManager = (() => {
 
   return {
     connect, disconnect, signAuthMessage,
-    signAndSendTransaction, signTransaction,
+    signAndSendTransaction,
     getPublicKey, isConnected, getAuthHeader, getWallet,
   };
 })();
