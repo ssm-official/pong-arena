@@ -1,19 +1,24 @@
 // ===========================================
 // Game Client — Canvas rendering + input
 // ===========================================
-// Client-side prediction for your paddle (instant response).
-// Smooth interpolation for opponent paddle + ball.
-// Frame-rate independent — works on 60Hz, 144Hz, etc.
+// Server-authoritative: ALL positions come from server state.
+// Both paddles, ball interpolated with lerp for smooth display.
+// Your paddle uses a faster lerp so it feels responsive.
+// No client-side prediction — ensures both players see the same thing
+// and collision always matches what's on screen.
 
 const GameClient = (() => {
   const CANVAS_W = 800;
   const CANVAS_H = 600;
   const PADDLE_W = 14;
   const PADDLE_H = 110;
-  const PADDLE_SPEED = 10; // px per server tick (must match server)
   const BALL_SIZE = 12;
-  const SERVER_TICK_MS = 1000 / 60; // server runs at 60fps
-  const LERP_BASE = 0.35; // interpolation factor per server tick
+  const SERVER_TICK_MS = 1000 / 60;
+
+  // Lerp factors per server tick — your paddle is faster for responsiveness
+  const MY_PADDLE_LERP = 0.55;
+  const REMOTE_PADDLE_LERP = 0.35;
+  const BALL_LERP = 0.5;
 
   let canvas = null;
   let ctx = null;
@@ -26,10 +31,11 @@ const GameClient = (() => {
   let lastFrameTime = 0;
   let skinConfig = { paddle: '#a855f7', ball: '#ffffff', background: '#0f0f2a' };
 
-  // Client-side predicted positions
-  let localPaddleY = CANVAS_H / 2 - PADDLE_H / 2;
-  let remotePaddleY = CANVAS_H / 2 - PADDLE_H / 2;
-  let displayRemotePaddleY = CANVAS_H / 2 - PADDLE_H / 2;
+  // Display positions — all driven by server, smoothed with lerp
+  let displayP1Y = CANVAS_H / 2 - PADDLE_H / 2;
+  let displayP2Y = CANVAS_H / 2 - PADDLE_H / 2;
+  let targetP1Y = CANVAS_H / 2 - PADDLE_H / 2;
+  let targetP2Y = CANVAS_H / 2 - PADDLE_H / 2;
   let displayBall = { x: CANVAS_W / 2, y: CANVAS_H / 2 };
   let displayScore = { p1: 0, p2: 0 };
   let isPaused = false;
@@ -48,9 +54,9 @@ const GameClient = (() => {
   function setGameInfo(gId, player1Wallet) {
     gameId = gId;
     amPlayer1 = (myWallet === player1Wallet);
-    localPaddleY = CANVAS_H / 2 - PADDLE_H / 2;
-    remotePaddleY = CANVAS_H / 2 - PADDLE_H / 2;
-    displayRemotePaddleY = CANVAS_H / 2 - PADDLE_H / 2;
+    const mid = CANVAS_H / 2 - PADDLE_H / 2;
+    displayP1Y = targetP1Y = mid;
+    displayP2Y = targetP2Y = mid;
     displayBall = { x: CANVAS_W / 2, y: CANVAS_H / 2 };
     lastFrameTime = 0;
   }
@@ -63,15 +69,12 @@ const GameClient = (() => {
 
   function updateState(state) {
     serverState = state;
-
     displayScore = state.score;
     isPaused = state.paused;
 
-    // Local paddle: no correction — client owns its own paddle display.
-    // Server is authoritative for physics/collision only.
-
-    // Remote paddle: set target for interpolation
-    remotePaddleY = amPlayer1 ? state.paddle2.y : state.paddle1.y;
+    // Set targets from server — lerp will smooth the display
+    targetP1Y = state.paddle1.y;
+    targetP2Y = state.paddle2.y;
   }
 
   function startRendering() {
@@ -79,7 +82,7 @@ const GameClient = (() => {
     lastFrameTime = 0;
     animFrameId = requestAnimationFrame(renderLoop);
 
-    // Resend input every 50ms as heartbeat
+    // Resend input every 50ms as heartbeat for packet loss
     if (inputInterval) clearInterval(inputInterval);
     inputInterval = setInterval(() => {
       if (window.socket && gameId && currentInput !== 'stop') {
@@ -99,26 +102,21 @@ const GameClient = (() => {
     lastFrameTime = timestamp;
 
     // How many server ticks worth of time passed this frame
-    const ticks = delta / SERVER_TICK_MS;
+    const ticks = Math.min(delta / SERVER_TICK_MS, 4); // cap to prevent huge jumps
 
-    // --- Client-side prediction: move local paddle scaled by delta ---
-    if (currentInput === 'up') {
-      localPaddleY = Math.max(0, localPaddleY - PADDLE_SPEED * ticks);
-    } else if (currentInput === 'down') {
-      localPaddleY = Math.min(CANVAS_H - PADDLE_H, localPaddleY + PADDLE_SPEED * ticks);
-    }
+    // Frame-rate independent lerp: 1 - (1 - base)^ticks
+    const myLerp = 1 - Math.pow(1 - MY_PADDLE_LERP, ticks);
+    const remoteLerp = 1 - Math.pow(1 - REMOTE_PADDLE_LERP, ticks);
+    const ballLerp = 1 - Math.pow(1 - BALL_LERP, ticks);
 
-    // --- Frame-rate independent lerp ---
-    // Convert per-tick lerp factor to per-frame: 1 - (1 - base)^ticks
-    const lerpFactor = 1 - Math.pow(1 - LERP_BASE, ticks);
+    // Interpolate both paddles toward server targets
+    displayP1Y = lerp(displayP1Y, targetP1Y, amPlayer1 ? myLerp : remoteLerp);
+    displayP2Y = lerp(displayP2Y, targetP2Y, amPlayer1 ? remoteLerp : myLerp);
 
-    // --- Interpolate remote paddle ---
-    displayRemotePaddleY = lerp(displayRemotePaddleY, remotePaddleY, lerpFactor);
-
-    // --- Interpolate ball ---
+    // Interpolate ball
     if (serverState) {
-      displayBall.x = lerp(displayBall.x, serverState.ball.x, lerpFactor);
-      displayBall.y = lerp(displayBall.y, serverState.ball.y, lerpFactor);
+      displayBall.x = lerp(displayBall.x, serverState.ball.x, ballLerp);
+      displayBall.y = lerp(displayBall.y, serverState.ball.y, ballLerp);
     }
 
     render();
@@ -153,14 +151,9 @@ const GameClient = (() => {
     ctx.fillText(displayScore.p1, CANVAS_W / 4, CANVAS_H / 2 + 50);
     ctx.fillText(displayScore.p2, (CANVAS_W * 3) / 4, CANVAS_H / 2 + 50);
 
-    // Determine paddle positions based on which player we are
-    const p1Y = amPlayer1 ? localPaddleY : displayRemotePaddleY;
-    const p2Y = amPlayer1 ? displayRemotePaddleY : localPaddleY;
-
-    // Left paddle (player 1)
-    drawPaddle(10, p1Y, amPlayer1);
-    // Right paddle (player 2)
-    drawPaddle(CANVAS_W - PADDLE_W - 10, p2Y, !amPlayer1);
+    // Paddles
+    drawPaddle(10, displayP1Y, amPlayer1);
+    drawPaddle(CANVAS_W - PADDLE_W - 10, displayP2Y, !amPlayer1);
 
     // Ball
     ctx.fillStyle = skinConfig.ball;
