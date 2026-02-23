@@ -8,6 +8,7 @@ let sessionToken = null; // Bearer token from server — sign once, use everywhe
 let onlineUsers = [];    // array of online wallet addresses
 let currentGameId = null;
 let pendingEscrowTx = null;
+let isMirrored = false; // true = player chose right side
 
 /** Return Authorization header using cached session token. No wallet popup. */
 function getAuthHeader() {
@@ -502,10 +503,37 @@ socket.on('match-cancelled', (data) => {
   showMatchmakingState('select');
 });
 
+// ===========================================
+// SIDE PICKER
+// ===========================================
+
+function pickSide(side) {
+  isMirrored = (side === 'right');
+  GameClient.setMirrored(isMirrored);
+
+  // Update button styles
+  const btnLeft = document.getElementById('btn-side-left');
+  const btnRight = document.getElementById('btn-side-right');
+  if (side === 'left') {
+    btnLeft.className = 'bg-purple-600 hover:bg-purple-700 px-5 py-2 rounded-lg text-sm font-medium transition border-2 border-purple-500';
+    btnRight.className = 'bg-gray-700 hover:bg-gray-600 px-5 py-2 rounded-lg text-sm font-medium transition border-2 border-transparent';
+  } else {
+    btnRight.className = 'bg-purple-600 hover:bg-purple-700 px-5 py-2 rounded-lg text-sm font-medium transition border-2 border-purple-500';
+    btnLeft.className = 'bg-gray-700 hover:bg-gray-600 px-5 py-2 rounded-lg text-sm font-medium transition border-2 border-transparent';
+  }
+}
+
 // Socket: Game countdown
 socket.on('game-countdown', (data) => {
   showMatchmakingState('game');
   GameClient.setGameInfo(data.gameId, null); // will be set on game-start
+
+  // Reset side picker to left (default) and show it
+  isMirrored = false;
+  GameClient.setMirrored(false);
+  pickSide('left');
+  document.getElementById('side-picker').classList.remove('hidden');
+
   let sec = data.seconds;
   const countdownInterval = setInterval(() => {
     GameClient.renderCountdown(sec);
@@ -518,10 +546,19 @@ socket.on('game-countdown', (data) => {
 socket.on('game-start', (data) => {
   currentGameId = data.gameId;
   showMatchmakingState('game');
+  document.getElementById('side-picker').classList.add('hidden');
   GameClient.setGameInfo(data.gameId, data.player1.wallet);
 
-  document.getElementById('game-p1-name').textContent = data.player1.username;
-  document.getElementById('game-p2-name').textContent = data.player2.username;
+  // Swap player name labels based on side choice
+  const leftLabel = document.getElementById('game-p1-name');
+  const rightLabel = document.getElementById('game-p2-name');
+  if (isMirrored) {
+    leftLabel.textContent = data.player2.username;
+    rightLabel.textContent = data.player1.username;
+  } else {
+    leftLabel.textContent = data.player1.username;
+    rightLabel.textContent = data.player2.username;
+  }
 
   GameClient.startRendering();
 });
@@ -530,8 +567,14 @@ socket.on('game-start', (data) => {
 socket.on('game-state', (data) => {
   if (data.gameId !== currentGameId) return;
   GameClient.updateState(data.state);
-  document.getElementById('game-score-p1').textContent = data.state.score.p1;
-  document.getElementById('game-score-p2').textContent = data.state.score.p2;
+  // Swap score display to match mirrored view
+  if (isMirrored) {
+    document.getElementById('game-score-p1').textContent = data.state.score.p2;
+    document.getElementById('game-score-p2').textContent = data.state.score.p1;
+  } else {
+    document.getElementById('game-score-p1').textContent = data.state.score.p1;
+    document.getElementById('game-score-p2').textContent = data.state.score.p2;
+  }
 });
 
 // Socket: Game over
@@ -575,6 +618,8 @@ socket.on('game-forfeit', (data) => {
 
 function backToMatchmaking() {
   currentGameId = null;
+  isMirrored = false;
+  document.getElementById('side-picker').classList.add('hidden');
   showMatchmakingState('select');
 }
 

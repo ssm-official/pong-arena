@@ -27,6 +27,7 @@ const GameClient = (() => {
   let inputInterval = null;
   let lastFrameTime = 0;
   let skinConfig = { paddle: '#a855f7', ball: '#ffffff', background: '#0f0f2a' };
+  let mirrored = false; // if true, flip view so your paddle is on the right
 
   // --- Your paddle: prediction with offset reconciliation ---
   let serverMyY = CANVAS_H / 2 - PADDLE_H / 2;  // last known server position
@@ -70,6 +71,10 @@ const GameClient = (() => {
     if (config.paddle) skinConfig.paddle = config.paddle;
     if (config.ball) skinConfig.ball = config.ball;
     if (config.background) skinConfig.background = config.background;
+  }
+
+  function setMirrored(val) {
+    mirrored = !!val;
   }
 
   function updateState(state) {
@@ -148,6 +153,9 @@ const GameClient = (() => {
     return a + (b - a) * t;
   }
 
+  // Mirror an x coordinate horizontally
+  function mx(x) { return mirrored ? CANVAS_W - x : x; }
+
   function render(myDisplayY) {
     if (!ctx) return;
 
@@ -164,25 +172,36 @@ const GameClient = (() => {
     ctx.stroke();
     ctx.setLineDash([]);
 
-    // Score
+    // Score — when mirrored, swap left/right score positions
     ctx.fillStyle = 'rgba(255,255,255,0.08)';
     ctx.font = 'bold 140px monospace';
     ctx.textAlign = 'center';
-    ctx.fillText(displayScore.p1, CANVAS_W / 4, CANVAS_H / 2 + 50);
-    ctx.fillText(displayScore.p2, (CANVAS_W * 3) / 4, CANVAS_H / 2 + 50);
+    const leftScore = mirrored ? displayScore.p2 : displayScore.p1;
+    const rightScore = mirrored ? displayScore.p1 : displayScore.p2;
+    ctx.fillText(leftScore, CANVAS_W / 4, CANVAS_H / 2 + 50);
+    ctx.fillText(rightScore, (CANVAS_W * 3) / 4, CANVAS_H / 2 + 50);
 
-    // Paddles
+    // Paddle positions from server
     const p1Y = amPlayer1 ? myDisplayY : remoteDisplayY;
     const p2Y = amPlayer1 ? remoteDisplayY : myDisplayY;
-    drawPaddle(10, p1Y, amPlayer1);
-    drawPaddle(CANVAS_W - PADDLE_W - 10, p2Y, !amPlayer1);
 
-    // Ball
+    if (!mirrored) {
+      // Normal: p1 left, p2 right
+      drawPaddle(10, p1Y, amPlayer1);
+      drawPaddle(CANVAS_W - PADDLE_W - 10, p2Y, !amPlayer1);
+    } else {
+      // Mirrored: p2 on left, p1 on right
+      drawPaddle(10, p2Y, !amPlayer1);
+      drawPaddle(CANVAS_W - PADDLE_W - 10, p1Y, amPlayer1);
+    }
+
+    // Ball — mirror x position
+    const bx = mirrored ? (CANVAS_W - ballDisplay.x - BALL_SIZE) : ballDisplay.x;
     ctx.fillStyle = skinConfig.ball;
     ctx.shadowColor = skinConfig.ball;
     ctx.shadowBlur = 15;
     ctx.beginPath();
-    ctx.arc(ballDisplay.x + BALL_SIZE / 2, ballDisplay.y + BALL_SIZE / 2, BALL_SIZE / 2, 0, Math.PI * 2);
+    ctx.arc(bx + BALL_SIZE / 2, ballDisplay.y + BALL_SIZE / 2, BALL_SIZE / 2, 0, Math.PI * 2);
     ctx.fill();
     ctx.shadowBlur = 0;
 
@@ -270,7 +289,7 @@ const GameClient = (() => {
   }
 
   return {
-    init, setGameInfo, setSkins, updateState,
+    init, setGameInfo, setSkins, setMirrored, updateState,
     startRendering, stopRendering, renderCountdown,
     cleanup,
   };
