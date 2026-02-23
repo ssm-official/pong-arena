@@ -56,7 +56,8 @@ const WalletManager = (() => {
 
   /**
    * Sign and send a serialized transaction (for escrow/purchases).
-   * Decodes base64 → bytes → base58, then uses Phantom's request API.
+   * Uses @solana/web3.js Transaction.from() to deserialize, then
+   * passes the real Transaction object to Phantom.
    * Returns the transaction signature string.
    */
   async function signAndSendTransaction(serializedTxBase64) {
@@ -65,15 +66,14 @@ const WalletManager = (() => {
     // Decode base64 to Uint8Array
     const txBytes = Uint8Array.from(atob(serializedTxBase64), c => c.charCodeAt(0));
 
-    // Phantom's request API expects base58-encoded transaction
-    const txBase58 = base58Encode(txBytes);
+    // Deserialize into a proper Transaction object
+    if (!window.solanaWeb3 || !window.solanaWeb3.Transaction) {
+      throw new Error('Solana library not loaded. Please refresh the page.');
+    }
+    const transaction = window.solanaWeb3.Transaction.from(txBytes);
 
-    const { signature } = await provider.request({
-      method: 'signAndSendTransaction',
-      params: {
-        message: txBase58,
-      }
-    });
+    // Phantom needs a real Transaction object for signAndSendTransaction
+    const { signature } = await provider.signAndSendTransaction(transaction);
 
     return signature;
   }
