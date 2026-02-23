@@ -34,7 +34,13 @@ app.set('trust proxy', 1); // trust Railway's reverse proxy
 app.use(helmet({ contentSecurityPolicy: false })); // relaxed CSP for dev
 app.use(cors());
 app.use(express.json());
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static(path.join(__dirname, 'public'), {
+  etag: false,
+  maxAge: 0,
+  setHeaders: (res) => {
+    res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+  }
+}));
 
 // Rate limit API routes
 const apiLimiter = rateLimit({
