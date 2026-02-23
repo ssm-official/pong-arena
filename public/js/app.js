@@ -551,9 +551,14 @@ socket.on('game-over', (data) => {
 
 // Socket: Payout complete
 socket.on('payout-complete', (data) => {
-  document.getElementById('gameover-payout').textContent =
-    `Won ${formatPong(data.winnerShare)} $PONG! (${formatPong(data.burned)} burned)`;
-  // Refresh user data
+  const won = data.winner === currentUser.wallet;
+  if (won) {
+    document.getElementById('gameover-payout').textContent =
+      `You won ${formatPong(data.winnerShare)} $PONG! (${formatPong(data.burned)} burned)`;
+  } else {
+    document.getElementById('gameover-payout').textContent =
+      `Your stake was lost. ${formatPong(data.burned)} $PONG was burned.`;
+  }
   refreshUserData();
 });
 
