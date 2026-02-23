@@ -111,20 +111,36 @@ async function buildEscrowTransaction(playerWallet, tier) {
  * Verify an escrow transaction was confirmed on-chain.
  */
 async function verifyEscrowTx(txSignature, expectedAmount, playerWallet) {
-  try {
-    // Use confirmTransaction — much more reliable than polling getTransaction
-    const latestBlockhash = await connection.getLatestBlockhash('confirmed');
-    const result = await connection.confirmTransaction({
-      signature: txSignature,
-      blockhash: latestBlockhash.blockhash,
-      lastValidBlockHeight: latestBlockhash.lastValidBlockHeight,
-    }, 'confirmed');
+  console.log(`Verifying tx: ${txSignature} for ${playerWallet}`);
 
-    return !result.value.err;
-  } catch (err) {
-    console.error('Escrow verify error:', err.message);
-    return false;
+  // Use getSignatureStatus — lightweight, no websocket needed
+  for (let attempt = 0; attempt < 15; attempt++) {
+    try {
+      const res = await connection.getSignatureStatus(txSignature, {
+        searchTransactionHistory: true,
+      });
+      const status = res?.value;
+      console.log(`  Attempt ${attempt + 1}: ${JSON.stringify(status)}`);
+
+      if (status?.err) {
+        console.error('Transaction failed on-chain:', JSON.stringify(status.err));
+        return false;
+      }
+
+      if (status?.confirmationStatus === 'confirmed' ||
+          status?.confirmationStatus === 'finalized' ||
+          status?.confirmationStatus === 'processed') {
+        console.log('Transaction confirmed!');
+        return true;
+      }
+    } catch (err) {
+      console.error(`  Attempt ${attempt + 1} RPC error:`, err.message);
+    }
+    await new Promise(r => setTimeout(r, 2000));
   }
+
+  console.error('Transaction not confirmed after 15 attempts (30s)');
+  return false;
 }
 
 /**

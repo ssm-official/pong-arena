@@ -65,17 +65,23 @@ const WalletManager = (() => {
 
     // Decode base64 to Uint8Array
     const txBytes = Uint8Array.from(atob(serializedTxBase64), c => c.charCodeAt(0));
+    console.log('TX bytes length:', txBytes.length);
 
     // Deserialize into a proper Transaction object
     if (!window.solanaWeb3 || !window.solanaWeb3.Transaction) {
       throw new Error('Solana library not loaded. Please refresh the page.');
     }
     const transaction = window.solanaWeb3.Transaction.from(txBytes);
+    console.log('Transaction deserialized, instructions:', transaction.instructions.length);
 
     // Phantom needs a real Transaction object for signAndSendTransaction
-    const { signature } = await provider.signAndSendTransaction(transaction);
+    const result = await provider.signAndSendTransaction(transaction);
+    console.log('Phantom result:', JSON.stringify(result));
 
-    return signature;
+    // Phantom may return { signature } or { publicKey, signature }
+    const sig = result.signature || result;
+    console.log('Transaction signature:', sig);
+    return sig;
   }
 
   function getPublicKey() { return publicKey; }
