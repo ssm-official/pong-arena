@@ -1,0 +1,726 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Pong Arena — Practice Mode</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            arena: { bg: '#0a0a1a', card: '#111128', accent: '#7c3aed', glow: '#a855f7' }
+          }
+        }
+      }
+    };
+  </script>
+  <style>
+    body { background: #0a0a1a; font-family: 'Segoe UI', system-ui, sans-serif; }
+    .glow-border { box-shadow: 0 0 15px rgba(168, 85, 247, 0.3); }
+    #game-canvas { background: #0f0f2a; border: 1px solid #2d2d5e; border-radius: 8px; }
+    @keyframes pulse-glow { 0%, 100% { box-shadow: 0 0 10px rgba(168, 85, 247, 0.4); } 50% { box-shadow: 0 0 25px rgba(168, 85, 247, 0.8); } }
+    .diff-btn:hover { transform: translateY(-2px); transition: transform 0.2s; }
+    .diff-btn.selected { ring: 2; }
+  </style>
+</head>
+<body class="text-gray-100 min-h-screen">
+
+  <!-- NAV BAR -->
+  <nav class="bg-arena-card border-b border-purple-900/30 px-6 py-3 flex items-center justify-between">
+    <div class="flex items-center gap-3">
+      <a href="/" class="text-2xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">PONG ARENA</a>
+      <span class="text-xs text-gray-500 bg-gray-800 px-2 py-0.5 rounded">PRACTICE</span>
+    </div>
+    <a href="/" class="text-sm text-gray-400 hover:text-white transition">Back to Arena</a>
+  </nav>
+
+  <!-- MAIN CONTENT -->
+  <div class="max-w-5xl mx-auto px-4 py-6">
+
+    <!-- Difficulty Selection Screen -->
+    <div id="view-difficulty" class="text-center py-10">
+      <h1 class="text-3xl font-bold mb-2 bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
+        Practice Mode
+      </h1>
+      <p class="text-gray-400 mb-8 max-w-md mx-auto">
+        Sharpen your skills against a bot. No wallet or stakes required.
+      </p>
+      <h2 class="text-xl font-bold mb-4">Choose Bot Difficulty</h2>
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 max-w-2xl mx-auto mb-6">
+        <button onclick="selectDifficulty('easy')"
+          class="diff-btn bg-arena-card border border-green-800 hover:border-green-500 rounded-xl p-6 text-center transition">
+          <div class="text-green-400 text-2xl font-bold mb-1">Easy</div>
+          <div class="text-gray-400 text-sm">Slow reactions, makes mistakes.</div>
+          <div class="text-gray-500 text-xs mt-2">Great for beginners</div>
+        </button>
+        <button onclick="selectDifficulty('medium')"
+          class="diff-btn bg-arena-card border border-yellow-800 hover:border-yellow-500 rounded-xl p-6 text-center transition">
+          <div class="text-yellow-400 text-2xl font-bold mb-1">Medium</div>
+          <div class="text-gray-400 text-sm">Predicts ball trajectory.</div>
+          <div class="text-gray-500 text-xs mt-2">A solid challenge</div>
+        </button>
+        <button onclick="selectDifficulty('hard')"
+          class="diff-btn bg-arena-card border border-red-800 hover:border-red-500 rounded-xl p-6 text-center transition">
+          <div class="text-red-400 text-2xl font-bold mb-1">Hard</div>
+          <div class="text-gray-400 text-sm">Full prediction, almost never misses.</div>
+          <div class="text-gray-500 text-xs mt-2">Only for the brave</div>
+        </button>
+      </div>
+      <p class="text-gray-600 text-xs">Controls: W/S or Arrow Up/Down. First to 5 wins.</p>
+    </div>
+
+    <!-- Game View -->
+    <div id="view-game" class="hidden">
+      <div class="flex justify-between items-center mb-2 px-2">
+        <div class="text-sm"><span class="text-purple-400 font-bold">You</span> (Player)</div>
+        <div class="text-2xl font-bold">
+          <span id="score-player">0</span> - <span id="score-bot">0</span>
+        </div>
+        <div class="text-sm"><span id="bot-difficulty-label" class="text-gray-400 font-bold"></span> (Bot)</div>
+      </div>
+      <canvas id="game-canvas" width="800" height="600" class="mx-auto block"></canvas>
+      <p class="text-center text-gray-500 text-xs mt-2">Controls: W/S or Arrow Keys | First to 5 wins</p>
+    </div>
+
+    <!-- Game Over Screen -->
+    <div id="view-gameover" class="hidden text-center py-10">
+      <div class="bg-arena-card rounded-xl px-8 py-8 max-w-md mx-auto glow-border">
+        <h3 id="gameover-title" class="text-3xl font-bold mb-3"></h3>
+        <p id="gameover-score" class="text-gray-400 text-lg mb-6"></p>
+        <div class="flex flex-col sm:flex-row gap-3 justify-center">
+          <button onclick="playAgain()"
+            class="bg-purple-600 hover:bg-purple-700 px-6 py-2 rounded-lg font-medium transition">
+            Play Again
+          </button>
+          <button onclick="changeDifficulty()"
+            class="bg-gray-700 hover:bg-gray-600 px-6 py-2 rounded-lg font-medium transition">
+            Change Difficulty
+          </button>
+        </div>
+        <a href="/" class="inline-block mt-4 text-sm text-gray-400 hover:text-white transition">Back to Arena</a>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ============ INLINE GAME SCRIPT ============ -->
+  <script>
+  (function() {
+    'use strict';
+
+    // =============================================
+    // CONSTANTS — must match server PongEngine.js
+    // =============================================
+    const CANVAS_W = 800;
+    const CANVAS_H = 600;
+    const PADDLE_W = 14;
+    const PADDLE_H = 110;
+    const PADDLE_SPEED = 10;
+    const BALL_SIZE = 12;
+    const BALL_SPEED_INITIAL = 4;
+    const BALL_SPEED_INCREMENT = 0.2;
+    const BALL_MAX_SPEED = 12;
+    const WIN_SCORE = 5;
+    const SCORE_PAUSE_TICKS = 90; // 1.5s at 60 ticks/sec
+
+    const PHYSICS_DT = 1000 / 60; // fixed timestep: 60 steps/sec
+
+    // Paddle x positions
+    const P1_X = 10;
+    const P2_X = CANVAS_W - 10 - PADDLE_W;
+
+    // =============================================
+    // STATE
+    // =============================================
+    let canvas, ctx;
+    let currentDifficulty = null;
+    let gameRunning = false;
+    let animFrameId = null;
+    let lastTimestamp = 0;
+    let accumulator = 0;
+
+    // Game state
+    let ball = { x: 0, y: 0, vx: 0, vy: 0 };
+    let playerPaddle = { y: 0 };
+    let botPaddle = { y: 0 };
+    let score = { player: 0, bot: 0 };
+    let pauseTicks = 0;
+    let isPaused = false;
+    let gameStatus = 'idle'; // 'idle', 'countdown', 'playing', 'finished'
+    let countdownValue = 3;
+    let countdownTimer = null;
+
+    // Input
+    const keys = {};
+    let playerInput = 'stop';
+
+    // Bot AI state
+    let botTargetY = CANVAS_H / 2;
+    let botLastUpdateTime = 0;
+    let botIntentionalMiss = false;
+
+    // =============================================
+    // VIEW MANAGEMENT
+    // =============================================
+    function showView(viewId) {
+      document.getElementById('view-difficulty').classList.add('hidden');
+      document.getElementById('view-game').classList.add('hidden');
+      document.getElementById('view-gameover').classList.add('hidden');
+      document.getElementById(viewId).classList.remove('hidden');
+    }
+
+    // =============================================
+    // DIFFICULTY SELECTION
+    // =============================================
+    window.selectDifficulty = function(diff) {
+      currentDifficulty = diff;
+      const labels = { easy: 'Easy', medium: 'Medium', hard: 'Hard' };
+      document.getElementById('bot-difficulty-label').textContent = labels[diff];
+      showView('view-game');
+      startGame();
+    };
+
+    window.playAgain = function() {
+      showView('view-game');
+      startGame();
+    };
+
+    window.changeDifficulty = function() {
+      stopGame();
+      showView('view-difficulty');
+    };
+
+    // =============================================
+    // GAME LIFECYCLE
+    // =============================================
+    function startGame() {
+      canvas = document.getElementById('game-canvas');
+      ctx = canvas.getContext('2d');
+
+      // Reset state
+      score = { player: 0, bot: 0 };
+      playerPaddle = { y: CANVAS_H / 2 - PADDLE_H / 2 };
+      botPaddle = { y: CANVAS_H / 2 - PADDLE_H / 2 };
+      ball = { x: CANVAS_W / 2 - BALL_SIZE / 2, y: CANVAS_H / 2 - BALL_SIZE / 2, vx: 0, vy: 0 };
+      pauseTicks = 0;
+      isPaused = false;
+      gameStatus = 'countdown';
+      countdownValue = 3;
+      accumulator = 0;
+      lastTimestamp = 0;
+      botTargetY = CANVAS_H / 2;
+      botLastUpdateTime = 0;
+      botIntentionalMiss = false;
+
+      updateScoreDisplay();
+      setupInput();
+      startCountdown();
+    }
+
+    function stopGame() {
+      gameRunning = false;
+      gameStatus = 'idle';
+      if (animFrameId) {
+        cancelAnimationFrame(animFrameId);
+        animFrameId = null;
+      }
+      if (countdownTimer) {
+        clearInterval(countdownTimer);
+        countdownTimer = null;
+      }
+    }
+
+    function startCountdown() {
+      countdownValue = 3;
+      gameStatus = 'countdown';
+      renderCountdown(countdownValue);
+
+      countdownTimer = setInterval(() => {
+        countdownValue--;
+        if (countdownValue <= 0) {
+          clearInterval(countdownTimer);
+          countdownTimer = null;
+          gameStatus = 'playing';
+          gameRunning = true;
+          launchBall();
+          lastTimestamp = 0;
+          accumulator = 0;
+          animFrameId = requestAnimationFrame(gameLoop);
+        } else {
+          renderCountdown(countdownValue);
+        }
+      }, 1000);
+    }
+
+    function gameOver(playerWon) {
+      gameStatus = 'finished';
+      gameRunning = false;
+      if (animFrameId) {
+        cancelAnimationFrame(animFrameId);
+        animFrameId = null;
+      }
+
+      const titleEl = document.getElementById('gameover-title');
+      const scoreEl = document.getElementById('gameover-score');
+
+      if (playerWon) {
+        titleEl.textContent = 'You Win!';
+        titleEl.className = 'text-3xl font-bold mb-3 text-green-400';
+      } else {
+        titleEl.textContent = 'You Lose';
+        titleEl.className = 'text-3xl font-bold mb-3 text-red-400';
+      }
+
+      scoreEl.textContent = 'Final Score: ' + score.player + ' - ' + score.bot;
+      showView('view-gameover');
+    }
+
+    // =============================================
+    // INPUT HANDLING
+    // =============================================
+    let inputSetup = false;
+
+    function setupInput() {
+      if (inputSetup) return;
+      inputSetup = true;
+
+      document.addEventListener('keydown', (e) => {
+        if (['w', 'W', 's', 'S', 'ArrowUp', 'ArrowDown'].includes(e.key)) {
+          e.preventDefault();
+        }
+        keys[e.key] = true;
+        updatePlayerInput();
+      });
+
+      document.addEventListener('keyup', (e) => {
+        keys[e.key] = false;
+        updatePlayerInput();
+      });
+    }
+
+    function updatePlayerInput() {
+      if (keys['w'] || keys['W'] || keys['ArrowUp']) {
+        playerInput = 'up';
+      } else if (keys['s'] || keys['S'] || keys['ArrowDown']) {
+        playerInput = 'down';
+      } else {
+        playerInput = 'stop';
+      }
+    }
+
+    // =============================================
+    // PHYSICS (fixed timestep)
+    // =============================================
+    function gameLoop(timestamp) {
+      if (!gameRunning) return;
+
+      if (lastTimestamp === 0) {
+        lastTimestamp = timestamp;
+        animFrameId = requestAnimationFrame(gameLoop);
+        return;
+      }
+
+      let delta = timestamp - lastTimestamp;
+      lastTimestamp = timestamp;
+
+      // Clamp delta to prevent spiral of death
+      if (delta > 200) delta = 200;
+
+      accumulator += delta;
+
+      while (accumulator >= PHYSICS_DT) {
+        physicsTick();
+        accumulator -= PHYSICS_DT;
+      }
+
+      render();
+      animFrameId = requestAnimationFrame(gameLoop);
+    }
+
+    function physicsTick() {
+      if (gameStatus !== 'playing') return;
+
+      // --- Move player paddle ---
+      if (playerInput === 'up') {
+        playerPaddle.y = Math.max(0, playerPaddle.y - PADDLE_SPEED);
+      } else if (playerInput === 'down') {
+        playerPaddle.y = Math.min(CANVAS_H - PADDLE_H, playerPaddle.y + PADDLE_SPEED);
+      }
+
+      // --- Move bot paddle ---
+      updateBot();
+
+      // --- Score pause countdown ---
+      if (pauseTicks > 0) {
+        pauseTicks--;
+        isPaused = true;
+        if (pauseTicks === 0) {
+          isPaused = false;
+          launchBall();
+        }
+        return;
+      }
+
+      // --- Move ball (with swept collision) ---
+      moveBallWithSweptCollision();
+    }
+
+    // =============================================
+    // BALL PHYSICS — SWEPT COLLISION DETECTION
+    // =============================================
+    function moveBallWithSweptCollision() {
+      const oldX = ball.x;
+      const oldY = ball.y;
+
+      ball.x += ball.vx;
+      ball.y += ball.vy;
+
+      // --- Top/bottom wall bounce ---
+      if (ball.y <= 0) {
+        ball.vy = Math.abs(ball.vy);
+        ball.y = 0;
+      }
+      if (ball.y >= CANVAS_H - BALL_SIZE) {
+        ball.vy = -Math.abs(ball.vy);
+        ball.y = CANVAS_H - BALL_SIZE;
+      }
+
+      // --- Swept collision: LEFT paddle (player) ---
+      // The right edge of the left paddle
+      const p1Right = P1_X + PADDLE_W;
+      const p1Left = P1_X;
+
+      if (ball.vx < 0) {
+        // Ball moving left. Check if it crossed the paddle's right edge this frame.
+        const ballLeadingEdgeOld = oldX;
+        const ballLeadingEdgeNew = ball.x;
+
+        // Did the leading edge cross from right of paddle to left of paddle?
+        if (ballLeadingEdgeOld >= p1Right && ballLeadingEdgeNew < p1Right) {
+          // Find the exact t (0..1) where ball's left edge = paddle's right edge
+          const t = (ballLeadingEdgeOld - p1Right) / (ballLeadingEdgeOld - ballLeadingEdgeNew);
+          // Ball y at intersection
+          const intersectY = oldY + (ball.y - oldY) * t;
+
+          // Check y overlap at intersection point
+          if (intersectY + BALL_SIZE >= playerPaddle.y && intersectY <= playerPaddle.y + PADDLE_H) {
+            // Hit! Reflect
+            const speed = Math.min(Math.abs(ball.vx) + BALL_SPEED_INCREMENT, BALL_MAX_SPEED);
+            ball.vx = speed;
+            ball.x = p1Right;
+            const hitPos = (intersectY + BALL_SIZE / 2 - playerPaddle.y) / PADDLE_H;
+            ball.vy = (hitPos - 0.5) * speed * 1.5;
+            return;
+          }
+        }
+        // Fallback: standard overlap check for ball already overlapping paddle zone
+        else if (
+          ball.x <= p1Right &&
+          ball.x + BALL_SIZE >= p1Left &&
+          ball.y + BALL_SIZE >= playerPaddle.y &&
+          ball.y <= playerPaddle.y + PADDLE_H
+        ) {
+          const speed = Math.min(Math.abs(ball.vx) + BALL_SPEED_INCREMENT, BALL_MAX_SPEED);
+          ball.vx = speed;
+          ball.x = p1Right;
+          const hitPos = (ball.y + BALL_SIZE / 2 - playerPaddle.y) / PADDLE_H;
+          ball.vy = (hitPos - 0.5) * speed * 1.5;
+          return;
+        }
+      }
+
+      // --- Swept collision: RIGHT paddle (bot) ---
+      const p2Left = P2_X;
+      const p2Right = P2_X + PADDLE_W;
+
+      if (ball.vx > 0) {
+        // Ball moving right. Check if its right edge crossed the paddle's left edge.
+        const ballTrailingEdgeOld = oldX + BALL_SIZE;
+        const ballTrailingEdgeNew = ball.x + BALL_SIZE;
+
+        if (ballTrailingEdgeOld <= p2Left && ballTrailingEdgeNew > p2Left) {
+          const t = (p2Left - ballTrailingEdgeOld) / (ballTrailingEdgeNew - ballTrailingEdgeOld);
+          const intersectY = oldY + (ball.y - oldY) * t;
+
+          if (intersectY + BALL_SIZE >= botPaddle.y && intersectY <= botPaddle.y + PADDLE_H) {
+            const speed = Math.min(Math.abs(ball.vx) + BALL_SPEED_INCREMENT, BALL_MAX_SPEED);
+            ball.vx = -speed;
+            ball.x = p2Left - BALL_SIZE;
+            const hitPos = (intersectY + BALL_SIZE / 2 - botPaddle.y) / PADDLE_H;
+            ball.vy = (hitPos - 0.5) * speed * 1.5;
+            return;
+          }
+        }
+        // Fallback overlap check
+        else if (
+          ball.x + BALL_SIZE >= p2Left &&
+          ball.x <= p2Right &&
+          ball.y + BALL_SIZE >= botPaddle.y &&
+          ball.y <= botPaddle.y + PADDLE_H
+        ) {
+          const speed = Math.min(Math.abs(ball.vx) + BALL_SPEED_INCREMENT, BALL_MAX_SPEED);
+          ball.vx = -speed;
+          ball.x = p2Left - BALL_SIZE;
+          const hitPos = (ball.y + BALL_SIZE / 2 - botPaddle.y) / PADDLE_H;
+          ball.vy = (hitPos - 0.5) * speed * 1.5;
+          return;
+        }
+      }
+
+      // --- Scoring ---
+      if (ball.x + BALL_SIZE < 0) {
+        // Bot scores
+        score.bot++;
+        updateScoreDisplay();
+        if (score.bot >= WIN_SCORE) { gameOver(false); return; }
+        resetBall();
+        return;
+      }
+      if (ball.x > CANVAS_W) {
+        // Player scores
+        score.player++;
+        updateScoreDisplay();
+        if (score.player >= WIN_SCORE) { gameOver(true); return; }
+        resetBall();
+        return;
+      }
+    }
+
+    function resetBall() {
+      ball.x = CANVAS_W / 2 - BALL_SIZE / 2;
+      ball.y = CANVAS_H / 2 - BALL_SIZE / 2;
+      ball.vx = 0;
+      ball.vy = 0;
+      pauseTicks = SCORE_PAUSE_TICKS;
+      isPaused = true;
+    }
+
+    function launchBall() {
+      const angle = (Math.random() - 0.5) * Math.PI / 3; // -30 to +30 degrees
+      const dir = Math.random() > 0.5 ? 1 : -1;
+      ball.vx = Math.cos(angle) * BALL_SPEED_INITIAL * dir;
+      ball.vy = Math.sin(angle) * BALL_SPEED_INITIAL;
+    }
+
+    // =============================================
+    // BOT AI
+    // =============================================
+    function updateBot() {
+      const now = performance.now();
+      const config = getBotConfig();
+
+      // Reaction delay: only update target every N ms
+      if (now - botLastUpdateTime < config.reactionDelay) {
+        // Move toward last known target
+        moveBotToward(config);
+        return;
+      }
+      botLastUpdateTime = now;
+
+      // Decide if bot intentionally misses (easy only)
+      if (config.mistakeChance > 0 && Math.random() < config.mistakeChance) {
+        botIntentionalMiss = true;
+      } else {
+        botIntentionalMiss = false;
+      }
+
+      // Compute target y based on difficulty
+      if (botIntentionalMiss) {
+        // Move to a random wrong position
+        botTargetY = Math.random() * (CANVAS_H - PADDLE_H);
+      } else if (currentDifficulty === 'easy') {
+        // Track ball center with jitter
+        const jitter = (Math.random() - 0.5) * 80;
+        botTargetY = ball.y + BALL_SIZE / 2 - PADDLE_H / 2 + jitter;
+      } else if (currentDifficulty === 'medium') {
+        // Predict where ball arrives at bot paddle x
+        botTargetY = predictBallY(false) - PADDLE_H / 2;
+      } else {
+        // Hard: full trajectory prediction with bounces
+        botTargetY = predictBallY(true) - PADDLE_H / 2;
+      }
+
+      // Clamp target
+      botTargetY = Math.max(0, Math.min(CANVAS_H - PADDLE_H, botTargetY));
+
+      moveBotToward(config);
+    }
+
+    function moveBotToward(config) {
+      const diff = botTargetY - botPaddle.y;
+      const maxMove = PADDLE_SPEED * config.speedFactor;
+
+      if (Math.abs(diff) < 2) return; // close enough
+
+      if (diff < 0) {
+        botPaddle.y = Math.max(0, botPaddle.y - Math.min(maxMove, Math.abs(diff)));
+      } else {
+        botPaddle.y = Math.min(CANVAS_H - PADDLE_H, botPaddle.y + Math.min(maxMove, diff));
+      }
+    }
+
+    function getBotConfig() {
+      switch (currentDifficulty) {
+        case 'easy':
+          return { reactionDelay: 200, speedFactor: 0.4, mistakeChance: 0.15 };
+        case 'medium':
+          return { reactionDelay: 100, speedFactor: 0.7, mistakeChance: 0 };
+        case 'hard':
+          return { reactionDelay: 50, speedFactor: 0.95, mistakeChance: 0 };
+        default:
+          return { reactionDelay: 100, speedFactor: 0.5, mistakeChance: 0 };
+      }
+    }
+
+    function predictBallY(simulateBounces) {
+      // If ball not moving toward bot, just track ball center
+      if (ball.vx <= 0) {
+        return ball.y + BALL_SIZE / 2;
+      }
+
+      if (!simulateBounces) {
+        // Simple linear prediction: where does ball intersect bot paddle x?
+        const targetX = P2_X;
+        const timeToReach = (targetX - (ball.x + BALL_SIZE)) / ball.vx;
+        if (timeToReach < 0) return ball.y + BALL_SIZE / 2;
+        let predictedY = ball.y + ball.vy * timeToReach + BALL_SIZE / 2;
+        // Clamp loosely
+        predictedY = Math.max(BALL_SIZE, Math.min(CANVAS_H - BALL_SIZE, predictedY));
+        return predictedY;
+      }
+
+      // Full trajectory simulation with bounces
+      let simX = ball.x;
+      let simY = ball.y;
+      let simVx = ball.vx;
+      let simVy = ball.vy;
+      const maxSteps = 600; // prevent infinite loops
+
+      for (let i = 0; i < maxSteps; i++) {
+        simX += simVx;
+        simY += simVy;
+
+        // Wall bounces
+        if (simY <= 0) {
+          simVy = Math.abs(simVy);
+          simY = 0;
+        }
+        if (simY >= CANVAS_H - BALL_SIZE) {
+          simVy = -Math.abs(simVy);
+          simY = CANVAS_H - BALL_SIZE;
+        }
+
+        // Reached bot paddle x?
+        if (simX + BALL_SIZE >= P2_X) {
+          return simY + BALL_SIZE / 2;
+        }
+
+        // If ball started going left, it won't reach bot
+        if (simVx <= 0) {
+          return ball.y + BALL_SIZE / 2;
+        }
+      }
+
+      return ball.y + BALL_SIZE / 2;
+    }
+
+    // =============================================
+    // RENDERING
+    // =============================================
+    function render() {
+      if (!ctx) return;
+
+      // Background
+      ctx.fillStyle = '#0f0f2a';
+      ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+
+      // Center dashed line
+      ctx.setLineDash([8, 8]);
+      ctx.strokeStyle = '#2d2d5e';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(CANVAS_W / 2, 0);
+      ctx.lineTo(CANVAS_W / 2, CANVAS_H);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // Large translucent score behind gameplay
+      ctx.fillStyle = 'rgba(255,255,255,0.08)';
+      ctx.font = 'bold 140px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText(score.player, CANVAS_W / 4, CANVAS_H / 2 + 50);
+      ctx.fillText(score.bot, (CANVAS_W * 3) / 4, CANVAS_H / 2 + 50);
+
+      // Left paddle (player) - purple with glow
+      drawPaddle(P1_X, playerPaddle.y, true);
+
+      // Right paddle (bot) - gray
+      drawPaddle(P2_X, botPaddle.y, false);
+
+      // Ball
+      ctx.fillStyle = '#ffffff';
+      ctx.shadowColor = '#ffffff';
+      ctx.shadowBlur = 15;
+      ctx.beginPath();
+      ctx.arc(ball.x + BALL_SIZE / 2, ball.y + BALL_SIZE / 2, BALL_SIZE / 2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.shadowBlur = 0;
+
+      // Pause overlay
+      if (isPaused) {
+        ctx.fillStyle = 'rgba(0,0,0,0.3)';
+        ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+        ctx.fillStyle = '#a855f7';
+        ctx.font = 'bold 32px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('Get Ready...', CANVAS_W / 2, CANVAS_H / 2 + 12);
+      }
+    }
+
+    function drawPaddle(x, y, isPlayer) {
+      const color = isPlayer ? '#a855f7' : '#6b7280';
+      ctx.fillStyle = color;
+      ctx.shadowColor = isPlayer ? '#a855f7' : 'transparent';
+      ctx.shadowBlur = isPlayer ? 18 : 0;
+
+      const r = 6;
+      ctx.beginPath();
+      ctx.moveTo(x + r, y);
+      ctx.lineTo(x + PADDLE_W - r, y);
+      ctx.quadraticCurveTo(x + PADDLE_W, y, x + PADDLE_W, y + r);
+      ctx.lineTo(x + PADDLE_W, y + PADDLE_H - r);
+      ctx.quadraticCurveTo(x + PADDLE_W, y + PADDLE_H, x + PADDLE_W - r, y + PADDLE_H);
+      ctx.lineTo(x + r, y + PADDLE_H);
+      ctx.quadraticCurveTo(x, y + PADDLE_H, x, y + PADDLE_H - r);
+      ctx.lineTo(x, y + r);
+      ctx.quadraticCurveTo(x, y, x + r, y);
+      ctx.closePath();
+      ctx.fill();
+      ctx.shadowBlur = 0;
+    }
+
+    function renderCountdown(seconds) {
+      if (!ctx) return;
+      ctx.fillStyle = '#0f0f2a';
+      ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+      ctx.fillStyle = '#a855f7';
+      ctx.font = 'bold 120px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText(seconds, CANVAS_W / 2, CANVAS_H / 2 + 40);
+      ctx.fillStyle = '#888';
+      ctx.font = '24px sans-serif';
+      ctx.fillText('Get Ready!', CANVAS_W / 2, CANVAS_H / 2 + 90);
+    }
+
+    function updateScoreDisplay() {
+      document.getElementById('score-player').textContent = score.player;
+      document.getElementById('score-bot').textContent = score.bot;
+    }
+
+  })();
+  </script>
+</body>
+</html>

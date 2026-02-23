@@ -97,8 +97,11 @@ class PongEngine {
       return;
     }
 
-    // --- Move ball ---
+    // --- Move ball (swept collision detection) ---
     const ball = this.state.ball;
+    const oldX = ball.x;
+    const oldY = ball.y;
+
     ball.x += ball.vx;
     ball.y += ball.vy;
 
@@ -112,38 +115,68 @@ class PongEngine {
       ball.y = CANVAS_H - BALL_SIZE;
     }
 
-    // Left paddle collision (player 1)
-    const p1Left = 10;
+    // --- Left paddle collision (player 1) — swept detection ---
     const p1Right = 10 + PADDLE_W;
-    if (
-      ball.vx < 0 &&
-      ball.x <= p1Right &&
-      ball.x + BALL_SIZE >= p1Left &&
-      ball.y + BALL_SIZE >= this.state.paddle1.y &&
-      ball.y <= this.state.paddle1.y + PADDLE_H
-    ) {
-      const speed = Math.min(Math.abs(ball.vx) + BALL_SPEED_INCREMENT, BALL_MAX_SPEED);
-      ball.vx = speed;
-      ball.x = p1Right;
-      const hitPos = (ball.y + BALL_SIZE / 2 - this.state.paddle1.y) / PADDLE_H;
-      ball.vy = (hitPos - 0.5) * speed * 1.5;
+    if (ball.vx < 0) {
+      // Check if ball's left edge crossed the paddle's right edge this tick
+      const oldLeft = oldX;
+      const newLeft = ball.x;
+      if (newLeft <= p1Right && oldLeft >= p1Right) {
+        // Parametric time of crossing: when did left edge == p1Right?
+        const t = (oldLeft - p1Right) / (oldLeft - newLeft);
+        const hitY = oldY + ball.vy * t;
+        // Check Y overlap at the moment of crossing
+        if (hitY + BALL_SIZE >= this.state.paddle1.y &&
+            hitY <= this.state.paddle1.y + PADDLE_H) {
+          const speed = Math.min(Math.abs(ball.vx) + BALL_SPEED_INCREMENT, BALL_MAX_SPEED);
+          ball.vx = speed;
+          ball.x = p1Right;
+          ball.y = hitY;
+          const hitPos = (ball.y + BALL_SIZE / 2 - this.state.paddle1.y) / PADDLE_H;
+          ball.vy = (hitPos - 0.5) * speed * 1.5;
+        }
+      } else if (ball.x <= p1Right && ball.x + BALL_SIZE >= 10 &&
+                 ball.y + BALL_SIZE >= this.state.paddle1.y &&
+                 ball.y <= this.state.paddle1.y + PADDLE_H) {
+        // Standard overlap fallback (ball already inside paddle zone)
+        const speed = Math.min(Math.abs(ball.vx) + BALL_SPEED_INCREMENT, BALL_MAX_SPEED);
+        ball.vx = speed;
+        ball.x = p1Right;
+        const hitPos = (ball.y + BALL_SIZE / 2 - this.state.paddle1.y) / PADDLE_H;
+        ball.vy = (hitPos - 0.5) * speed * 1.5;
+      }
     }
 
-    // Right paddle collision (player 2)
+    // --- Right paddle collision (player 2) — swept detection ---
     const p2Left = CANVAS_W - 10 - PADDLE_W;
-    const p2Right = CANVAS_W - 10;
-    if (
-      ball.vx > 0 &&
-      ball.x + BALL_SIZE >= p2Left &&
-      ball.x <= p2Right &&
-      ball.y + BALL_SIZE >= this.state.paddle2.y &&
-      ball.y <= this.state.paddle2.y + PADDLE_H
-    ) {
-      const speed = Math.min(Math.abs(ball.vx) + BALL_SPEED_INCREMENT, BALL_MAX_SPEED);
-      ball.vx = -speed;
-      ball.x = p2Left - BALL_SIZE;
-      const hitPos = (ball.y + BALL_SIZE / 2 - this.state.paddle2.y) / PADDLE_H;
-      ball.vy = (hitPos - 0.5) * speed * 1.5;
+    if (ball.vx > 0) {
+      // Check if ball's right edge crossed the paddle's left edge this tick
+      const oldRight = oldX + BALL_SIZE;
+      const newRight = ball.x + BALL_SIZE;
+      if (newRight >= p2Left && oldRight <= p2Left) {
+        // Parametric time of crossing
+        const t = (p2Left - oldRight) / (newRight - oldRight);
+        const hitY = oldY + ball.vy * t;
+        // Check Y overlap at the moment of crossing
+        if (hitY + BALL_SIZE >= this.state.paddle2.y &&
+            hitY <= this.state.paddle2.y + PADDLE_H) {
+          const speed = Math.min(Math.abs(ball.vx) + BALL_SPEED_INCREMENT, BALL_MAX_SPEED);
+          ball.vx = -speed;
+          ball.x = p2Left - BALL_SIZE;
+          ball.y = hitY;
+          const hitPos = (ball.y + BALL_SIZE / 2 - this.state.paddle2.y) / PADDLE_H;
+          ball.vy = (hitPos - 0.5) * speed * 1.5;
+        }
+      } else if (ball.x + BALL_SIZE >= p2Left && ball.x <= CANVAS_W - 10 &&
+                 ball.y + BALL_SIZE >= this.state.paddle2.y &&
+                 ball.y <= this.state.paddle2.y + PADDLE_H) {
+        // Standard overlap fallback
+        const speed = Math.min(Math.abs(ball.vx) + BALL_SPEED_INCREMENT, BALL_MAX_SPEED);
+        ball.vx = -speed;
+        ball.x = p2Left - BALL_SIZE;
+        const hitPos = (ball.y + BALL_SIZE / 2 - this.state.paddle2.y) / PADDLE_H;
+        ball.vy = (hitPos - 0.5) * speed * 1.5;
+      }
     }
 
     // --- Scoring ---

@@ -56,6 +56,11 @@ app.use('/api/profile', authMiddleware, profileRoutes);
 app.use('/api/friends', authMiddleware, friendRoutes);
 app.use('/api/shop', authMiddleware, shopRoutes);
 
+// Practice mode
+app.get('/practice', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'practice.html'));
+});
+
 // Catch-all: serve index.html for SPA
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
