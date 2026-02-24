@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Pong Arena — $PONG</title>
+  <title>CryptoPong — $PONG</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.2/cropper.min.css" />
   <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.2/cropper.min.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
@@ -63,7 +63,7 @@
   <nav class="bg-arena-card border-b border-purple-900/30 px-6 py-3 flex items-center justify-between">
     <div class="flex items-center gap-3">
       <span class="text-2xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
-        PONG ARENA
+        CRYPTOPONG
       </span>
       <span class="text-xs text-gray-500 bg-gray-800 px-2 py-0.5 rounded">DEVNET</span>
     </div>
@@ -100,7 +100,7 @@
     <!-- Connect Prompt -->
     <div id="view-connect" class="text-center py-20">
       <h1 class="text-4xl font-bold mb-4 bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
-        Welcome to Pong Arena
+        Welcome to CryptoPong
       </h1>
       <p class="text-gray-400 mb-8 max-w-md mx-auto">
         Competitive 1v1 Pong with $PONG token stakes on Solana. Connect your Phantom wallet to play.
@@ -148,7 +148,7 @@
 
       <!-- Tabs -->
       <div class="flex gap-4 border-b border-gray-800 mb-6 flex-wrap">
-        <button onclick="switchTab('play')" class="tab-btn pb-2 text-sm font-medium text-gray-400 hover:text-white tab-active" data-tab="play">Play</button>
+        <button onclick="switchTab('play')" class="tab-btn pb-2 text-sm font-medium text-gray-400 hover:text-white tab-active" data-tab="play">Dashboard</button>
         <button onclick="switchTab('leaderboard')" class="tab-btn pb-2 text-sm font-medium text-gray-400 hover:text-white" data-tab="leaderboard">Leaderboard</button>
         <button onclick="switchTab('profile')" class="tab-btn pb-2 text-sm font-medium text-gray-400 hover:text-white" data-tab="profile">Profile</button>
         <button onclick="switchTab('friends')" class="tab-btn pb-2 text-sm font-medium text-gray-400 hover:text-white relative" data-tab="friends">
@@ -164,32 +164,82 @@
       <div id="tab-play" class="tab-content">
         <!-- Tier Selection -->
         <div id="matchmaking-ui">
-          <h2 class="text-xl font-bold mb-4">Choose Your Stake</h2>
-          <div class="grid grid-cols-3 gap-4 mb-6">
-            <button onclick="joinQueue('low')"
-              class="tier-btn bg-arena-card border border-green-800 hover:border-green-500 rounded-xl p-4 text-center transition">
-              <div class="text-green-400 text-lg font-bold">Low</div>
-              <div id="tier-usd-low" class="text-2xl font-bold mt-1 text-white">--</div>
-              <div class="text-gray-400 text-sm mt-0.5">10K $PONG</div>
-              <div class="text-gray-500 text-xs mt-1">Casual</div>
-            </button>
-            <button onclick="joinQueue('medium')"
-              class="tier-btn bg-arena-card border border-yellow-800 hover:border-yellow-500 rounded-xl p-4 text-center transition">
-              <div class="text-yellow-400 text-lg font-bold">Medium</div>
-              <div id="tier-usd-medium" class="text-2xl font-bold mt-1 text-white">--</div>
-              <div class="text-gray-400 text-sm mt-0.5">50K $PONG</div>
-              <div class="text-gray-500 text-xs mt-1">Competitive</div>
-            </button>
-            <button onclick="joinQueue('high')"
-              class="tier-btn bg-arena-card border border-red-800 hover:border-red-500 rounded-xl p-4 text-center transition">
-              <div class="text-red-400 text-lg font-bold">High</div>
-              <div id="tier-usd-high" class="text-2xl font-bold mt-1 text-white">--</div>
-              <div class="text-gray-400 text-sm mt-0.5">200K $PONG</div>
-              <div class="text-gray-500 text-xs mt-1">High Roller</div>
-            </button>
-          </div>
-          <div class="text-center">
-            <a href="/practice.html" class="text-purple-400 hover:text-purple-300 text-sm underline">Or practice against bots</a>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+            <!-- Quick Play Panel -->
+            <div class="bg-arena-card rounded-xl p-5 border border-gray-800">
+              <h3 class="text-lg font-bold mb-3">Quick Play</h3>
+              <div class="grid grid-cols-3 gap-2 mb-3">
+                <button onclick="joinQueue('low')"
+                  class="tier-btn bg-gray-800 border border-green-800 hover:border-green-500 rounded-lg p-3 text-center transition">
+                  <div class="text-green-400 text-sm font-bold">Low</div>
+                  <div id="tier-usd-low" class="text-lg font-bold text-white">--</div>
+                  <div class="text-gray-500 text-xs">10K $PONG</div>
+                </button>
+                <button onclick="joinQueue('medium')"
+                  class="tier-btn bg-gray-800 border border-yellow-800 hover:border-yellow-500 rounded-lg p-3 text-center transition">
+                  <div class="text-yellow-400 text-sm font-bold">Medium</div>
+                  <div id="tier-usd-medium" class="text-lg font-bold text-white">--</div>
+                  <div class="text-gray-500 text-xs">50K $PONG</div>
+                </button>
+                <button onclick="joinQueue('high')"
+                  class="tier-btn bg-gray-800 border border-red-800 hover:border-red-500 rounded-lg p-3 text-center transition">
+                  <div class="text-red-400 text-sm font-bold">High</div>
+                  <div id="tier-usd-high" class="text-lg font-bold text-white">--</div>
+                  <div class="text-gray-500 text-xs">200K $PONG</div>
+                </button>
+              </div>
+              <a href="/practice.html" class="text-purple-400 hover:text-purple-300 text-xs underline">Practice against bots</a>
+            </div>
+
+            <!-- Leaderboard Preview Panel -->
+            <div class="bg-arena-card rounded-xl p-5 border border-gray-800">
+              <div class="flex items-center justify-between mb-3">
+                <h3 class="text-lg font-bold">Leaderboard</h3>
+                <a href="#" onclick="event.preventDefault();switchTab('leaderboard')" class="text-purple-400 hover:text-purple-300 text-xs">View All &rarr;</a>
+              </div>
+              <div class="flex gap-1 mb-3">
+                <button onclick="loadDashboardLeaderboard('earnings')" id="dash-lb-btn-earnings"
+                  class="bg-purple-600 px-3 py-1 rounded text-xs font-medium transition">Earnings</button>
+                <button onclick="loadDashboardLeaderboard('wins')" id="dash-lb-btn-wins"
+                  class="bg-gray-700 hover:bg-gray-600 px-3 py-1 rounded text-xs font-medium transition">Wins</button>
+                <button onclick="loadDashboardLeaderboard('games')" id="dash-lb-btn-games"
+                  class="bg-gray-700 hover:bg-gray-600 px-3 py-1 rounded text-xs font-medium transition">Games</button>
+              </div>
+              <div id="dash-leaderboard-list" class="space-y-1">
+                <p class="text-gray-500 text-xs">Loading...</p>
+              </div>
+            </div>
+
+            <!-- Recent Matches Panel -->
+            <div class="bg-arena-card rounded-xl p-5 border border-gray-800">
+              <div class="flex items-center justify-between mb-3">
+                <h3 class="text-lg font-bold">Recent Matches</h3>
+                <a href="#" onclick="event.preventDefault();switchTab('history')" class="text-purple-400 hover:text-purple-300 text-xs">View All &rarr;</a>
+              </div>
+              <div id="dash-recent-matches" class="space-y-1">
+                <p class="text-gray-500 text-xs">Loading...</p>
+              </div>
+            </div>
+
+            <!-- Arena Status Panel -->
+            <div class="bg-arena-card rounded-xl p-5 border border-gray-800">
+              <h3 class="text-lg font-bold mb-3">Arena Status</h3>
+              <div class="grid grid-cols-2 gap-3">
+                <div class="bg-gray-800 rounded-lg p-3 text-center">
+                  <div class="flex items-center justify-center gap-2 mb-1">
+                    <span class="w-2 h-2 rounded-full bg-green-400 animate-pulse"></span>
+                    <span class="text-xs text-gray-400">Online Now</span>
+                  </div>
+                  <div id="dash-online-count" class="text-2xl font-bold text-green-400">0</div>
+                </div>
+                <div class="bg-gray-800 rounded-lg p-3 text-center">
+                  <div class="text-xs text-gray-400 mb-1">Your Record</div>
+                  <div id="dash-your-record" class="text-2xl font-bold text-white">0-0</div>
+                </div>
+              </div>
+            </div>
+
           </div>
         </div>
 

@@ -275,6 +275,7 @@ function updateNav() {
 
 const TAB_ROUTES = {
   '/play': 'play',
+  '/dashboard': 'play',
   '/leaderboard': 'leaderboard',
   '/profile': 'profile',
   '/friends': 'friends',
@@ -306,6 +307,7 @@ function switchTab(tab, pushState) {
     }
   }
 
+  if (tab === 'play') loadDashboard();
   if (tab === 'profile') loadProfile();
   if (tab === 'friends') loadFriends();
   if (tab === 'shop') loadShop();
@@ -1985,6 +1987,9 @@ socket.on('online-users', (users) => {
   // Update online count display
   const countEl = document.getElementById('online-count-num');
   if (countEl) countEl.textContent = users.length;
+  // Update dashboard online count
+  const dashCount = document.getElementById('dash-online-count');
+  if (dashCount) dashCount.textContent = users.length;
 });
 
 // Socket: Errors
@@ -1995,6 +2000,102 @@ socket.on('match-error', (data) => {
   showMatchmakingState('select');
 });
 socket.on('payout-error', (data) => console.error('Payout error:', data.error));
+
+// ===========================================
+// DASHBOARD
+// ===========================================
+
+let currentDashLbSort = 'earnings';
+
+function loadDashboard() {
+  loadDashboardLeaderboard(currentDashLbSort);
+  loadDashboardRecentMatches();
+  updateDashboardStats();
+}
+
+async function loadDashboardLeaderboard(sort) {
+  currentDashLbSort = sort || 'earnings';
+  // Update category button styles
+  ['earnings', 'wins', 'games'].forEach(s => {
+    const btn = document.getElementById(`dash-lb-btn-${s}`);
+    if (!btn) return;
+    if (s === currentDashLbSort) {
+      btn.className = 'bg-purple-600 px-3 py-1 rounded text-xs font-medium transition';
+    } else {
+      btn.className = 'bg-gray-700 hover:bg-gray-600 px-3 py-1 rounded text-xs font-medium transition';
+    }
+  });
+
+  try {
+    const res = await fetch(`/api/leaderboard?sort=${currentDashLbSort}&limit=5`).then(r => r.json());
+    const container = document.getElementById('dash-leaderboard-list');
+    if (!container) return;
+    if (!res.users || res.users.length === 0) {
+      container.innerHTML = '<p class="text-gray-500 text-xs">No players yet.</p>';
+      return;
+    }
+    const medalColors = ['text-yellow-400', 'text-gray-300', 'text-amber-600'];
+    container.innerHTML = res.users.map((u, i) => {
+      let statVal;
+      if (currentDashLbSort === 'earnings') {
+        statVal = formatPong(u.stats?.totalEarnings || 0) + ' $PONG';
+      } else if (currentDashLbSort === 'wins') {
+        statVal = (u.stats?.wins || 0) + ' wins';
+      } else {
+        statVal = (u.totalGames || ((u.stats?.wins || 0) + (u.stats?.losses || 0))) + ' games';
+      }
+      const medal = i < 3 ? medalColors[i] : 'text-gray-500';
+      return `
+        <div class="flex items-center gap-2 py-1 cursor-pointer hover:bg-gray-800/50 rounded px-1 transition"
+          onclick="showProfilePopup('${u.wallet}')">
+          <span class="${medal} font-bold text-xs w-5 text-right">#${i + 1}</span>
+          <img src="${esc(u.pfp || '')}" class="w-5 h-5 rounded-full bg-gray-700" onerror="this.style.display='none'" />
+          <span class="text-sm flex-1 truncate">${esc(u.username)}</span>
+          <span class="text-gray-400 text-xs">${statVal}</span>
+        </div>
+      `;
+    }).join('');
+  } catch (err) {
+    console.error('Dashboard leaderboard error:', err);
+  }
+}
+
+async function loadDashboardRecentMatches() {
+  try {
+    const res = await fetch('/api/profile/history', { headers: { Authorization: getAuthHeader() } }).then(r => r.json());
+    const container = document.getElementById('dash-recent-matches');
+    if (!container) return;
+    if (!res.matches || res.matches.length === 0) {
+      container.innerHTML = '<p class="text-gray-500 text-xs">No matches played yet.</p>';
+      return;
+    }
+    container.innerHTML = res.matches.slice(0, 3).map(m => {
+      const won = m.winner === currentUser.wallet;
+      const opponent = m.player1 === currentUser.wallet ? m.player2Username : m.player1Username;
+      return `
+        <div class="flex items-center gap-2 py-1.5 px-1">
+          <span class="text-xs font-bold px-1.5 py-0.5 rounded ${won ? 'bg-green-900/60 text-green-400' : 'bg-red-900/60 text-red-400'}">${won ? 'W' : 'L'}</span>
+          <span class="text-sm flex-1 truncate">vs ${esc(opponent || 'Unknown')}</span>
+          <span class="text-gray-400 text-xs">${m.score.player1} - ${m.score.player2}</span>
+        </div>
+      `;
+    }).join('');
+  } catch (err) {
+    console.error('Dashboard recent matches error:', err);
+  }
+}
+
+function updateDashboardStats() {
+  const onlineEl = document.getElementById('dash-online-count');
+  if (onlineEl) onlineEl.textContent = onlineUsers.length;
+
+  const recordEl = document.getElementById('dash-your-record');
+  if (recordEl && currentUser) {
+    const wins = currentUser.stats?.wins || 0;
+    const losses = currentUser.stats?.losses || 0;
+    recordEl.textContent = `${wins}-${losses}`;
+  }
+}
 
 // ===========================================
 // HELPERS
