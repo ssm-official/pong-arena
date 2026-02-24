@@ -5,46 +5,33 @@
 const express = require('express');
 const router = express.Router();
 const multer = require('multer');
-const path = require('path');
-const fs = require('fs');
 const crypto = require('crypto');
 const Crate = require('../models/Crate');
 const Skin = require('../models/Skin');
 
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'P0ngAr3naAdm1n!2024';
 
-// Multer setup — save PNGs to public/skins/
-const skinsDir = path.join(__dirname, '..', 'public', 'skins');
-if (!fs.existsSync(skinsDir)) {
-  fs.mkdirSync(skinsDir, { recursive: true });
-}
-
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, skinsDir),
-  filename: (req, file, cb) => {
-    // Use provided name or generate one, preserve extension
-    const ext = file.originalname.match(/\.(svg|png)$/i)?.[0] || '.svg';
-    const baseName = (req.body.fileName || file.originalname)
-      .replace(/\.(svg|png)$/i, '')
-      .toLowerCase()
-      .replace(/[^a-z0-9\-]/g, '-')
-      .replace(/--+/g, '-');
-    cb(null, baseName + ext);
-  }
-});
-
+// Multer config — use memory storage so it works on serverless (Vercel).
+// Uploaded images are converted to base64 data URLs and stored in MongoDB.
 const upload = multer({
-  storage,
+  storage: multer.memoryStorage(),
   limits: { fileSize: 2 * 1024 * 1024 }, // 2MB max
   fileFilter: (req, file, cb) => {
-    const allowed = ['image/svg+xml', 'image/png'];
+    const allowed = ['image/svg+xml', 'image/png', 'image/jpeg', 'image/webp'];
     if (allowed.includes(file.mimetype)) {
       cb(null, true);
     } else {
-      cb(new Error('Only SVG and PNG files are allowed'));
+      cb(new Error('Only SVG, PNG, JPEG, and WebP files are allowed'));
     }
   }
 });
+
+/** Convert multer file buffer to a base64 data URL */
+function toDataUrl(file) {
+  const mime = file.mimetype || 'image/png';
+  const base64 = file.buffer.toString('base64');
+  return `data:${mime};base64,${base64}`;
+}
 
 // --- Middleware: check admin password ---
 function adminAuth(req, res, next) {
@@ -139,16 +126,6 @@ router.put('/crate/:crateId', adminAuth, async (req, res) => {
 router.delete('/crate/:crateId', adminAuth, async (req, res) => {
   try {
     const { crateId } = req.params;
-
-    // Delete skin image files
-    const skins = await Skin.find({ crateId });
-    for (const skin of skins) {
-      if (skin.imageUrl) {
-        const filePath = path.join(__dirname, '..', 'public', skin.imageUrl);
-        if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
-      }
-    }
-
     await Skin.deleteMany({ crateId });
     await Crate.findOneAndDelete({ crateId });
     res.json({ status: 'deleted' });
@@ -182,7 +159,7 @@ router.post('/skin', adminAuth, upload.single('image'), async (req, res) => {
     };
 
     if (req.file) {
-      skinData.imageUrl = '/skins/' + req.file.filename;
+      skinData.imageUrl = toDataUrl(req.file);
       skinData.type = 'image';
     }
 
@@ -212,13 +189,9 @@ router.put('/skin/:skinId', adminAuth, upload.single('image'), async (req, res) 
     if (req.body.cssValue !== undefined) update.cssValue = req.body.cssValue;
     if (req.body.crateId !== undefined) update.crateId = req.body.crateId;
 
-    // If a new image was uploaded, delete the old one and set new path
+    // If a new image was uploaded, store as base64 data URL
     if (req.file) {
-      if (skin.imageUrl) {
-        const oldPath = path.join(__dirname, '..', 'public', skin.imageUrl);
-        if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
-      }
-      update.imageUrl = '/skins/' + req.file.filename;
+      update.imageUrl = toDataUrl(req.file);
       update.type = 'image';
     }
 
@@ -235,18 +208,11 @@ router.put('/skin/:skinId', adminAuth, upload.single('image'), async (req, res) 
   }
 });
 
-// DELETE /api/admin/skin/:skinId — delete skin + its image
+// DELETE /api/admin/skin/:skinId — delete skin
 router.delete('/skin/:skinId', adminAuth, async (req, res) => {
   try {
-    const skin = await Skin.findOne({ skinId: req.params.skinId });
+    const skin = await Skin.findOneAndDelete({ skinId: req.params.skinId });
     if (!skin) return res.status(404).json({ error: 'Skin not found' });
-
-    if (skin.imageUrl) {
-      const filePath = path.join(__dirname, '..', 'public', skin.imageUrl);
-      if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
-    }
-
-    await Skin.findOneAndDelete({ skinId: req.params.skinId });
     res.json({ status: 'deleted' });
   } catch (err) {
     res.status(500).json({ error: 'Failed to delete skin' });

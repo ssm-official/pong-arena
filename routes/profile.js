@@ -6,20 +6,13 @@ const express = require('express');
 const router = express.Router();
 const multer = require('multer');
 const path = require('path');
-const crypto = require('crypto');
 const User = require('../models/User');
 const Match = require('../models/Match');
 
-// Multer config for profile picture uploads
-const storage = multer.diskStorage({
-  destination: path.join(__dirname, '..', 'public', 'uploads'),
-  filename: (req, file, cb) => {
-    const ext = path.extname(file.originalname).toLowerCase() || '.png';
-    cb(null, crypto.randomBytes(12).toString('hex') + ext);
-  }
-});
+// Multer config — use memory storage so it works on serverless (Vercel).
+// Uploaded images are converted to base64 data URLs and stored in MongoDB.
 const upload = multer({
-  storage,
+  storage: multer.memoryStorage(),
   limits: { fileSize: 2 * 1024 * 1024 }, // 2 MB
   fileFilter: (req, file, cb) => {
     const allowed = ['.jpg', '.jpeg', '.png', '.gif', '.webp'];
@@ -28,6 +21,13 @@ const upload = multer({
     else cb(new Error('Only image files are allowed'));
   }
 });
+
+/** Convert multer file buffer to a base64 data URL */
+function toDataUrl(file) {
+  const mime = file.mimetype || 'image/png';
+  const base64 = file.buffer.toString('base64');
+  return `data:${mime};base64,${base64}`;
+}
 
 /**
  * GET /api/profile
@@ -109,12 +109,12 @@ router.get('/history', async (req, res) => {
 
 /**
  * POST /api/profile/upload-pfp
- * Upload a profile picture file. Returns the URL.
+ * Upload a profile picture. Stored as base64 data URL in MongoDB.
  */
 router.post('/upload-pfp', upload.single('pfp'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
-    const pfpUrl = '/uploads/' + req.file.filename;
+    const pfpUrl = toDataUrl(req.file);
     await User.findOneAndUpdate({ wallet: req.wallet }, { $set: { pfp: pfpUrl } });
     res.json({ pfp: pfpUrl });
   } catch (err) {
@@ -124,12 +124,12 @@ router.post('/upload-pfp', upload.single('pfp'), async (req, res) => {
 
 /**
  * POST /api/profile/upload-banner
- * Upload a profile banner image. Returns the URL.
+ * Upload a profile banner. Stored as base64 data URL in MongoDB.
  */
 router.post('/upload-banner', upload.single('banner'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
-    const bannerUrl = '/uploads/' + req.file.filename;
+    const bannerUrl = toDataUrl(req.file);
     await User.findOneAndUpdate({ wallet: req.wallet }, { $set: { banner: bannerUrl } });
     res.json({ banner: bannerUrl });
   } catch (err) {
