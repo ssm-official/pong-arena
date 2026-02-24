@@ -65,16 +65,6 @@ router.post('/buy-crate', async (req, res) => {
     const crate = await Crate.findOne({ crateId, active: true });
     if (!crate) return res.status(404).json({ error: 'Crate not found or inactive' });
 
-    // Check if user already owns all skins in this crate
-    const crateSkins = await Skin.find({ crateId });
-    const user = await User.findOne({ wallet: req.wallet });
-    const ownedIds = user ? user.skins.map(s => s.skinId) : [];
-    const unowned = crateSkins.filter(s => !ownedIds.includes(s.skinId));
-
-    if (unowned.length === 0) {
-      return res.status(400).json({ error: 'You already own all skins in this crate' });
-    }
-
     const priceBaseUnits = crate.price * (10 ** PONG_DECIMALS);
     const { transaction } = await buildSkinPurchaseTransaction(req.wallet, priceBaseUnits);
 
@@ -107,30 +97,32 @@ router.post('/confirm-crate', async (req, res) => {
       return res.status(400).json({ error: 'Transaction not confirmed on-chain' });
     }
 
-    // Get unowned skins from this crate
+    // Roll from ALL skins in this crate (allows infinite opens)
     const crateSkins = await Skin.find({ crateId });
+    if (crateSkins.length === 0) {
+      return res.status(400).json({ error: 'Crate has no skins' });
+    }
+
     const user = await User.findOne({ wallet: req.wallet });
     const ownedIds = user ? user.skins.map(s => s.skinId) : [];
-    const unowned = crateSkins.filter(s => !ownedIds.includes(s.skinId));
-
-    if (unowned.length === 0) {
-      return res.status(400).json({ error: 'You already own all skins in this crate' });
-    }
 
     // Weighted random by rarity
     const weights = { common: 70, rare: 25, legendary: 5 };
     const weighted = [];
-    for (const skin of unowned) {
+    for (const skin of crateSkins) {
       const w = weights[skin.rarity] || 70;
       for (let i = 0; i < w; i++) weighted.push(skin);
     }
     const droppedSkin = weighted[Math.floor(Math.random() * weighted.length)];
 
-    // Grant skin to user
-    await User.findOneAndUpdate(
-      { wallet: req.wallet },
-      { $push: { skins: { skinId: droppedSkin.skinId } } }
-    );
+    // Grant skin only if not already owned (no duplicates)
+    const alreadyOwned = ownedIds.includes(droppedSkin.skinId);
+    if (!alreadyOwned) {
+      await User.findOneAndUpdate(
+        { wallet: req.wallet },
+        { $push: { skins: { skinId: droppedSkin.skinId } } }
+      );
+    }
 
     // Burn 90% of revenue in background
     burnSkinRevenue(priceBaseUnits).catch(err => {
@@ -139,6 +131,7 @@ router.post('/confirm-crate', async (req, res) => {
 
     res.json({
       status: 'opened',
+      duplicate: alreadyOwned,
       skin: {
         skinId: droppedSkin.skinId,
         name: droppedSkin.name,

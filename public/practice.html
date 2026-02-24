@@ -116,17 +116,49 @@
     // =============================================
     const CANVAS_W = 800;
     const CANVAS_H = 600;
-    const PADDLE_W = 20;
+    const PADDLE_W = 26;
     const PADDLE_H = 110;
     const PADDLE_SPEED = 6;
-    const BALL_SIZE = 12;
-    const BALL_SPEED_INITIAL = 4;
-    const BALL_SPEED_INCREMENT = 0.2;
-    const BALL_MAX_SPEED = 12;
+    const BALL_SIZE = 16;
+    const BALL_SPEED_INITIAL = 6;
+    const BALL_SPEED_INCREMENT = 0.25;
+    const BALL_MAX_SPEED = 14;
     const WIN_SCORE = 5;
     const SCORE_PAUSE_TICKS = 90; // 1.5s at 60 ticks/sec
 
     const PHYSICS_DT = 1000 / 60; // fixed timestep: 60 steps/sec
+
+    // --- Sound Effects ---
+    let practiceAudioCtx = null;
+    function getPracticeAudio() {
+      if (!practiceAudioCtx) practiceAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      return practiceAudioCtx;
+    }
+    function playPracticeSound(type) {
+      try {
+        const ctx = getPracticeAudio();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        if (type === 'paddle') {
+          osc.frequency.value = 440; osc.type = 'square';
+          gain.gain.value = 0.1;
+          gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.08);
+          osc.start(ctx.currentTime); osc.stop(ctx.currentTime + 0.08);
+        } else if (type === 'wall') {
+          osc.frequency.value = 300; osc.type = 'triangle';
+          gain.gain.value = 0.06;
+          gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.06);
+          osc.start(ctx.currentTime); osc.stop(ctx.currentTime + 0.06);
+        } else if (type === 'score') {
+          osc.frequency.value = 220; osc.type = 'sawtooth';
+          gain.gain.value = 0.12;
+          gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
+          osc.start(ctx.currentTime); osc.stop(ctx.currentTime + 0.3);
+        }
+      } catch (e) {}
+    }
 
     // Paddle x positions
     const P1_X = 10;
@@ -422,10 +454,12 @@
       if (ball.y <= 0) {
         ball.vy = Math.abs(ball.vy);
         ball.y = 0;
+        playPracticeSound('wall');
       }
       if (ball.y >= CANVAS_H - BALL_SIZE) {
         ball.vy = -Math.abs(ball.vy);
         ball.y = CANVAS_H - BALL_SIZE;
+        playPracticeSound('wall');
       }
 
       // --- Swept collision: LEFT paddle (player) ---
@@ -453,6 +487,7 @@
             ball.x = p1Right;
             const hitPos = (intersectY + BALL_SIZE / 2 - playerPaddle.y) / PADDLE_H;
             ball.vy = (hitPos - 0.5) * speed * 1.5;
+            playPracticeSound('paddle');
             return;
           }
         }
@@ -468,6 +503,7 @@
           ball.x = p1Right;
           const hitPos = (ball.y + BALL_SIZE / 2 - playerPaddle.y) / PADDLE_H;
           ball.vy = (hitPos - 0.5) * speed * 1.5;
+          playPracticeSound('paddle');
           return;
         }
       }
@@ -491,6 +527,7 @@
             ball.x = p2Left - BALL_SIZE;
             const hitPos = (intersectY + BALL_SIZE / 2 - botPaddle.y) / PADDLE_H;
             ball.vy = (hitPos - 0.5) * speed * 1.5;
+            playPracticeSound('paddle');
             return;
           }
         }
@@ -506,6 +543,7 @@
           ball.x = p2Left - BALL_SIZE;
           const hitPos = (ball.y + BALL_SIZE / 2 - botPaddle.y) / PADDLE_H;
           ball.vy = (hitPos - 0.5) * speed * 1.5;
+          playPracticeSound('paddle');
           return;
         }
       }
@@ -515,6 +553,7 @@
         // Bot scores
         score.bot++;
         updateScoreDisplay();
+        playPracticeSound('score');
         if (score.bot >= WIN_SCORE) { gameOver(false); return; }
         resetBall();
         return;
@@ -523,6 +562,7 @@
         // Player scores
         score.player++;
         updateScoreDisplay();
+        playPracticeSound('score');
         if (score.player >= WIN_SCORE) { gameOver(true); return; }
         resetBall();
         return;
@@ -700,12 +740,18 @@
       // Right paddle (bot) - gray
       drawPaddle(P2_X, botPaddle.y, false);
 
-      // Ball
+      // Ball — larger, softer glow
+      const bcx = ball.x + BALL_SIZE / 2;
+      const bcy = ball.y + BALL_SIZE / 2;
+      ctx.fillStyle = 'rgba(168, 85, 247, 0.15)';
+      ctx.beginPath();
+      ctx.arc(bcx, bcy, BALL_SIZE, 0, Math.PI * 2);
+      ctx.fill();
       ctx.fillStyle = '#ffffff';
       ctx.shadowColor = '#ffffff';
-      ctx.shadowBlur = 15;
+      ctx.shadowBlur = 18;
       ctx.beginPath();
-      ctx.arc(ball.x + BALL_SIZE / 2, ball.y + BALL_SIZE / 2, BALL_SIZE / 2, 0, Math.PI * 2);
+      ctx.arc(bcx, bcy, BALL_SIZE / 2, 0, Math.PI * 2);
       ctx.fill();
       ctx.shadowBlur = 0;
 

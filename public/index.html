@@ -31,6 +31,7 @@
     .roller-card.rarity-legendary { border-color: #eab308; box-shadow: 0 0 12px rgba(234, 179, 8, 0.4); }
     @keyframes reveal-glow { 0%, 100% { box-shadow: 0 0 20px rgba(168, 85, 247, 0.6); } 50% { box-shadow: 0 0 50px rgba(168, 85, 247, 1); } }
     .reveal-glow { animation: reveal-glow 1.5s infinite; }
+    .pfp-dropzone.drag-over { border-color: #a855f7; background: rgba(168, 85, 247, 0.1); }
   </style>
 </head>
 <body class="text-gray-100 min-h-screen">
@@ -84,9 +85,14 @@
             class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:border-purple-500 focus:outline-none" />
         </div>
         <div>
-          <label class="block text-sm text-gray-400 mb-1">Profile Picture URL</label>
-          <input id="reg-pfp" type="text" placeholder="https://i.imgur.com/..."
-            class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:border-purple-500 focus:outline-none" />
+          <label class="block text-sm text-gray-400 mb-1">Profile Picture</label>
+          <div id="reg-pfp-drop" class="pfp-dropzone border-2 border-dashed border-gray-600 rounded-lg p-4 text-center cursor-pointer hover:border-purple-500 transition"
+            onclick="document.getElementById('reg-pfp-file').click()">
+            <img id="reg-pfp-preview" class="w-16 h-16 rounded-full mx-auto mb-2 hidden object-cover" />
+            <p id="reg-pfp-label" class="text-gray-500 text-sm">Drag & drop or click to upload</p>
+            <p class="text-gray-600 text-xs mt-1">Max 2 MB (JPG, PNG, GIF, WebP)</p>
+          </div>
+          <input id="reg-pfp-file" type="file" accept="image/*" class="hidden" onchange="handlePfpSelect(this, 'reg')" />
         </div>
         <div>
           <label class="block text-sm text-gray-400 mb-1">Bio</label>
@@ -284,9 +290,14 @@
                 class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:border-purple-500 focus:outline-none" />
             </div>
             <div>
-              <label class="block text-sm text-gray-400 mb-1">Profile Picture URL</label>
-              <input id="edit-pfp" type="text"
-                class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:border-purple-500 focus:outline-none" />
+              <label class="block text-sm text-gray-400 mb-1">Profile Picture</label>
+              <div id="edit-pfp-drop" class="pfp-dropzone border-2 border-dashed border-gray-600 rounded-lg p-4 text-center cursor-pointer hover:border-purple-500 transition"
+                onclick="document.getElementById('edit-pfp-file').click()">
+                <img id="edit-pfp-preview" class="w-16 h-16 rounded-full mx-auto mb-2 hidden object-cover" />
+                <p id="edit-pfp-label" class="text-gray-500 text-sm">Drag & drop or click to change</p>
+                <p class="text-gray-600 text-xs mt-1">Max 2 MB (JPG, PNG, GIF, WebP)</p>
+              </div>
+              <input id="edit-pfp-file" type="file" accept="image/*" class="hidden" onchange="handlePfpSelect(this, 'edit')" />
             </div>
             <div>
               <label class="block text-sm text-gray-400 mb-1">Bio</label>
@@ -399,8 +410,8 @@
   <!-- ============ SCRIPTS ============ -->
   <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@solana/web3.js@1.87.6/lib/index.iife.min.js"></script>
-  <script src="/js/wallet.js?v=22"></script>
-  <script src="/js/game-client.js?v=22"></script>
-  <script src="/js/app.js?v=22"></script>
+  <script src="/js/wallet.js?v=23"></script>
+  <script src="/js/game-client.js?v=23"></script>
+  <script src="/js/app.js?v=23"></script>
 </body>
 </html>

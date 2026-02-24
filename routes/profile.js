@@ -4,8 +4,30 @@
 
 const express = require('express');
 const router = express.Router();
+const multer = require('multer');
+const path = require('path');
+const crypto = require('crypto');
 const User = require('../models/User');
 const Match = require('../models/Match');
+
+// Multer config for profile picture uploads
+const storage = multer.diskStorage({
+  destination: path.join(__dirname, '..', 'public', 'uploads'),
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase() || '.png';
+    cb(null, crypto.randomBytes(12).toString('hex') + ext);
+  }
+});
+const upload = multer({
+  storage,
+  limits: { fileSize: 2 * 1024 * 1024 }, // 2 MB
+  fileFilter: (req, file, cb) => {
+    const allowed = ['.jpg', '.jpeg', '.png', '.gif', '.webp'];
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (allowed.includes(ext)) cb(null, true);
+    else cb(new Error('Only image files are allowed'));
+  }
+});
 
 /**
  * GET /api/profile
@@ -82,6 +104,21 @@ router.get('/history', async (req, res) => {
     res.json({ matches });
   } catch (err) {
     res.status(500).json({ error: 'Failed to fetch history' });
+  }
+});
+
+/**
+ * POST /api/profile/upload-pfp
+ * Upload a profile picture file. Returns the URL.
+ */
+router.post('/upload-pfp', upload.single('pfp'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+    const pfpUrl = '/uploads/' + req.file.filename;
+    await User.findOneAndUpdate({ wallet: req.wallet }, { $set: { pfp: pfpUrl } });
+    res.json({ pfp: pfpUrl });
+  } catch (err) {
+    res.status(500).json({ error: err.message || 'Upload failed' });
   }
 });
 

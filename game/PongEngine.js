@@ -10,13 +10,13 @@ const { payoutWinner, STAKE_TIERS } = require('../solana/utils');
 
 const CANVAS_W = 800;
 const CANVAS_H = 600;
-const PADDLE_W = 20;
+const PADDLE_W = 26;
 const PADDLE_H = 110;
 const PADDLE_SPEED = 6;
-const BALL_SIZE = 12;
-const BALL_SPEED_INITIAL = 4;   // start a bit slower
-const BALL_SPEED_INCREMENT = 0.2;
-const BALL_MAX_SPEED = 12;
+const BALL_SIZE = 16;
+const BALL_SPEED_INITIAL = 6;
+const BALL_SPEED_INCREMENT = 0.25;
+const BALL_MAX_SPEED = 14;
 const WIN_SCORE = 5;
 const TICK_RATE = 1000 / 60;
 const SCORE_PAUSE_TICKS = 90;   // 1.5 second pause after scoring
@@ -38,7 +38,8 @@ class PongEngine {
       score: { p1: 0, p2: 0 },
       status: 'playing',
       winner: null,
-      paused: false, // tells client to show "Get Ready" between points
+      paused: false,
+      sound: null, // 'paddle'|'wall'|'score' — client plays sound then clears
     };
 
     this.input = {
@@ -88,6 +89,7 @@ class PongEngine {
 
   tick() {
     if (this.state.status !== 'playing') return;
+    this.state.sound = null;
 
     // --- Always allow paddle movement, even during pause ---
     const p1Input = this.input[this.player1.wallet];
@@ -122,10 +124,12 @@ class PongEngine {
     if (ball.y <= 0) {
       ball.vy = Math.abs(ball.vy);
       ball.y = 0;
+      this.state.sound = 'wall';
     }
     if (ball.y >= CANVAS_H - BALL_SIZE) {
       ball.vy = -Math.abs(ball.vy);
       ball.y = CANVAS_H - BALL_SIZE;
+      this.state.sound = 'wall';
     }
 
     // --- Left paddle collision (player 1) — swept detection ---
@@ -147,6 +151,7 @@ class PongEngine {
           ball.y = hitY;
           const hitPos = (ball.y + BALL_SIZE / 2 - this.state.paddle1.y) / PADDLE_H;
           ball.vy = (hitPos - 0.5) * speed * 1.5;
+          this.state.sound = 'paddle';
         }
       } else if (ball.x <= p1Right && ball.x + BALL_SIZE >= 10 &&
                  ball.y + BALL_SIZE >= this.state.paddle1.y &&
@@ -157,6 +162,7 @@ class PongEngine {
         ball.x = p1Right;
         const hitPos = (ball.y + BALL_SIZE / 2 - this.state.paddle1.y) / PADDLE_H;
         ball.vy = (hitPos - 0.5) * speed * 1.5;
+        this.state.sound = 'paddle';
       }
     }
 
@@ -179,6 +185,7 @@ class PongEngine {
           ball.y = hitY;
           const hitPos = (ball.y + BALL_SIZE / 2 - this.state.paddle2.y) / PADDLE_H;
           ball.vy = (hitPos - 0.5) * speed * 1.5;
+          this.state.sound = 'paddle';
         }
       } else if (ball.x + BALL_SIZE >= p2Left && ball.x <= CANVAS_W - 10 &&
                  ball.y + BALL_SIZE >= this.state.paddle2.y &&
@@ -189,22 +196,25 @@ class PongEngine {
         ball.x = p2Left - BALL_SIZE;
         const hitPos = (ball.y + BALL_SIZE / 2 - this.state.paddle2.y) / PADDLE_H;
         ball.vy = (hitPos - 0.5) * speed * 1.5;
+        this.state.sound = 'paddle';
       }
     }
 
     // --- Scoring ---
     if (ball.x + BALL_SIZE < 0) {
       this.state.score.p2++;
+      this.state.sound = 'score';
       if (this.state.score.p2 >= WIN_SCORE) { this.endGame(this.player2.wallet); return; }
       this.resetBall();
-      this.broadcastState(); // force — score change
+      this.broadcastState();
       return;
     }
     if (ball.x > CANVAS_W) {
       this.state.score.p1++;
+      this.state.sound = 'score';
       if (this.state.score.p1 >= WIN_SCORE) { this.endGame(this.player1.wallet); return; }
       this.resetBall();
-      this.broadcastState(); // force — score change
+      this.broadcastState();
       return;
     }
 

@@ -9,15 +9,53 @@
 const GameClient = (() => {
   const CANVAS_W = 800;
   const CANVAS_H = 600;
-  const PADDLE_W = 20;
+  const PADDLE_W = 26;
   const PADDLE_H = 110;
   const PADDLE_SPEED = 6;
-  const BALL_SIZE = 12;
+  const BALL_SIZE = 16;
   const SERVER_TICK_MS = 1000 / 60;
 
   // Skin image render dimensions (centered on paddle hitbox)
   const SKIN_DRAW_W = 60;
   const SKIN_DRAW_H = 200;
+
+  // --- Game Sound Effects (Web Audio API) ---
+  let gameAudioCtx = null;
+  function getGameAudio() {
+    if (!gameAudioCtx) gameAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    return gameAudioCtx;
+  }
+  function playGameSound(type) {
+    try {
+      const ctx = getGameAudio();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      if (type === 'paddle') {
+        osc.frequency.value = 440;
+        osc.type = 'square';
+        gain.gain.value = 0.1;
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.08);
+        osc.start(ctx.currentTime);
+        osc.stop(ctx.currentTime + 0.08);
+      } else if (type === 'wall') {
+        osc.frequency.value = 300;
+        osc.type = 'triangle';
+        gain.gain.value = 0.06;
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.06);
+        osc.start(ctx.currentTime);
+        osc.stop(ctx.currentTime + 0.06);
+      } else if (type === 'score') {
+        osc.frequency.value = 220;
+        osc.type = 'sawtooth';
+        gain.gain.value = 0.12;
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
+        osc.start(ctx.currentTime);
+        osc.stop(ctx.currentTime + 0.3);
+      }
+    } catch (e) { /* audio not available */ }
+  }
 
   let canvas = null;
   let ctx = null;
@@ -120,6 +158,9 @@ const GameClient = (() => {
   function updateState(state) {
     displayScore = state.score;
     isPaused = state.paused;
+
+    // Play sound effects from server events
+    if (state.sound) playGameSound(state.sound);
 
     const newServerY = amPlayer1 ? state.paddle1.y : state.paddle2.y;
     myOffset -= (newServerY - serverMyY);
@@ -229,13 +270,21 @@ const GameClient = (() => {
       drawPaddle(CANVAS_W - PADDLE_W - 10, p1Y, amPlayer1, amPlayer1 ? mySkin : opponentSkin, amPlayer1 ? mySkinImage : opponentSkinImage, true);
     }
 
-    // Ball
+    // Ball — larger, softer glow
     const drawBx = mirrored ? (CANVAS_W - bx - BALL_SIZE) : bx;
+    const bcx = drawBx + BALL_SIZE / 2;
+    const bcy = by + BALL_SIZE / 2;
+    // Outer glow
+    ctx.fillStyle = 'rgba(168, 85, 247, 0.15)';
+    ctx.beginPath();
+    ctx.arc(bcx, bcy, BALL_SIZE, 0, Math.PI * 2);
+    ctx.fill();
+    // Main ball
     ctx.fillStyle = skinConfig.ball;
     ctx.shadowColor = skinConfig.ball;
-    ctx.shadowBlur = 10;
+    ctx.shadowBlur = 18;
     ctx.beginPath();
-    ctx.arc(drawBx + BALL_SIZE / 2, by + BALL_SIZE / 2, BALL_SIZE / 2, 0, Math.PI * 2);
+    ctx.arc(bcx, bcy, BALL_SIZE / 2, 0, Math.PI * 2);
     ctx.fill();
     ctx.shadowBlur = 0;
 

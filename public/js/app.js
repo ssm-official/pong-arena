@@ -146,23 +146,29 @@ async function connectWallet() {
 
 async function registerUser() {
   const username = document.getElementById('reg-username').value.trim();
-  const pfp = document.getElementById('reg-pfp').value.trim();
   const bio = document.getElementById('reg-bio').value.trim();
 
   if (!username) return showRegError('Username is required');
 
   try {
-    // Use existing session token from login step — no re-signing needed
+    // Register first (without pfp)
     const res = await fetch('/api/auth/register', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: getAuthHeader() },
-      body: JSON.stringify({ wallet: WalletManager.getWallet(), username, pfp, bio })
+      body: JSON.stringify({ wallet: WalletManager.getWallet(), username, pfp: '', bio })
     }).then(r => r.json());
 
     if (res.error) return showRegError(res.error);
     sessionToken = res.token;
     currentUser = res.user;
     saveSession();
+
+    // Upload pfp file if one was selected
+    const fileInput = document.getElementById('reg-pfp-file');
+    if (fileInput.files.length > 0) {
+      await uploadPfpFile(fileInput.files[0]);
+    }
+
     showApp();
   } catch (err) {
     showRegError(err.message);
@@ -241,18 +247,28 @@ function loadProfile() {
   document.getElementById('profile-username').textContent = currentUser.username;
   document.getElementById('profile-wallet').textContent = shortenAddress(currentUser.wallet);
   document.getElementById('edit-username').value = currentUser.username;
-  document.getElementById('edit-pfp').value = currentUser.pfp || '';
   document.getElementById('edit-bio').value = currentUser.bio || '';
   document.getElementById('stat-wins').textContent = currentUser.stats?.wins || 0;
   document.getElementById('stat-losses').textContent = currentUser.stats?.losses || 0;
   document.getElementById('stat-earnings').textContent = formatPong(currentUser.stats?.totalEarnings || 0);
+
+  // Show current pfp in edit dropzone
+  const editPreview = document.getElementById('edit-pfp-preview');
+  const editLabel = document.getElementById('edit-pfp-label');
+  if (currentUser.pfp) {
+    editPreview.src = currentUser.pfp;
+    editPreview.classList.remove('hidden');
+    editLabel.textContent = 'Drag & drop or click to change';
+  } else {
+    editPreview.classList.add('hidden');
+    editLabel.textContent = 'Drag & drop or click to upload';
+  }
 }
 
 async function saveProfile() {
   try {
     const body = {
       username: document.getElementById('edit-username').value.trim(),
-      pfp: document.getElementById('edit-pfp').value.trim(),
       bio: document.getElementById('edit-bio').value.trim(),
     };
 
@@ -280,6 +296,84 @@ function showProfileMsg(msg, color) {
   el.className = `text-sm text-${color}-400`;
   el.classList.remove('hidden');
   setTimeout(() => el.classList.add('hidden'), 3000);
+}
+
+// --- Profile Picture Upload ---
+
+/** Upload a file to /api/profile/upload-pfp */
+async function uploadPfpFile(file) {
+  const formData = new FormData();
+  formData.append('pfp', file);
+  const res = await fetch('/api/profile/upload-pfp', {
+    method: 'POST',
+    headers: { Authorization: getAuthHeader() },
+    body: formData,
+  }).then(r => r.json());
+  if (res.pfp) {
+    currentUser.pfp = res.pfp;
+    updateNav();
+  }
+  return res;
+}
+
+/** Handle file input change for pfp (registration or edit) */
+function handlePfpSelect(input, prefix) {
+  if (!input.files.length) return;
+  const file = input.files[0];
+  showPfpPreview(file, prefix);
+
+  // If editing (not registering), upload immediately
+  if (prefix === 'edit') {
+    uploadPfpFile(file).then(res => {
+      if (res.pfp) {
+        showProfileMsg('Profile picture updated!', 'green');
+        document.getElementById('profile-pfp').src = res.pfp;
+      } else {
+        showProfileMsg(res.error || 'Upload failed', 'red');
+      }
+    });
+  }
+}
+
+/** Show preview thumbnail in the dropzone */
+function showPfpPreview(file, prefix) {
+  const preview = document.getElementById(`${prefix}-pfp-preview`);
+  const label = document.getElementById(`${prefix}-pfp-label`);
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    preview.src = e.target.result;
+    preview.classList.remove('hidden');
+    label.textContent = file.name;
+  };
+  reader.readAsDataURL(file);
+}
+
+/** Initialize drag/drop for all pfp dropzones */
+function initPfpDropzones() {
+  ['reg-pfp-drop', 'edit-pfp-drop'].forEach(id => {
+    const zone = document.getElementById(id);
+    if (!zone) return;
+    const prefix = id.startsWith('reg') ? 'reg' : 'edit';
+    const fileInput = document.getElementById(`${prefix}-pfp-file`);
+
+    zone.addEventListener('dragover', (e) => { e.preventDefault(); zone.classList.add('drag-over'); });
+    zone.addEventListener('dragleave', () => { zone.classList.remove('drag-over'); });
+    zone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      zone.classList.remove('drag-over');
+      if (e.dataTransfer.files.length) {
+        fileInput.files = e.dataTransfer.files;
+        handlePfpSelect(fileInput, prefix);
+      }
+    });
+  });
+}
+
+// Init dropzones once DOM is ready
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initPfpDropzones);
+} else {
+  initPfpDropzones();
 }
 
 // ===========================================
@@ -461,12 +555,9 @@ function renderCrateCard(c, isLimited) {
       </div>
       <div class="flex items-center justify-between">
         <span class="text-sm font-bold text-white">${usdPrice}${c.price.toLocaleString()} $PONG</span>
-        ${c.allOwned
-          ? '<span class="text-green-400 text-xs font-medium">All Owned</span>'
-          : `<button onclick="buyCrate('${c.crateId}')" class="bg-purple-600 hover:bg-purple-700 px-4 py-1.5 rounded-lg text-xs font-medium transition">
-              Open (${c.unownedCount} left)
-            </button>`
-        }
+        <button onclick="buyCrate('${c.crateId}')" class="bg-purple-600 hover:bg-purple-700 px-4 py-1.5 rounded-lg text-xs font-medium transition">
+          Open${c.unownedCount > 0 ? ` (${c.unownedCount} new)` : ''}
+        </button>
       </div>
     </div>
   `;
@@ -488,7 +579,7 @@ async function buyCrate(crateId) {
     if (confirmRes.error) return alert(confirmRes.error);
 
     // Show crate roller animation
-    showCrateRoller(confirmRes.skin, confirmRes.crateSkins || []);
+    showCrateRoller(confirmRes.skin, confirmRes.crateSkins || [], confirmRes.duplicate);
   } catch (err) {
     alert('Purchase failed: ' + err.message);
   }
@@ -642,7 +733,7 @@ function animateRoller(cards, winIndex) {
 }
 
 /** Show the final reveal card with glow + sound */
-function showFinalReveal(skin) {
+function showFinalReveal(skin, isDuplicate) {
   const preview = document.getElementById('roller-reveal-preview');
   const nameEl = document.getElementById('roller-reveal-name');
   const rarityEl = document.getElementById('roller-reveal-rarity');
@@ -658,8 +749,8 @@ function showFinalReveal(skin) {
 
   nameEl.textContent = skin.name;
   const rarityColors = { common: 'text-gray-400', rare: 'text-purple-400', legendary: 'text-yellow-400' };
-  rarityEl.textContent = skin.rarity.toUpperCase();
-  rarityEl.className = `text-sm mb-4 font-bold ${rarityColors[skin.rarity] || 'text-gray-400'}`;
+  rarityEl.textContent = isDuplicate ? skin.rarity.toUpperCase() + ' (DUPLICATE)' : skin.rarity.toUpperCase();
+  rarityEl.className = `text-sm mb-4 font-bold ${isDuplicate ? 'text-gray-500' : (rarityColors[skin.rarity] || 'text-gray-400')}`;
 
   // Rarity-based effects
   if (skin.rarity === 'legendary') {
@@ -677,7 +768,7 @@ function showFinalReveal(skin) {
 }
 
 /** Main entry: show the roller modal and run the animation */
-async function showCrateRoller(wonSkin, crateSkins) {
+async function showCrateRoller(wonSkin, crateSkins, isDuplicate) {
   const modal = document.getElementById('crate-roller-modal');
   const revealDiv = document.getElementById('roller-reveal');
   const flash = document.getElementById('roller-flash');
@@ -698,7 +789,7 @@ async function showCrateRoller(wonSkin, crateSkins) {
   await animateRoller(cards, winIndex);
 
   // Show reveal
-  showFinalReveal(wonSkin);
+  showFinalReveal(wonSkin, isDuplicate);
 }
 
 function closeRoller() {
