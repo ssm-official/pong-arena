@@ -246,7 +246,11 @@ function showView(view) {
 function showApp() {
   showView('app');
   updateNav();
-  switchTab('play');
+  // Route to the tab matching the current URL, or default to play
+  const initialTab = getTabFromPath();
+  switchTab(initialTab, false);
+  // Replace current history entry so back works correctly
+  history.replaceState({ tab: initialTab }, '', ROUTE_PATHS[initialTab] || '/play');
   socket.emit('register', { wallet: currentUser.wallet, username: currentUser.username });
   const canvas = document.getElementById('game-canvas');
   GameClient.init(canvas, currentUser.wallet);
@@ -265,11 +269,42 @@ function updateNav() {
   document.getElementById('nav-user').classList.remove('hidden');
 }
 
-function switchTab(tab) {
+// ===========================================
+// CLIENT-SIDE ROUTING
+// ===========================================
+
+const TAB_ROUTES = {
+  '/play': 'play',
+  '/leaderboard': 'leaderboard',
+  '/profile': 'profile',
+  '/friends': 'friends',
+  '/opponents': 'opponents',
+  '/shop': 'shop',
+  '/history': 'history',
+};
+const ROUTE_PATHS = {};
+Object.entries(TAB_ROUTES).forEach(([path, tab]) => { ROUTE_PATHS[tab] = path; });
+
+function getTabFromPath() {
+  const path = window.location.pathname;
+  if (path === '/' || path === '/home') return 'play';
+  return TAB_ROUTES[path] || 'play';
+}
+
+function switchTab(tab, pushState) {
   document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
   document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('tab-active'));
   document.getElementById(`tab-${tab}`).classList.remove('hidden');
-  document.querySelector(`[data-tab="${tab}"]`).classList.add('tab-active');
+  const tabBtn = document.querySelector(`[data-tab="${tab}"]`);
+  if (tabBtn) tabBtn.classList.add('tab-active');
+
+  // Update URL (don't push on popstate or initial load)
+  if (pushState !== false) {
+    const targetPath = ROUTE_PATHS[tab] || '/play';
+    if (window.location.pathname !== targetPath) {
+      history.pushState({ tab }, '', targetPath);
+    }
+  }
 
   if (tab === 'profile') loadProfile();
   if (tab === 'friends') loadFriends();
@@ -278,6 +313,13 @@ function switchTab(tab) {
   if (tab === 'leaderboard') loadLeaderboard(currentLbSort);
   if (tab === 'opponents') loadRecentOpponents();
 }
+
+// Handle browser back/forward
+window.addEventListener('popstate', (e) => {
+  if (!currentUser) return; // not logged in, ignore
+  const tab = (e.state && e.state.tab) ? e.state.tab : getTabFromPath();
+  switchTab(tab, false);
+});
 
 // ===========================================
 // LEADERBOARD
@@ -1054,17 +1096,36 @@ socket.on('duel-error', (data) => {
 // Socket: Incoming duel invite
 socket.on('duel-incoming', (data) => {
   pendingDuelId = data.duelId;
-  document.getElementById('duel-from-name').textContent = data.fromUsername;
   const pongAmount = (data.stakeAmount / 1e6);
   const usdAmount = pongPriceUsd > 0 ? ` (${formatUsd(pongAmount * pongPriceUsd)})` : '';
-  document.getElementById('duel-incoming-stake').textContent = pongAmount.toLocaleString() + ' $PONG' + usdAmount;
+  const stakeText = pongAmount.toLocaleString() + ' $PONG' + usdAmount;
+
+  // Show modal
+  document.getElementById('duel-from-name').textContent = data.fromUsername;
+  document.getElementById('duel-incoming-stake').textContent = stakeText;
   document.getElementById('duel-incoming-modal').classList.remove('hidden');
+
+  // Also show the persistent challenge bar
+  const bar = document.getElementById('challenge-bar');
+  const barText = document.getElementById('challenge-bar-text');
+  if (bar && barText) {
+    barText.textContent = `${data.fromUsername} challenged you for ${stakeText}`;
+    bar.classList.remove('hidden');
+  }
 });
+
+function hideChallengeBar() {
+  const bar = document.getElementById('challenge-bar');
+  if (bar) bar.classList.add('hidden');
+}
 
 function acceptDuel() {
   if (!pendingDuelId) return;
   socket.emit('duel-accept', { duelId: pendingDuelId });
   document.getElementById('duel-incoming-modal').classList.add('hidden');
+  hideChallengeBar();
+  // Switch to Play tab so user sees the escrow/game flow
+  switchTab('play');
   pendingDuelId = null;
 }
 
@@ -1072,7 +1133,16 @@ function declineDuel() {
   if (!pendingDuelId) return;
   socket.emit('duel-decline', { duelId: pendingDuelId });
   document.getElementById('duel-incoming-modal').classList.add('hidden');
+  hideChallengeBar();
   pendingDuelId = null;
+}
+
+function acceptChallengeFromBar() {
+  acceptDuel();
+}
+
+function declineChallengeFromBar() {
+  declineDuel();
 }
 
 socket.on('duel-declined', (data) => {
@@ -1081,6 +1151,7 @@ socket.on('duel-declined', (data) => {
 
 socket.on('duel-expired', (data) => {
   document.getElementById('duel-incoming-modal').classList.add('hidden');
+  hideChallengeBar();
   pendingDuelId = null;
 });
 
@@ -1730,7 +1801,7 @@ socket.on('game-start', (data) => {
 // Socket: Game state tick
 socket.on('game-state', (data) => {
   if (data.gameId !== currentGameId) return;
-  GameClient.updateState(data.state);
+  GameClient.updateState(data.state, data.sounds);
   if (isMirrored) {
     document.getElementById('game-score-p1').textContent = data.state.score.p2;
     document.getElementById('game-score-p2').textContent = data.state.score.p1;
@@ -1766,6 +1837,29 @@ socket.on('opponent-reconnected', (data) => {
 
 // Socket: Rejoin active game
 socket.on('rejoin-game', (data) => {
+  // If the game is already finished, don't show the game UI — go to game-over screen
+  if (data.state && data.state.status === 'finished') {
+    currentGameId = data.gameId;
+    const amP1 = (currentUser.wallet === data.player1.wallet);
+    lastGameOpponent = amP1
+      ? { wallet: data.player2.wallet, username: data.player2.username }
+      : { wallet: data.player1.wallet, username: data.player1.username };
+    const won = data.state.winner === currentUser.wallet;
+    document.getElementById('gameover-title').textContent = won ? 'VICTORY!' : 'DEFEAT';
+    document.getElementById('gameover-title').className = `text-2xl font-bold mb-2 ${won ? 'text-green-400' : 'text-red-400'}`;
+    document.getElementById('gameover-score').textContent = `Final Score: ${data.state.score.p1} - ${data.state.score.p2}`;
+    document.getElementById('gameover-payout').textContent = '';
+    const addSection = document.getElementById('gameover-add-friend');
+    if (lastGameOpponent && currentUser.friends && !currentUser.friends.includes(lastGameOpponent.wallet)) {
+      document.getElementById('btn-add-opponent').textContent = `Add ${lastGameOpponent.username}`;
+      addSection.classList.remove('hidden');
+    } else {
+      addSection.classList.add('hidden');
+    }
+    showMatchmakingState('gameover');
+    return;
+  }
+
   currentGameId = data.gameId;
   currentGameTier = data.tier;
   showMatchmakingState('game');

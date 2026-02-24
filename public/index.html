@@ -80,6 +80,20 @@
     </div>
   </nav>
 
+  <!-- ============ CHALLENGE BAR ============ -->
+  <div id="challenge-bar" class="hidden bg-gradient-to-r from-yellow-900/80 to-orange-900/80 border-b border-yellow-600/40">
+    <div class="max-w-5xl mx-auto px-4 py-2 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <span class="text-yellow-400 font-bold text-sm animate-pulse">CHALLENGE</span>
+        <span id="challenge-bar-text" class="text-gray-200 text-sm"></span>
+      </div>
+      <div class="flex items-center gap-2">
+        <button onclick="acceptChallengeFromBar()" class="bg-green-600 hover:bg-green-700 px-4 py-1 rounded-lg text-xs font-bold transition">Accept</button>
+        <button onclick="declineChallengeFromBar()" class="bg-gray-700 hover:bg-gray-600 px-3 py-1 rounded-lg text-xs transition">Decline</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ============ MAIN CONTENT ============ -->
   <div class="max-w-5xl mx-auto px-4 py-6">
 
@@ -616,8 +630,8 @@
   <!-- ============ SCRIPTS ============ -->
   <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@solana/web3.js@1.87.6/lib/index.iife.min.js"></script>
-  <script src="/js/wallet.js?v=26"></script>
-  <script src="/js/game-client.js?v=26"></script>
-  <script src="/js/app.js?v=26"></script>
+  <script src="/js/wallet.js?v=27"></script>
+  <script src="/js/game-client.js?v=27"></script>
+  <script src="/js/app.js?v=27"></script>
 </body>
 </html>

@@ -32,6 +32,9 @@ class PongEngine {
     this.activeGames = activeGames;
     this.pauseTicks = 0;
     this.customStake = customStake || null; // for duel matches
+    this.tickCount = 0;
+    this.broadcastInterval = 3; // broadcast every 3rd tick = ~20Hz
+    this.pendingSounds = [];    // accumulate sounds between broadcasts
 
     // Ready system
     this.readyPhase = true;
@@ -187,6 +190,8 @@ class PongEngine {
   tick() {
     if (this.state.status !== 'playing') return;
     this.state.sound = null;
+    this.tickCount++;
+    const isBroadcastTick = (this.tickCount % this.broadcastInterval === 0);
 
     // --- Always allow paddle movement, even during pause ---
     const p1Input = this.input[this.player1.wallet];
@@ -205,7 +210,7 @@ class PongEngine {
         this.state.paused = false;
         this.launchBall();
       }
-      this.broadcastState();
+      if (isBroadcastTick) this.broadcastState();
       return;
     }
 
@@ -295,7 +300,7 @@ class PongEngine {
       this.state.sound = 'score';
       if (this.state.score.p2 >= WIN_SCORE) { this.endGame(this.player2.wallet); return; }
       this.resetBall();
-      this.broadcastState();
+      this.broadcastState(); // always broadcast score events immediately
       return;
     }
     if (ball.x > CANVAS_W) {
@@ -303,11 +308,16 @@ class PongEngine {
       this.state.sound = 'score';
       if (this.state.score.p1 >= WIN_SCORE) { this.endGame(this.player1.wallet); return; }
       this.resetBall();
-      this.broadcastState();
+      this.broadcastState(); // always broadcast score events immediately
       return;
     }
 
-    this.broadcastState();
+    // Accumulate sounds for next broadcast
+    if (this.state.sound && !this.pendingSounds.includes(this.state.sound)) {
+      this.pendingSounds.push(this.state.sound);
+    }
+
+    if (isBroadcastTick) this.broadcastState();
   }
 
   resetBall() {
@@ -329,9 +339,18 @@ class PongEngine {
   }
 
   broadcastState() {
+    // Include any sounds accumulated since last broadcast
+    const sounds = this.pendingSounds.length > 0 ? this.pendingSounds.slice() : [];
+    if (this.state.sound && !sounds.includes(this.state.sound)) {
+      sounds.push(this.state.sound);
+    }
+    this.pendingSounds = [];
+
     this.emit('game-state', {
       gameId: this.gameId,
       state: this.state,
+      tick: this.tickCount,
+      sounds,
     });
   }
 

@@ -2,8 +2,9 @@
 // Game Client — Canvas rendering + input
 // ===========================================
 // Your paddle: client-side prediction (offset reconciliation).
-// Opponent + ball: interpolation between two most recent server states.
-//   Renders one tick behind for perfectly smooth constant-speed motion.
+// Opponent + ball: ring buffer interpolation with render delay.
+//   Renders ~60ms behind latest snapshot to absorb network jitter.
+//   Between snapshots, ball position is predicted using velocity.
 // All positions rounded to integers.
 
 const GameClient = (() => {
@@ -14,6 +15,10 @@ const GameClient = (() => {
   const PADDLE_SPEED = 6;
   const BALL_SIZE = 16;
   const SERVER_TICK_MS = 1000 / 60;
+
+  // --- Interpolation constants ---
+  const RENDER_DELAY_MS = 60;  // render 60ms behind latest snapshot
+  const MAX_SNAPS = 10;        // ring buffer size
 
   // Skin image render dimensions (centered on paddle hitbox)
   const SKIN_DRAW_W = 60;
@@ -63,7 +68,6 @@ const GameClient = (() => {
   let amPlayer1 = false;
   let gameId = null;
   let animFrameId = null;
-  let inputInterval = null;
   let lastFrameTime = 0;
   let skinConfig = { paddle: '#a855f7', ball: '#ffffff', background: '#0f0f2a' };
   let mirrored = false;
@@ -79,10 +83,9 @@ const GameClient = (() => {
   let serverMyY = CANVAS_H / 2 - PADDLE_H / 2;
   let myOffset = 0;
 
-  // --- Interpolation buffer for opponent + ball ---
-  let prevSnap = null;
-  let currSnap = null;
-  let snapElapsed = 0;
+  // --- Ring buffer for opponent + ball interpolation ---
+  const snapBuffer = [];   // { time, remoteY, ballX, ballY, ballVx, ballVy }
+  let renderClock = 0;     // local clock for render timing
 
   let displayScore = { p1: 0, p2: 0 };
   let isPaused = false;
@@ -100,12 +103,10 @@ const GameClient = (() => {
   function setGameInfo(gId, player1Wallet) {
     gameId = gId;
     amPlayer1 = (myWallet === player1Wallet);
-    const mid = CANVAS_H / 2 - PADDLE_H / 2;
-    serverMyY = mid;
+    serverMyY = CANVAS_H / 2 - PADDLE_H / 2;
     myOffset = 0;
-    prevSnap = null;
-    currSnap = null;
-    snapElapsed = 0;
+    snapBuffer.length = 0;
+    renderClock = 0;
     lastFrameTime = 0;
   }
 
@@ -155,13 +156,18 @@ const GameClient = (() => {
     mirrored = !!val;
   }
 
-  function updateState(state) {
+  function updateState(state, sounds) {
     displayScore = state.score;
     isPaused = state.paused;
 
-    // Play sound effects from server events
-    if (state.sound) playGameSound(state.sound);
+    // Play accumulated sound effects from server
+    if (sounds && sounds.length > 0) {
+      sounds.forEach(s => playGameSound(s));
+    } else if (state.sound) {
+      playGameSound(state.sound);
+    }
 
+    // Own paddle reconciliation
     const newServerY = amPlayer1 ? state.paddle1.y : state.paddle2.y;
     myOffset -= (newServerY - serverMyY);
     serverMyY = newServerY;
@@ -169,31 +175,33 @@ const GameClient = (() => {
     if (myOffset > 30) myOffset = 30;
     if (myOffset < -30) myOffset = -30;
 
-    prevSnap = currSnap;
-    currSnap = {
+    // Push to ring buffer with local timestamp
+    snapBuffer.push({
+      time: performance.now(),
       remoteY: amPlayer1 ? state.paddle2.y : state.paddle1.y,
       ballX: state.ball.x,
       ballY: state.ball.y,
-    };
-    snapElapsed = 0;
+      ballVx: state.ball.vx,
+      ballVy: state.ball.vy,
+    });
+    while (snapBuffer.length > MAX_SNAPS) snapBuffer.shift();
+
+    // Initialize render clock on first snapshot
+    if (snapBuffer.length === 1) {
+      renderClock = snapBuffer[0].time - RENDER_DELAY_MS;
+    }
   }
 
   function startRendering() {
     if (animFrameId) cancelAnimationFrame(animFrameId);
     lastFrameTime = 0;
+    renderClock = 0;
     animFrameId = requestAnimationFrame(renderLoop);
-
-    if (inputInterval) clearInterval(inputInterval);
-    inputInterval = setInterval(() => {
-      if (window.socket && gameId) {
-        window.socket.emit('paddle-move', { gameId, direction: currentInput });
-      }
-    }, 16);
+    // Input is sent on key change only — no polling interval needed
   }
 
   function stopRendering() {
     if (animFrameId) { cancelAnimationFrame(animFrameId); animFrameId = null; }
-    if (inputInterval) { clearInterval(inputInterval); inputInterval = null; }
   }
 
   function renderLoop(timestamp) {
@@ -202,6 +210,7 @@ const GameClient = (() => {
     lastFrameTime = timestamp;
     const ticks = Math.min(delta / SERVER_TICK_MS, 4);
 
+    // Own paddle prediction
     if (currentInput === 'up') {
       myOffset -= PADDLE_SPEED * ticks;
     } else if (currentInput === 'down') {
@@ -211,18 +220,42 @@ const GameClient = (() => {
       Math.max(0, Math.min(CANVAS_H - PADDLE_H, serverMyY + myOffset))
     );
 
-    snapElapsed += delta;
+    // Advance render clock
+    renderClock += delta;
+
     let oppY, bx, by;
 
-    if (prevSnap && currSnap) {
-      const t = Math.min(snapElapsed / SERVER_TICK_MS, 1);
-      oppY = prevSnap.remoteY + (currSnap.remoteY - prevSnap.remoteY) * t;
-      bx = prevSnap.ballX + (currSnap.ballX - prevSnap.ballX) * t;
-      by = prevSnap.ballY + (currSnap.ballY - prevSnap.ballY) * t;
-    } else if (currSnap) {
-      oppY = currSnap.remoteY;
-      bx = currSnap.ballX;
-      by = currSnap.ballY;
+    if (snapBuffer.length >= 2) {
+      const renderTime = renderClock;
+
+      // Find the two snapshots that straddle renderTime
+      let s0 = snapBuffer[0], s1 = snapBuffer[1];
+      for (let i = 0; i < snapBuffer.length - 1; i++) {
+        if (snapBuffer[i + 1].time >= renderTime) {
+          s0 = snapBuffer[i];
+          s1 = snapBuffer[i + 1];
+          break;
+        }
+        s0 = snapBuffer[i];
+        s1 = snapBuffer[i + 1];
+      }
+
+      const range = s1.time - s0.time;
+      const t = range > 0 ? Math.max(0, Math.min(1.2, (renderTime - s0.time) / range)) : 1;
+
+      oppY = s0.remoteY + (s1.remoteY - s0.remoteY) * t;
+      bx = s0.ballX + (s1.ballX - s0.ballX) * t;
+      by = s0.ballY + (s1.ballY - s0.ballY) * t;
+    } else if (snapBuffer.length === 1) {
+      const s = snapBuffer[0];
+      // Extrapolate ball position using velocity
+      const elapsed = (renderClock - s.time) / SERVER_TICK_MS;
+      oppY = s.remoteY;
+      bx = s.ballX + (s.ballVx || 0) * elapsed;
+      by = s.ballY + (s.ballVy || 0) * elapsed;
+      // Clamp ball to canvas bounds
+      bx = Math.max(0, Math.min(CANVAS_W - BALL_SIZE, bx));
+      by = Math.max(0, Math.min(CANVAS_H - BALL_SIZE, by));
     } else {
       oppY = CANVAS_H / 2 - PADDLE_H / 2;
       bx = CANVAS_W / 2;
@@ -408,8 +441,8 @@ const GameClient = (() => {
     currentInput = 'stop';
     lastFrameTime = 0;
     myOffset = 0;
-    prevSnap = null;
-    currSnap = null;
+    snapBuffer.length = 0;
+    renderClock = 0;
     mySkin = null;
     opponentSkin = null;
     mySkinImage = null;
