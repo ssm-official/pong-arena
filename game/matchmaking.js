@@ -1,9 +1,9 @@
 // ===========================================
-// Matchmaking — Tier-Based Queue System
+// Matchmaking — Tier-Based Queue + Duel System
 // ===========================================
 
 const { PongEngine } = require('./PongEngine');
-const { STAKE_TIERS, buildEscrowTransaction, verifyEscrowTx, refundPlayer } = require('../solana/utils');
+const { STAKE_TIERS, buildEscrowTransaction, buildCustomEscrowTransaction, verifyEscrowTx, refundPlayer } = require('../solana/utils');
 const Match = require('../models/Match');
 const User = require('../models/User');
 const Skin = require('../models/Skin');
@@ -11,7 +11,6 @@ const crypto = require('crypto');
 
 /**
  * Look up a player's equipped skin data from DB.
- * Returns { type, cssValue, imageUrl } or null for default.
  */
 async function getPlayerSkin(wallet) {
   try {
@@ -25,15 +24,17 @@ async function getPlayerSkin(wallet) {
   }
 }
 
-// Skip on-chain escrow for testing (set SKIP_ESCROW=true in env)
 const SKIP_ESCROW = process.env.SKIP_ESCROW === 'true';
 if (SKIP_ESCROW) console.log('⚠ SKIP_ESCROW mode: games start without token escrow');
 
-// Queues per tier: { low: [player, ...], medium: [...], high: [...] }
+// Queues per tier
 const queues = { low: [], medium: [], high: [] };
 
-// Pending matches waiting for escrow confirmation: gameId -> { player1, player2, escrow status }
+// Pending matches waiting for escrow
 const pendingEscrow = new Map();
+
+// Pending duel invites: duelId -> { challenger, target, stakeAmount, createdAt }
+const pendingDuels = new Map();
 
 function setupMatchmaking(io, socket, onlineUsers, activeGames) {
 
@@ -62,7 +63,6 @@ function setupMatchmaking(io, socket, onlineUsers, activeGames) {
     socket.emit('queue-joined', { tier, position: queues[tier].length });
     console.log(`${player.username} joined ${tier} queue (${queues[tier].length} in queue)`);
 
-    // Check for match
     if (queues[tier].length >= 2) {
       const p1 = queues[tier].shift();
       const p2 = queues[tier].shift();
@@ -87,14 +87,13 @@ function setupMatchmaking(io, socket, onlineUsers, activeGames) {
     const isP2 = socket.wallet === pending.player2.wallet;
     if (!isP1 && !isP2) return;
 
-    // Tell both players this player is verifying
     const who = isP1 ? 'p1' : 'p2';
     io.to(pending.player1.socketId).emit('escrow-status', { gameId, player: who, status: 'verifying' });
     io.to(pending.player2.socketId).emit('escrow-status', { gameId, player: who, status: 'verifying' });
 
-    // Verify tx on-chain
+    const stakeAmount = pending.stakeAmount || STAKE_TIERS[pending.tier];
     console.log(`Verifying escrow tx for ${socket.wallet}: ${txSignature}`);
-    const verified = await verifyEscrowTx(txSignature, STAKE_TIERS[pending.tier], socket.wallet);
+    const verified = await verifyEscrowTx(txSignature, stakeAmount, socket.wallet);
     if (!verified) {
       io.to(pending.player1.socketId).emit('escrow-status', { gameId, player: who, status: 'failed' });
       io.to(pending.player2.socketId).emit('escrow-status', { gameId, player: who, status: 'failed' });
@@ -104,21 +103,17 @@ function setupMatchmaking(io, socket, onlineUsers, activeGames) {
     if (isP1) pending.p1Escrowed = true;
     if (isP2) pending.p2Escrowed = true;
 
-    // Update match record
     const update = isP1
       ? { player1EscrowTx: txSignature }
       : { player2EscrowTx: txSignature };
     await Match.findOneAndUpdate({ gameId }, update);
 
-    // Tell both players this player confirmed
     io.to(pending.player1.socketId).emit('escrow-status', { gameId, player: who, status: 'confirmed' });
     io.to(pending.player2.socketId).emit('escrow-status', { gameId, player: who, status: 'confirmed' });
 
-    // If both players escrowed, start the game
     if (pending.p1Escrowed && pending.p2Escrowed) {
       pendingEscrow.delete(gameId);
 
-      // Look up equipped skins for both players
       const [p1Skin, p2Skin] = await Promise.all([
         getPlayerSkin(pending.player1.wallet),
         getPlayerSkin(pending.player2.wallet),
@@ -126,26 +121,31 @@ function setupMatchmaking(io, socket, onlineUsers, activeGames) {
       pending.player1.skin = p1Skin;
       pending.player2.skin = p2Skin;
 
+      const customStake = pending.stakeAmount || null;
       const game = new PongEngine(
         gameId,
         pending.player1,
         pending.player2,
         pending.tier,
         io,
-        activeGames
+        activeGames,
+        customStake
       );
       activeGames.set(gameId, game);
       await Match.findOneAndUpdate({ gameId }, { status: 'in-progress' });
 
       const countdownData = {
-        gameId, seconds: 10, tier: pending.tier,
+        gameId, seconds: 30, tier: pending.tier,
         player1: { wallet: pending.player1.wallet, username: pending.player1.username, skin: p1Skin },
         player2: { wallet: pending.player2.wallet, username: pending.player2.username, skin: p2Skin },
+        stakeAmount: customStake || STAKE_TIERS[pending.tier],
+        useReadySystem: true,
       };
       io.to(pending.player1.socketId).emit('game-countdown', countdownData);
       io.to(pending.player2.socketId).emit('game-countdown', countdownData);
 
-      setTimeout(() => game.start(), 10000);
+      // Start ready phase instead of auto-start
+      game.startReadyPhase();
     }
   });
 
@@ -156,9 +156,9 @@ function setupMatchmaking(io, socket, onlineUsers, activeGames) {
     pendingEscrow.delete(gameId);
     await Match.findOneAndUpdate({ gameId }, { status: 'cancelled' });
 
-    // If the other player already escrowed, refund them
     if (pending.p1Escrowed && socket.wallet !== pending.player1.wallet) {
-      refundPlayer(pending.player1.wallet, STAKE_TIERS[pending.tier]).catch(err => {
+      const stakeAmount = pending.stakeAmount || STAKE_TIERS[pending.tier];
+      refundPlayer(pending.player1.wallet, stakeAmount).catch(err => {
         console.error('Refund P1 failed:', err.message);
       });
       io.to(pending.player1.socketId).emit('match-cancelled', { gameId, reason: 'Opponent cancelled. Your $PONG is being refunded.' });
@@ -167,13 +167,215 @@ function setupMatchmaking(io, socket, onlineUsers, activeGames) {
     }
 
     if (pending.p2Escrowed && socket.wallet !== pending.player2.wallet) {
-      refundPlayer(pending.player2.wallet, STAKE_TIERS[pending.tier]).catch(err => {
+      const stakeAmount = pending.stakeAmount || STAKE_TIERS[pending.tier];
+      refundPlayer(pending.player2.wallet, stakeAmount).catch(err => {
         console.error('Refund P2 failed:', err.message);
       });
       io.to(pending.player2.socketId).emit('match-cancelled', { gameId, reason: 'Opponent cancelled. Your $PONG is being refunded.' });
     } else {
       io.to(pending.player2.socketId).emit('match-cancelled', { gameId, reason: 'Match cancelled' });
     }
+  });
+
+  // === READY SYSTEM ===
+  socket.on('player-ready', ({ gameId }) => {
+    const game = activeGames.get(gameId);
+    if (!game || !game.readyPhase) return;
+    if (!socket.wallet) return;
+    game.playerReady(socket.wallet);
+  });
+
+  // === IN-GAME CHAT ===
+  // Rate limit: 1 msg/sec per player
+  const chatLastSent = new Map();
+
+  socket.on('game-chat', ({ gameId, text }) => {
+    const game = activeGames.get(gameId);
+    if (!game) return;
+    if (!socket.wallet || !game.hasPlayer(socket.wallet)) return;
+    if (!text || typeof text !== 'string') return;
+
+    const now = Date.now();
+    const lastSent = chatLastSent.get(socket.wallet) || 0;
+    if (now - lastSent < 1000) return; // rate limit
+    chatLastSent.set(socket.wallet, now);
+
+    game.handleChat(socket.wallet, text.substring(0, 100));
+  });
+
+  // === DUEL INVITE SYSTEM ===
+  socket.on('duel-invite', async ({ targetWallet, stakeAmount }) => {
+    if (!socket.wallet) return socket.emit('duel-error', { error: 'Not authenticated' });
+    if (!targetWallet || !stakeAmount) return socket.emit('duel-error', { error: 'Missing parameters' });
+    if (stakeAmount <= 0) return socket.emit('duel-error', { error: 'Invalid stake amount' });
+
+    // Check if target is online
+    const targetInfo = onlineUsers.get(targetWallet);
+    if (!targetInfo) return socket.emit('duel-error', { error: 'Player is offline' });
+
+    // Check if both are friends
+    const [user, target] = await Promise.all([
+      User.findOne({ wallet: socket.wallet }),
+      User.findOne({ wallet: targetWallet })
+    ]);
+    if (!user || !target) return socket.emit('duel-error', { error: 'User not found' });
+    if (!user.friends.includes(targetWallet)) return socket.emit('duel-error', { error: 'You must be friends to duel' });
+
+    // Check neither is in an active game
+    for (const [, game] of activeGames) {
+      if (game.hasPlayer(socket.wallet) && game.state.status === 'playing') {
+        return socket.emit('duel-error', { error: 'You are already in a game' });
+      }
+      if (game.hasPlayer(targetWallet) && game.state.status === 'playing') {
+        return socket.emit('duel-error', { error: 'Opponent is already in a game' });
+      }
+    }
+
+    const duelId = crypto.randomUUID();
+    pendingDuels.set(duelId, {
+      challenger: { wallet: socket.wallet, username: socket.username, socketId: socket.id },
+      target: { wallet: targetWallet, username: targetInfo.username, socketId: targetInfo.socketId },
+      stakeAmount,
+      createdAt: Date.now(),
+    });
+
+    // Notify target
+    io.to(targetInfo.socketId).emit('duel-incoming', {
+      duelId,
+      from: socket.wallet,
+      fromUsername: socket.username,
+      stakeAmount,
+    });
+
+    socket.emit('duel-sent', { duelId, targetUsername: targetInfo.username });
+
+    // Timeout duel invite after 30s
+    setTimeout(() => {
+      if (pendingDuels.has(duelId)) {
+        pendingDuels.delete(duelId);
+        socket.emit('duel-expired', { duelId });
+        io.to(targetInfo.socketId).emit('duel-expired', { duelId });
+      }
+    }, 30000);
+  });
+
+  socket.on('duel-accept', async ({ duelId }) => {
+    const duel = pendingDuels.get(duelId);
+    if (!duel) return socket.emit('duel-error', { error: 'Duel invite expired or not found' });
+    if (socket.wallet !== duel.target.wallet) return;
+
+    pendingDuels.delete(duelId);
+
+    // Update socket IDs (may have changed)
+    const challengerInfo = onlineUsers.get(duel.challenger.wallet);
+    if (challengerInfo) duel.challenger.socketId = challengerInfo.socketId;
+
+    // Create duel match
+    const gameId = crypto.randomUUID();
+    const stakeAmount = duel.stakeAmount;
+
+    await Match.create({
+      gameId,
+      player1: duel.challenger.wallet,
+      player2: duel.target.wallet,
+      player1Username: duel.challenger.username,
+      player2Username: duel.target.username,
+      tier: 'duel',
+      stakeAmount,
+      status: SKIP_ESCROW ? 'in-progress' : 'pending-escrow',
+    });
+
+    if (SKIP_ESCROW) {
+      const [p1Skin, p2Skin] = await Promise.all([
+        getPlayerSkin(duel.challenger.wallet),
+        getPlayerSkin(duel.target.wallet),
+      ]);
+      duel.challenger.skin = p1Skin;
+      duel.target.skin = p2Skin;
+
+      const game = new PongEngine(gameId, duel.challenger, duel.target, 'duel', io, activeGames, stakeAmount);
+      activeGames.set(gameId, game);
+
+      const countdownData = {
+        gameId, seconds: 30, tier: 'duel',
+        player1: { wallet: duel.challenger.wallet, username: duel.challenger.username, skin: p1Skin },
+        player2: { wallet: duel.target.wallet, username: duel.target.username, skin: p2Skin },
+        stakeAmount,
+        useReadySystem: true,
+      };
+      io.to(duel.challenger.socketId).emit('game-countdown', countdownData);
+      io.to(duel.target.socketId).emit('game-countdown', countdownData);
+
+      game.startReadyPhase();
+      return;
+    }
+
+    // Build escrow transactions
+    let p1Tx, p2Tx;
+    try {
+      p1Tx = await buildCustomEscrowTransaction(duel.challenger.wallet, stakeAmount);
+    } catch (err) {
+      io.to(duel.challenger.socketId).emit('match-error', { error: err.message });
+      io.to(duel.target.socketId).emit('match-error', { error: 'Opponent cannot stake. Duel cancelled.' });
+      await Match.findOneAndUpdate({ gameId }, { status: 'cancelled' });
+      return;
+    }
+    try {
+      p2Tx = await buildCustomEscrowTransaction(duel.target.wallet, stakeAmount);
+    } catch (err) {
+      io.to(duel.target.socketId).emit('match-error', { error: err.message });
+      io.to(duel.challenger.socketId).emit('match-error', { error: 'Opponent cannot stake. Duel cancelled.' });
+      await Match.findOneAndUpdate({ gameId }, { status: 'cancelled' });
+      return;
+    }
+
+    pendingEscrow.set(gameId, {
+      player1: duel.challenger,
+      player2: duel.target,
+      tier: 'duel',
+      stakeAmount,
+      p1Escrowed: false,
+      p2Escrowed: false,
+    });
+
+    io.to(duel.challenger.socketId).emit('match-found', {
+      gameId,
+      opponent: { wallet: duel.target.wallet, username: duel.target.username },
+      tier: 'duel',
+      stake: stakeAmount,
+      escrowTransaction: p1Tx.transaction,
+      yourSlot: 'p1',
+    });
+
+    io.to(duel.target.socketId).emit('match-found', {
+      gameId,
+      opponent: { wallet: duel.challenger.wallet, username: duel.challenger.username },
+      tier: 'duel',
+      stake: stakeAmount,
+      escrowTransaction: p2Tx.transaction,
+      yourSlot: 'p2',
+    });
+
+    setTimeout(() => {
+      if (pendingEscrow.has(gameId)) {
+        pendingEscrow.delete(gameId);
+        Match.findOneAndUpdate({ gameId }, { status: 'cancelled' }).catch(() => {});
+        io.to(duel.challenger.socketId).emit('match-cancelled', { gameId, reason: 'Escrow timeout' });
+        io.to(duel.target.socketId).emit('match-cancelled', { gameId, reason: 'Escrow timeout' });
+      }
+    }, 60000);
+  });
+
+  socket.on('duel-decline', ({ duelId }) => {
+    const duel = pendingDuels.get(duelId);
+    if (!duel) return;
+    if (socket.wallet !== duel.target.wallet) return;
+    pendingDuels.delete(duelId);
+
+    io.to(duel.challenger.socketId).emit('duel-declined', {
+      duelId,
+      byUsername: duel.target.username,
+    });
   });
 
   // Clean up on disconnect
@@ -187,7 +389,6 @@ function setupMatchmaking(io, socket, onlineUsers, activeGames) {
 async function createMatch(io, player1, player2, tier, activeGames) {
   const gameId = crypto.randomUUID();
 
-  // Create match record in DB
   await Match.create({
     gameId,
     player1: player1.wallet,
@@ -199,9 +400,7 @@ async function createMatch(io, player1, player2, tier, activeGames) {
     status: SKIP_ESCROW ? 'in-progress' : 'pending-escrow'
   });
 
-  // --- DEV MODE: skip escrow, start game immediately ---
   if (SKIP_ESCROW) {
-    // Look up equipped skins for both players
     const [p1Skin, p2Skin] = await Promise.all([
       getPlayerSkin(player1.wallet),
       getPlayerSkin(player2.wallet),
@@ -213,18 +412,20 @@ async function createMatch(io, player1, player2, tier, activeGames) {
     activeGames.set(gameId, game);
 
     const countdownData = {
-      gameId, seconds: 10, tier,
+      gameId, seconds: 30, tier,
       player1: { wallet: player1.wallet, username: player1.username, skin: p1Skin },
       player2: { wallet: player2.wallet, username: player2.username, skin: p2Skin },
+      stakeAmount: STAKE_TIERS[tier],
+      useReadySystem: true,
     };
     io.to(player1.socketId).emit('game-countdown', countdownData);
     io.to(player2.socketId).emit('game-countdown', countdownData);
 
-    setTimeout(() => game.start(), 10000);
+    game.startReadyPhase();
     return;
   }
 
-  // --- PRODUCTION: build escrow transactions ---
+  // PRODUCTION: build escrow transactions
   let p1Tx, p2Tx;
   try {
     p1Tx = await buildEscrowTransaction(player1.wallet, tier);
@@ -245,13 +446,11 @@ async function createMatch(io, player1, player2, tier, activeGames) {
     return;
   }
 
-  // Store pending match
   pendingEscrow.set(gameId, {
     player1, player2, tier,
     p1Escrowed: false, p2Escrowed: false,
   });
 
-  // Notify both players they've been matched — send escrow tx to sign
   io.to(player1.socketId).emit('match-found', {
     gameId,
     opponent: { wallet: player2.wallet, username: player2.username },
@@ -270,7 +469,6 @@ async function createMatch(io, player1, player2, tier, activeGames) {
     yourSlot: 'p2',
   });
 
-  // Timeout: cancel if escrow not completed in 60 seconds
   setTimeout(() => {
     if (pendingEscrow.has(gameId)) {
       pendingEscrow.delete(gameId);

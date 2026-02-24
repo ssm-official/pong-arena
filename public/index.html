@@ -32,6 +32,20 @@
     @keyframes reveal-glow { 0%, 100% { box-shadow: 0 0 20px rgba(168, 85, 247, 0.6); } 50% { box-shadow: 0 0 50px rgba(168, 85, 247, 1); } }
     .reveal-glow { animation: reveal-glow 1.5s infinite; }
     .pfp-dropzone.drag-over { border-color: #a855f7; background: rgba(168, 85, 247, 0.1); }
+    /* Autocomplete dropdown */
+    .autocomplete-dropdown { position: absolute; z-index: 40; top: 100%; left: 0; right: 0; max-height: 240px; overflow-y: auto; }
+    .autocomplete-item:hover { background: #1e1e3f; }
+    /* DM Panel slide-in */
+    .dm-panel { position: fixed; top: 0; right: 0; bottom: 0; width: 380px; max-width: 100vw; z-index: 50; transform: translateX(100%); transition: transform 0.3s ease; }
+    .dm-panel.open { transform: translateX(0); }
+    /* Chat overlay */
+    .game-chat-box { max-height: 120px; overflow-y: auto; scrollbar-width: thin; }
+    .game-chat-box::-webkit-scrollbar { width: 4px; }
+    .game-chat-box::-webkit-scrollbar-thumb { background: #555; border-radius: 2px; }
+    /* Notification badge */
+    .badge { position: absolute; top: -4px; right: -8px; min-width: 16px; height: 16px; font-size: 10px; line-height: 16px; text-align: center; border-radius: 99px; background: #ef4444; color: white; padding: 0 4px; }
+    /* Profile modal */
+    .profile-modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 45; }
   </style>
 </head>
 <body class="text-gray-100 min-h-screen">
@@ -60,7 +74,7 @@
   <!-- ============ MAIN CONTENT ============ -->
   <div class="max-w-5xl mx-auto px-4 py-6">
 
-    <!-- Connect Prompt (shown when not logged in) -->
+    <!-- Connect Prompt -->
     <div id="view-connect" class="text-center py-20">
       <h1 class="text-4xl font-bold mb-4 bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
         Welcome to Pong Arena
@@ -72,10 +86,10 @@
         class="bg-purple-600 hover:bg-purple-700 px-8 py-3 rounded-xl text-lg font-medium transition glow-border">
         Connect Wallet
       </button>
-      <p class="text-gray-600 text-xs mt-4">Phantom may show security warnings — this is normal for new dApps. Click "Connect Anyway" to continue.</p>
+      <p class="text-gray-600 text-xs mt-4">Phantom may show security warnings — this is normal for new dApps.</p>
     </div>
 
-    <!-- Registration Form (first-time users) -->
+    <!-- Registration Form -->
     <div id="view-register" class="hidden max-w-md mx-auto py-10">
       <h2 class="text-2xl font-bold mb-6 text-center">Set Up Your Profile</h2>
       <div class="bg-arena-card rounded-xl p-6 space-y-4 glow-border">
@@ -106,14 +120,19 @@
       </div>
     </div>
 
-    <!-- Main App (logged in) -->
+    <!-- Main App -->
     <div id="view-app" class="hidden">
 
       <!-- Tabs -->
-      <div class="flex gap-6 border-b border-gray-800 mb-6">
+      <div class="flex gap-4 border-b border-gray-800 mb-6 flex-wrap">
         <button onclick="switchTab('play')" class="tab-btn pb-2 text-sm font-medium text-gray-400 hover:text-white tab-active" data-tab="play">Play</button>
+        <button onclick="switchTab('leaderboard')" class="tab-btn pb-2 text-sm font-medium text-gray-400 hover:text-white" data-tab="leaderboard">Leaderboard</button>
         <button onclick="switchTab('profile')" class="tab-btn pb-2 text-sm font-medium text-gray-400 hover:text-white" data-tab="profile">Profile</button>
-        <button onclick="switchTab('friends')" class="tab-btn pb-2 text-sm font-medium text-gray-400 hover:text-white" data-tab="friends">Friends</button>
+        <button onclick="switchTab('friends')" class="tab-btn pb-2 text-sm font-medium text-gray-400 hover:text-white relative" data-tab="friends">
+          Friends
+          <span id="friends-badge" class="badge hidden">0</span>
+        </button>
+        <button onclick="switchTab('opponents')" class="tab-btn pb-2 text-sm font-medium text-gray-400 hover:text-white" data-tab="opponents">Recent</button>
         <button onclick="switchTab('shop')" class="tab-btn pb-2 text-sm font-medium text-gray-400 hover:text-white" data-tab="shop">Shop</button>
         <button onclick="switchTab('history')" class="tab-btn pb-2 text-sm font-medium text-gray-400 hover:text-white" data-tab="history">History</button>
       </div>
@@ -166,8 +185,6 @@
             <h3 class="text-lg font-bold text-purple-400 mb-2">Match Found!</h3>
             <p class="text-gray-300 mb-1">Opponent: <span id="escrow-opponent" class="font-bold text-white"></span></p>
             <p class="text-gray-300 mb-4">Stake: <span id="escrow-stake" class="font-bold text-yellow-400"></span></p>
-
-            <!-- Per-player confirmation status -->
             <div class="flex justify-center gap-6 mb-4">
               <div class="text-center">
                 <div id="escrow-you-icon" class="w-10 h-10 rounded-full bg-gray-700 flex items-center justify-center mx-auto mb-1 text-lg">?</div>
@@ -180,8 +197,7 @@
                 <p id="escrow-opp-status" class="text-xs text-gray-500">Waiting...</p>
               </div>
             </div>
-
-            <p id="escrow-msg" class="text-gray-500 text-sm mb-4">Approve the transaction in Phantom to stake your $PONG. Game starts when both players confirm.</p>
+            <p id="escrow-msg" class="text-gray-500 text-sm mb-4">Approve the transaction in Phantom to stake your $PONG.</p>
             <button id="btn-escrow-submit" onclick="submitEscrow()" class="bg-purple-600 hover:bg-purple-700 px-6 py-2 rounded-lg font-medium transition mr-2">
               Approve & Stake
             </button>
@@ -191,7 +207,7 @@
           </div>
         </div>
 
-        <!-- Intermission (10s before game starts) -->
+        <!-- Intermission (30s ready-up phase) -->
         <div id="intermission-info" class="hidden text-center py-6">
           <div class="bg-arena-card rounded-xl px-8 py-6 max-w-lg mx-auto glow-border">
             <p id="intermission-tier" class="text-xs text-purple-400 uppercase tracking-widest mb-4">LOW TIER</p>
@@ -207,8 +223,25 @@
               </div>
             </div>
             <div class="mb-4">
-              <span class="text-4xl font-bold text-white" id="intermission-countdown">10</span>
-              <p class="text-gray-500 text-xs mt-1">Game starts in...</p>
+              <span class="text-4xl font-bold text-white" id="intermission-countdown">30</span>
+              <p class="text-gray-500 text-xs mt-1">Ready up!</p>
+            </div>
+            <!-- Ready Button -->
+            <div id="ready-section" class="mb-4">
+              <div class="flex justify-center gap-4 mb-2">
+                <div class="text-center">
+                  <div id="ready-you-dot" class="w-4 h-4 rounded-full bg-gray-600 mx-auto mb-1"></div>
+                  <span class="text-xs text-gray-400">You</span>
+                </div>
+                <div class="text-center">
+                  <div id="ready-opp-dot" class="w-4 h-4 rounded-full bg-gray-600 mx-auto mb-1"></div>
+                  <span class="text-xs text-gray-400">Opponent</span>
+                </div>
+              </div>
+              <button id="btn-ready" onclick="sendReady()"
+                class="bg-green-600 hover:bg-green-700 px-8 py-3 rounded-lg text-lg font-bold transition">
+                READY
+              </button>
             </div>
             <!-- Side Picker -->
             <div id="side-picker" class="hidden pt-3 border-t border-gray-800">
@@ -227,7 +260,7 @@
           </div>
         </div>
 
-        <!-- Game Canvas -->
+        <!-- Game Canvas + In-Game Chat -->
         <div id="game-ui" class="hidden">
           <div class="text-center mb-1">
             <span id="game-stake-display" class="text-xs text-yellow-400 bg-yellow-900/30 px-3 py-0.5 rounded-full"></span>
@@ -244,6 +277,17 @@
           </div>
           <canvas id="game-canvas" width="800" height="600" class="mx-auto block"></canvas>
           <p class="text-center text-gray-500 text-xs mt-2">Controls: W/S or Arrow Keys</p>
+
+          <!-- In-Game Chat -->
+          <div class="max-w-[800px] mx-auto mt-2">
+            <div id="game-chat-messages" class="game-chat-box bg-black/40 rounded-lg p-2 mb-1 text-xs space-y-0.5" style="min-height:40px;"></div>
+            <div class="flex gap-2">
+              <input id="game-chat-input" type="text" maxlength="100" placeholder="Type a message..."
+                class="flex-1 bg-gray-800/60 border border-gray-700 rounded px-2 py-1 text-xs text-white focus:border-purple-500 focus:outline-none"
+                onkeydown="if(event.key==='Enter')sendGameChat()" />
+              <button onclick="sendGameChat()" class="bg-purple-600 hover:bg-purple-700 px-3 py-1 rounded text-xs transition">Send</button>
+            </div>
+          </div>
         </div>
 
         <!-- Game Over -->
@@ -252,6 +296,22 @@
             <h3 id="gameover-title" class="text-2xl font-bold mb-2"></h3>
             <p id="gameover-score" class="text-gray-400 mb-2"></p>
             <p id="gameover-payout" class="text-green-400 mb-4"></p>
+            <!-- Post-game chat -->
+            <div class="text-left mb-4">
+              <div id="postgame-chat-messages" class="game-chat-box bg-black/30 rounded-lg p-2 mb-1 text-xs space-y-0.5" style="min-height:30px;max-height:100px;"></div>
+              <div class="flex gap-2">
+                <input id="postgame-chat-input" type="text" maxlength="100" placeholder="GG!"
+                  class="flex-1 bg-gray-800/60 border border-gray-700 rounded px-2 py-1 text-xs text-white focus:border-purple-500 focus:outline-none"
+                  onkeydown="if(event.key==='Enter')sendGameChat()" />
+                <button onclick="sendGameChat()" class="bg-purple-600 hover:bg-purple-700 px-3 py-1 rounded text-xs transition">Send</button>
+              </div>
+            </div>
+            <!-- Add opponent button -->
+            <div id="gameover-add-friend" class="hidden mb-3">
+              <button id="btn-add-opponent" onclick="addGameOpponent()" class="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg text-sm font-medium transition">
+                Add Friend
+              </button>
+            </div>
             <button onclick="backToMatchmaking()" class="bg-purple-600 hover:bg-purple-700 px-6 py-2 rounded-lg font-medium transition">
               Play Again
             </button>
@@ -259,55 +319,84 @@
         </div>
       </div>
 
+      <!-- ===== LEADERBOARD TAB ===== -->
+      <div id="tab-leaderboard" class="tab-content hidden">
+        <h2 class="text-xl font-bold mb-4">Leaderboard</h2>
+        <div class="flex gap-2 mb-4">
+          <button onclick="loadLeaderboard('earnings')" id="lb-btn-earnings"
+            class="bg-purple-600 px-4 py-1.5 rounded-lg text-sm font-medium transition">Most Earnings</button>
+          <button onclick="loadLeaderboard('wins')" id="lb-btn-wins"
+            class="bg-gray-700 hover:bg-gray-600 px-4 py-1.5 rounded-lg text-sm font-medium transition">Most Wins</button>
+          <button onclick="loadLeaderboard('games')" id="lb-btn-games"
+            class="bg-gray-700 hover:bg-gray-600 px-4 py-1.5 rounded-lg text-sm font-medium transition">Most Games</button>
+        </div>
+        <div id="leaderboard-list" class="space-y-2">
+          <p class="text-gray-500 text-sm">Loading...</p>
+        </div>
+      </div>
+
       <!-- ===== PROFILE TAB ===== -->
       <div id="tab-profile" class="tab-content hidden">
-        <div class="max-w-lg mx-auto bg-arena-card rounded-xl p-6 glow-border">
-          <div class="flex items-center gap-4 mb-6">
-            <img id="profile-pfp" src="" class="w-16 h-16 rounded-full bg-gray-700" onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect fill=%22%23333%22 width=%22100%22 height=%22100%22/><text x=%2250%22 y=%2255%22 text-anchor=%22middle%22 fill=%22%23999%22 font-size=%2240%22>?</text></svg>'" />
-            <div>
-              <h2 id="profile-username" class="text-xl font-bold"></h2>
-              <p id="profile-wallet" class="text-gray-500 text-xs font-mono"></p>
+        <div class="max-w-lg mx-auto bg-arena-card rounded-xl overflow-hidden glow-border">
+          <!-- Banner -->
+          <div id="profile-banner" class="w-full h-36 bg-gradient-to-r from-purple-900 to-pink-900 relative cursor-pointer"
+            onclick="document.getElementById('edit-banner-file').click()"
+            title="Click to change banner">
+            <img id="profile-banner-img" src="" class="w-full h-full object-cover hidden" />
+            <div class="absolute inset-0 flex items-center justify-center opacity-0 hover:opacity-100 bg-black/40 transition text-sm text-gray-300">
+              Change Banner
             </div>
           </div>
-          <div class="grid grid-cols-3 gap-4 mb-6 text-center">
-            <div class="bg-gray-800 rounded-lg p-3">
-              <div id="stat-wins" class="text-xl font-bold text-green-400">0</div>
-              <div class="text-xs text-gray-500">Wins</div>
-            </div>
-            <div class="bg-gray-800 rounded-lg p-3">
-              <div id="stat-losses" class="text-xl font-bold text-red-400">0</div>
-              <div class="text-xs text-gray-500">Losses</div>
-            </div>
-            <div class="bg-gray-800 rounded-lg p-3">
-              <div id="stat-earnings" class="text-xl font-bold text-yellow-400">0</div>
-              <div class="text-xs text-gray-500">$PONG Earned</div>
-            </div>
-          </div>
-          <div class="space-y-3">
-            <div>
-              <label class="block text-sm text-gray-400 mb-1">Username</label>
-              <input id="edit-username" type="text" maxlength="20"
-                class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:border-purple-500 focus:outline-none" />
-            </div>
-            <div>
-              <label class="block text-sm text-gray-400 mb-1">Profile Picture</label>
-              <div id="edit-pfp-drop" class="pfp-dropzone border-2 border-dashed border-gray-600 rounded-lg p-4 text-center cursor-pointer hover:border-purple-500 transition"
-                onclick="document.getElementById('edit-pfp-file').click()">
-                <img id="edit-pfp-preview" class="w-16 h-16 rounded-full mx-auto mb-2 hidden object-cover" />
-                <p id="edit-pfp-label" class="text-gray-500 text-sm">Drag & drop or click to change</p>
-                <p class="text-gray-600 text-xs mt-1">Max 2 MB (JPG, PNG, GIF, WebP)</p>
+          <input id="edit-banner-file" type="file" accept="image/*" class="hidden" onchange="uploadBanner(this)" />
+
+          <div class="p-6">
+            <div class="flex items-center gap-4 mb-6 -mt-12 relative z-10">
+              <img id="profile-pfp" src="" class="w-20 h-20 rounded-full bg-gray-700 border-4 border-arena-card" onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect fill=%22%23333%22 width=%22100%22 height=%22100%22/><text x=%2250%22 y=%2255%22 text-anchor=%22middle%22 fill=%22%23999%22 font-size=%2240%22>?</text></svg>'" />
+              <div class="pt-8">
+                <h2 id="profile-username" class="text-xl font-bold"></h2>
+                <p id="profile-wallet" class="text-gray-500 text-xs font-mono"></p>
               </div>
-              <input id="edit-pfp-file" type="file" accept="image/*" class="hidden" onchange="handlePfpSelect(this, 'edit')" />
             </div>
-            <div>
-              <label class="block text-sm text-gray-400 mb-1">Bio</label>
-              <textarea id="edit-bio" maxlength="160" rows="2"
-                class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:border-purple-500 focus:outline-none"></textarea>
+            <div class="grid grid-cols-3 gap-4 mb-6 text-center">
+              <div class="bg-gray-800 rounded-lg p-3">
+                <div id="stat-wins" class="text-xl font-bold text-green-400">0</div>
+                <div class="text-xs text-gray-500">Wins</div>
+              </div>
+              <div class="bg-gray-800 rounded-lg p-3">
+                <div id="stat-losses" class="text-xl font-bold text-red-400">0</div>
+                <div class="text-xs text-gray-500">Losses</div>
+              </div>
+              <div class="bg-gray-800 rounded-lg p-3">
+                <div id="stat-earnings" class="text-xl font-bold text-yellow-400">0</div>
+                <div class="text-xs text-gray-500">$PONG Earned</div>
+              </div>
             </div>
-            <button onclick="saveProfile()" class="bg-purple-600 hover:bg-purple-700 w-full py-2 rounded-lg font-medium transition">
-              Save Changes
-            </button>
-            <p id="profile-msg" class="text-sm hidden"></p>
+            <div class="space-y-3">
+              <div>
+                <label class="block text-sm text-gray-400 mb-1">Username</label>
+                <input id="edit-username" type="text" maxlength="20"
+                  class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:border-purple-500 focus:outline-none" />
+              </div>
+              <div>
+                <label class="block text-sm text-gray-400 mb-1">Profile Picture</label>
+                <div id="edit-pfp-drop" class="pfp-dropzone border-2 border-dashed border-gray-600 rounded-lg p-4 text-center cursor-pointer hover:border-purple-500 transition"
+                  onclick="document.getElementById('edit-pfp-file').click()">
+                  <img id="edit-pfp-preview" class="w-16 h-16 rounded-full mx-auto mb-2 hidden object-cover" />
+                  <p id="edit-pfp-label" class="text-gray-500 text-sm">Drag & drop or click to change</p>
+                  <p class="text-gray-600 text-xs mt-1">Max 2 MB (JPG, PNG, GIF, WebP)</p>
+                </div>
+                <input id="edit-pfp-file" type="file" accept="image/*" class="hidden" onchange="handlePfpSelect(this, 'edit')" />
+              </div>
+              <div>
+                <label class="block text-sm text-gray-400 mb-1">Bio</label>
+                <textarea id="edit-bio" maxlength="160" rows="2"
+                  class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:border-purple-500 focus:outline-none"></textarea>
+              </div>
+              <button onclick="saveProfile()" class="bg-purple-600 hover:bg-purple-700 w-full py-2 rounded-lg font-medium transition">
+                Save Changes
+              </button>
+              <p id="profile-msg" class="text-sm hidden"></p>
+            </div>
           </div>
         </div>
       </div>
@@ -318,10 +407,10 @@
           <!-- Search & Add -->
           <div>
             <h3 class="text-lg font-bold mb-3">Find Players</h3>
-            <div class="flex gap-2 mb-4">
-              <input id="friend-search" type="text" placeholder="Search by username..."
-                class="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:border-purple-500 focus:outline-none" />
-              <button onclick="searchFriends()" class="bg-purple-600 hover:bg-purple-700 px-4 py-2 rounded-lg text-sm transition">Search</button>
+            <div class="relative mb-4">
+              <input id="friend-search" type="text" placeholder="Search by username..." autocomplete="off"
+                class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:border-purple-500 focus:outline-none" />
+              <div id="search-dropdown" class="autocomplete-dropdown hidden bg-arena-card border border-gray-700 rounded-lg mt-1 shadow-xl"></div>
             </div>
             <div id="search-results" class="space-y-2"></div>
 
@@ -342,49 +431,42 @@
         </div>
       </div>
 
+      <!-- ===== RECENT OPPONENTS TAB ===== -->
+      <div id="tab-opponents" class="tab-content hidden">
+        <h2 class="text-xl font-bold mb-4">Recent Opponents</h2>
+        <p class="text-gray-500 text-xs mb-4">Players you've recently faced. Add them as friends!</p>
+        <div id="opponents-list" class="space-y-2">
+          <p class="text-gray-500 text-sm">No recent opponents yet.</p>
+        </div>
+      </div>
+
       <!-- ===== SHOP TAB ===== -->
       <div id="tab-shop" class="tab-content hidden">
         <p class="text-gray-500 text-sm mb-4">Open crates to get random paddle skins. 90% of purchases are burned!</p>
-
-        <!-- Limited Releases -->
         <div id="shop-limited-section" class="hidden mb-6">
           <h3 class="text-lg font-bold mb-3 text-yellow-400 flex items-center gap-2">
             <span class="w-2 h-2 rounded-full bg-yellow-400 animate-pulse"></span> Limited Releases
           </h3>
           <div id="shop-limited-grid" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
         </div>
-
-        <!-- Standard Crates -->
         <div class="mb-6">
           <h3 class="text-lg font-bold mb-3">Standard Crates</h3>
           <div id="shop-standard-grid" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
         </div>
-
-        <!-- Inventory -->
         <div class="border-t border-gray-800 pt-6">
           <h3 class="text-lg font-bold mb-3">Your Inventory</h3>
           <div id="shop-inventory" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3"></div>
         </div>
-
         <!-- Crate Roller Modal -->
         <div id="crate-roller-modal" class="hidden fixed inset-0 bg-black/90 z-50 flex flex-col items-center justify-center">
-          <!-- Screen flash overlay for legendary -->
           <div id="roller-flash" class="fixed inset-0 bg-yellow-400 opacity-0 pointer-events-none z-[60] transition-opacity duration-200"></div>
-
           <p class="text-gray-400 text-sm mb-4">Opening crate...</p>
-
-          <!-- Roller container -->
           <div class="relative w-[340px] sm:w-[500px] md:w-[600px] overflow-hidden rounded-xl border border-gray-700 bg-arena-card" style="height:120px;">
-            <!-- Center marker -->
             <div class="absolute top-0 bottom-0 left-1/2 -translate-x-1/2 w-[3px] bg-purple-500 z-10"></div>
             <div class="absolute top-0 left-1/2 -translate-x-1/2 z-10 w-0 h-0 border-l-[8px] border-r-[8px] border-t-[10px] border-transparent border-t-purple-500"></div>
             <div class="absolute bottom-0 left-1/2 -translate-x-1/2 z-10 w-0 h-0 border-l-[8px] border-r-[8px] border-b-[10px] border-transparent border-b-purple-500"></div>
-
-            <!-- Scrolling strip -->
             <div id="roller-strip" class="absolute top-0 left-0 flex items-center h-full" style="will-change:transform;"></div>
           </div>
-
-          <!-- Final reveal card (hidden until roller stops) -->
           <div id="roller-reveal" class="hidden mt-6 text-center">
             <div id="roller-reveal-preview" class="w-24 h-24 rounded-lg mx-auto mb-3 flex items-center justify-center"></div>
             <h3 id="roller-reveal-name" class="text-xl font-bold mb-1"></h3>
@@ -407,11 +489,109 @@
     </div><!-- /view-app -->
   </div><!-- /container -->
 
+  <!-- ============ ONLINE COUNT (bottom-left, always visible) ============ -->
+  <div id="online-count" class="fixed bottom-4 left-4 bg-arena-card/80 backdrop-blur-sm border border-gray-800 rounded-full px-3 py-1.5 text-xs text-gray-400 flex items-center gap-2 z-30 hidden">
+    <span class="w-2 h-2 rounded-full bg-green-400 animate-pulse"></span>
+    <span id="online-count-num">0</span> online
+  </div>
+
+  <!-- ============ DM CHAT PANEL (slide-in from right) ============ -->
+  <div id="dm-panel" class="dm-panel bg-arena-card border-l border-gray-800 flex flex-col">
+    <div class="flex items-center justify-between px-4 py-3 border-b border-gray-800">
+      <div class="flex items-center gap-2">
+        <img id="dm-panel-pfp" src="" class="w-8 h-8 rounded-full bg-gray-700" onerror="this.style.display='none'" />
+        <span id="dm-panel-username" class="font-bold text-sm"></span>
+      </div>
+      <button onclick="closeDmPanel()" class="text-gray-400 hover:text-white text-xl">&times;</button>
+    </div>
+    <div id="dm-messages" class="flex-1 overflow-y-auto p-3 space-y-2 text-sm"></div>
+    <div class="border-t border-gray-800 p-3 flex gap-2">
+      <input id="dm-input" type="text" maxlength="500" placeholder="Type a message..."
+        class="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:border-purple-500 focus:outline-none"
+        onkeydown="if(event.key==='Enter')sendDm()" />
+      <button onclick="sendDm()" class="bg-purple-600 hover:bg-purple-700 px-4 py-2 rounded-lg text-sm transition">Send</button>
+    </div>
+  </div>
+
+  <!-- ============ DUEL INVITE MODAL ============ -->
+  <div id="duel-modal" class="hidden fixed inset-0 bg-black/70 z-50 flex items-center justify-center">
+    <div class="bg-arena-card rounded-xl p-6 max-w-sm w-full mx-4 glow-border">
+      <h3 class="text-lg font-bold text-purple-400 mb-3">Challenge to Duel</h3>
+      <p class="text-gray-300 text-sm mb-1">Opponent: <span id="duel-target-name" class="font-bold text-white"></span></p>
+      <div class="mb-4">
+        <label class="block text-sm text-gray-400 mb-1">Stake Amount (USD)</label>
+        <input id="duel-usd-input" type="number" min="0" step="0.01" placeholder="Enter USD amount"
+          class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:border-purple-500 focus:outline-none"
+          oninput="updateDuelPongAmount()" />
+        <p id="duel-pong-display" class="text-gray-400 text-xs mt-1"></p>
+      </div>
+      <div class="flex gap-2">
+        <button onclick="sendDuelInvite()" class="flex-1 bg-purple-600 hover:bg-purple-700 py-2 rounded-lg font-medium transition">
+          Send Challenge
+        </button>
+        <button onclick="closeDuelModal()" class="bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded-lg text-sm transition">
+          Cancel
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ DUEL INCOMING NOTIFICATION ============ -->
+  <div id="duel-incoming-modal" class="hidden fixed inset-0 bg-black/70 z-50 flex items-center justify-center">
+    <div class="bg-arena-card rounded-xl p-6 max-w-sm w-full mx-4 glow-border">
+      <h3 class="text-lg font-bold text-yellow-400 mb-3">Duel Challenge!</h3>
+      <p class="text-gray-300 mb-1"><span id="duel-from-name" class="font-bold text-white"></span> wants to duel you!</p>
+      <p class="text-gray-300 mb-4">Stake: <span id="duel-incoming-stake" class="font-bold text-yellow-400"></span></p>
+      <div class="flex gap-2">
+        <button onclick="acceptDuel()" class="flex-1 bg-green-600 hover:bg-green-700 py-2 rounded-lg font-medium transition">Accept</button>
+        <button onclick="declineDuel()" class="flex-1 bg-red-600 hover:bg-red-700 py-2 rounded-lg font-medium transition">Decline</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ PROFILE POPUP MODAL ============ -->
+  <div id="profile-popup" class="hidden profile-modal-backdrop flex items-center justify-center">
+    <div class="bg-arena-card rounded-xl overflow-hidden max-w-sm w-full mx-4 glow-border">
+      <div id="popup-banner" class="w-full h-24 bg-gradient-to-r from-purple-900 to-pink-900">
+        <img id="popup-banner-img" src="" class="w-full h-full object-cover hidden" />
+      </div>
+      <div class="p-4">
+        <div class="flex items-center gap-3 -mt-10 mb-3">
+          <img id="popup-pfp" src="" class="w-14 h-14 rounded-full bg-gray-700 border-3 border-arena-card" onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect fill=%22%23333%22 width=%22100%22 height=%22100%22/><text x=%2250%22 y=%2255%22 text-anchor=%22middle%22 fill=%22%23999%22 font-size=%2240%22>?</text></svg>'" />
+          <div class="pt-6">
+            <h3 id="popup-username" class="font-bold text-lg"></h3>
+          </div>
+        </div>
+        <p id="popup-bio" class="text-gray-400 text-sm mb-3"></p>
+        <div class="grid grid-cols-3 gap-2 mb-4 text-center text-xs">
+          <div class="bg-gray-800 rounded p-2">
+            <div id="popup-wins" class="font-bold text-green-400">0</div>
+            <div class="text-gray-500">Wins</div>
+          </div>
+          <div class="bg-gray-800 rounded p-2">
+            <div id="popup-losses" class="font-bold text-red-400">0</div>
+            <div class="text-gray-500">Losses</div>
+          </div>
+          <div class="bg-gray-800 rounded p-2">
+            <div id="popup-earnings" class="font-bold text-yellow-400">0</div>
+            <div class="text-gray-500">Earned</div>
+          </div>
+        </div>
+        <div class="flex gap-2" id="popup-actions">
+          <button id="popup-add-btn" onclick="popupAddFriend()" class="flex-1 bg-purple-600 hover:bg-purple-700 py-2 rounded-lg text-sm font-medium transition">Add Friend</button>
+          <button id="popup-challenge-btn" onclick="popupChallenge()" class="flex-1 bg-yellow-600 hover:bg-yellow-700 py-2 rounded-lg text-sm font-medium transition">Challenge</button>
+          <button id="popup-msg-btn" onclick="popupMessage()" class="flex-1 bg-blue-600 hover:bg-blue-700 py-2 rounded-lg text-sm font-medium transition">Message</button>
+        </div>
+        <button onclick="closeProfilePopup()" class="w-full mt-3 text-gray-500 hover:text-white text-sm">Close</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ============ SCRIPTS ============ -->
   <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@solana/web3.js@1.87.6/lib/index.iife.min.js"></script>
-  <script src="/js/wallet.js?v=24"></script>
-  <script src="/js/game-client.js?v=24"></script>
-  <script src="/js/app.js?v=24"></script>
+  <script src="/js/wallet.js?v=25"></script>
+  <script src="/js/game-client.js?v=25"></script>
+  <script src="/js/app.js?v=25"></script>
 </body>
 </html>

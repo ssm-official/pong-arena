@@ -4,6 +4,7 @@ const userSchema = new mongoose.Schema({
   wallet: { type: String, required: true, unique: true, index: true },
   username: { type: String, required: true, unique: true, minlength: 3, maxlength: 20 },
   pfp: { type: String, default: '' },          // profile pic URL
+  banner: { type: String, default: '' },        // profile banner URL
   bio: { type: String, default: '', maxlength: 160 },
   friends: [{ type: String }],                  // array of wallet addresses
   friendRequests: [{                             // pending incoming requests

@@ -1,39 +1,67 @@
 // ===========================================
 // App.js — Main application logic
 // ===========================================
-// Handles UI state, API calls, socket events, tab navigation.
 
-let currentUser = null;  // { wallet, username, pfp, bio, stats, ... }
-let sessionToken = null; // Bearer token from server — sign once, use everywhere
-let onlineUsers = [];    // array of online wallet addresses
+let currentUser = null;
+let sessionToken = null;
+let onlineUsers = [];
 let currentGameId = null;
 let pendingEscrowTx = null;
 let isMirrored = false;
-let chosenSide = 'left'; // which side the player wants their paddle on
+let chosenSide = 'left';
 
 // --- $PONG Price in USD ---
 const PONG_TOKEN_MINT = 'GVLfSudckNc8L1MGWUJP5vXUgFNtYJqjytLR7xm3pump';
-let pongPriceUsd = 0; // price per 1 $PONG
+let pongPriceUsd = 0;
 let priceLastFetched = 0;
-const PRICE_REFRESH_MS = 60000; // refresh every 60s
-// Human-readable PONG amounts per tier
+let priceFetchFailed = false;
+const PRICE_REFRESH_MS = 60000;
 const TIER_PONG_AMOUNTS = { low: 10000, medium: 50000, high: 200000 };
+
+// --- DM state ---
+let dmOpenWallet = null;
+let dmOpenUsername = null;
+let unreadCounts = {};
+
+// --- Duel state ---
+let duelTargetWallet = null;
+let pendingDuelId = null;
+
+// --- Game opponent for post-game add ---
+let lastGameOpponent = null;
+
+// --- Leaderboard ---
+let currentLbSort = 'earnings';
+
+// ===========================================
+// USD PRICE FETCH (with fallback)
+// ===========================================
 
 async function fetchPongPrice() {
   try {
     const res = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${PONG_TOKEN_MINT}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
     if (data.pairs && data.pairs.length > 0) {
-      pongPriceUsd = parseFloat(data.pairs[0].priceUsd) || 0;
-      priceLastFetched = Date.now();
-      updateAllUsdDisplays();
+      const price = parseFloat(data.pairs[0].priceUsd);
+      if (price && price > 0) {
+        pongPriceUsd = price;
+        priceLastFetched = Date.now();
+        priceFetchFailed = false;
+        updateAllUsdDisplays();
+        return;
+      }
     }
+    throw new Error('No valid price data');
   } catch (err) {
     console.error('Failed to fetch $PONG price:', err);
+    priceFetchFailed = true;
+    updateAllUsdDisplays();
   }
 }
 
 function formatUsd(amount) {
+  if (!amount || amount <= 0) return '--';
   if (amount < 0.01) return '<$0.01';
   if (amount < 1) return '$' + amount.toFixed(2);
   if (amount < 1000) return '$' + amount.toFixed(2);
@@ -45,19 +73,22 @@ function getTierUsd(tier) {
 }
 
 function updateAllUsdDisplays() {
-  // Update tier selection buttons
   const lowUsd = document.getElementById('tier-usd-low');
   const medUsd = document.getElementById('tier-usd-medium');
   const highUsd = document.getElementById('tier-usd-high');
-  if (lowUsd) lowUsd.textContent = formatUsd(getTierUsd('low'));
-  if (medUsd) medUsd.textContent = formatUsd(getTierUsd('medium'));
-  if (highUsd) highUsd.textContent = formatUsd(getTierUsd('high'));
 
-  // Update in-game stake display if visible
+  if (priceFetchFailed || pongPriceUsd <= 0) {
+    if (lowUsd) lowUsd.textContent = 'Price N/A';
+    if (medUsd) medUsd.textContent = 'Price N/A';
+    if (highUsd) highUsd.textContent = 'Price N/A';
+  } else {
+    if (lowUsd) lowUsd.textContent = formatUsd(getTierUsd('low'));
+    if (medUsd) medUsd.textContent = formatUsd(getTierUsd('medium'));
+    if (highUsd) highUsd.textContent = formatUsd(getTierUsd('high'));
+  }
   updateGameStakeDisplay();
 }
 
-// Periodically refresh price
 function startPriceRefresh() {
   fetchPongPrice();
   setInterval(() => {
@@ -67,43 +98,35 @@ function startPriceRefresh() {
   }, PRICE_REFRESH_MS);
 }
 
-/** Return Authorization header using cached session token. No wallet popup. */
 function getAuthHeader() {
   return 'Bearer ' + sessionToken;
 }
 
 // ---- Socket.io ----
 const socket = io();
-window.socket = socket; // expose for game-client input
+window.socket = socket;
 
-// Re-register on reconnect (Railway can drop connections)
 socket.on('connect', () => {
   if (currentUser) {
-    socket.emit('register', {
-      wallet: currentUser.wallet,
-      username: currentUser.username
-    });
+    socket.emit('register', { wallet: currentUser.wallet, username: currentUser.username });
   }
 });
 
 // ===========================================
-// WALLET CONNECTION & AUTH (with localStorage persistence)
+// WALLET CONNECTION & AUTH
 // ===========================================
 
-// Try to restore session on page load
 (async function tryAutoLogin() {
   const saved = localStorage.getItem('pong_session');
   if (!saved) return;
   try {
     const { token } = JSON.parse(saved);
-    // Verify session is still valid by hitting /api/profile
     const res = await fetch('/api/profile', {
       headers: { Authorization: 'Bearer ' + token }
     }).then(r => r.json());
     if (res.user) {
       sessionToken = token;
       currentUser = res.user;
-      // Silently reconnect Phantom so signAndSendTransaction works
       await WalletManager.reconnectIfTrusted();
       showApp();
     } else {
@@ -116,10 +139,7 @@ socket.on('connect', () => {
 
 function saveSession() {
   if (sessionToken && currentUser) {
-    localStorage.setItem('pong_session', JSON.stringify({
-      token: sessionToken,
-      wallet: currentUser.wallet,
-    }));
+    localStorage.setItem('pong_session', JSON.stringify({ token: sessionToken, wallet: currentUser.wallet }));
   }
 }
 
@@ -127,11 +147,8 @@ async function connectWallet() {
   try {
     const wallet = await WalletManager.connect();
     const authData = await WalletManager.signAuthMessage();
-
-    // Try login — server returns session token (sign once!)
     const res = await apiPost('/api/auth/login', authData);
     sessionToken = res.token;
-
     if (res.status === 'existing') {
       currentUser = res.user;
       saveSession();
@@ -147,28 +164,19 @@ async function connectWallet() {
 async function registerUser() {
   const username = document.getElementById('reg-username').value.trim();
   const bio = document.getElementById('reg-bio').value.trim();
-
   if (!username) return showRegError('Username is required');
-
   try {
-    // Register first (without pfp)
     const res = await fetch('/api/auth/register', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: getAuthHeader() },
       body: JSON.stringify({ wallet: WalletManager.getWallet(), username, pfp: '', bio })
     }).then(r => r.json());
-
     if (res.error) return showRegError(res.error);
     sessionToken = res.token;
     currentUser = res.user;
     saveSession();
-
-    // Upload pfp file if one was selected
     const fileInput = document.getElementById('reg-pfp-file');
-    if (fileInput.files.length > 0) {
-      await uploadPfpFile(fileInput.files[0]);
-    }
-
+    if (fileInput.files.length > 0) await uploadPfpFile(fileInput.files[0]);
     showApp();
   } catch (err) {
     showRegError(err.message);
@@ -189,7 +197,6 @@ function showView(view) {
   document.getElementById('view-connect').classList.add('hidden');
   document.getElementById('view-register').classList.add('hidden');
   document.getElementById('view-app').classList.add('hidden');
-
   document.getElementById(`view-${view}`).classList.remove('hidden');
 }
 
@@ -197,44 +204,84 @@ function showApp() {
   showView('app');
   updateNav();
   switchTab('play');
-
-  // Register with socket
-  socket.emit('register', {
-    wallet: currentUser.wallet,
-    username: currentUser.username
-  });
-
-  // Init game canvas
+  socket.emit('register', { wallet: currentUser.wallet, username: currentUser.username });
   const canvas = document.getElementById('game-canvas');
   GameClient.init(canvas, currentUser.wallet);
-
-  // Start fetching $PONG price for USD display
   startPriceRefresh();
+  // Show online count
+  document.getElementById('online-count').classList.remove('hidden');
+  // Fetch unread DM counts
+  fetchUnreadCounts();
 }
 
 function updateNav() {
   document.getElementById('btn-connect').textContent = shortenAddress(currentUser.wallet);
-  document.getElementById('btn-connect').onclick = null; // disable reconnect
+  document.getElementById('btn-connect').onclick = null;
   document.getElementById('nav-username').textContent = currentUser.username;
-  if (currentUser.pfp) {
-    document.getElementById('nav-pfp').src = currentUser.pfp;
-  }
+  if (currentUser.pfp) document.getElementById('nav-pfp').src = currentUser.pfp;
   document.getElementById('nav-user').classList.remove('hidden');
 }
 
 function switchTab(tab) {
-  // Hide all tab contents
   document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
   document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('tab-active'));
-
   document.getElementById(`tab-${tab}`).classList.remove('hidden');
   document.querySelector(`[data-tab="${tab}"]`).classList.add('tab-active');
 
-  // Load tab-specific data
   if (tab === 'profile') loadProfile();
   if (tab === 'friends') loadFriends();
   if (tab === 'shop') loadShop();
   if (tab === 'history') loadHistory();
+  if (tab === 'leaderboard') loadLeaderboard(currentLbSort);
+  if (tab === 'opponents') loadRecentOpponents();
+}
+
+// ===========================================
+// LEADERBOARD
+// ===========================================
+
+async function loadLeaderboard(sort) {
+  currentLbSort = sort || 'earnings';
+  // Update button styles
+  ['earnings', 'wins', 'games'].forEach(s => {
+    const btn = document.getElementById(`lb-btn-${s}`);
+    if (s === currentLbSort) {
+      btn.className = 'bg-purple-600 px-4 py-1.5 rounded-lg text-sm font-medium transition';
+    } else {
+      btn.className = 'bg-gray-700 hover:bg-gray-600 px-4 py-1.5 rounded-lg text-sm font-medium transition';
+    }
+  });
+
+  try {
+    const res = await fetch(`/api/leaderboard?sort=${currentLbSort}&limit=50`).then(r => r.json());
+    const container = document.getElementById('leaderboard-list');
+    if (!res.users || res.users.length === 0) {
+      container.innerHTML = '<p class="text-gray-500 text-sm">No players yet.</p>';
+      return;
+    }
+    container.innerHTML = res.users.map((u, i) => {
+      let statVal;
+      if (currentLbSort === 'earnings') {
+        statVal = formatPong(u.stats?.totalEarnings || 0) + ' $PONG';
+      } else if (currentLbSort === 'wins') {
+        statVal = (u.stats?.wins || 0) + ' wins';
+      } else {
+        statVal = (u.totalGames || ((u.stats?.wins || 0) + (u.stats?.losses || 0))) + ' games';
+      }
+      const isMe = currentUser && u.wallet === currentUser.wallet;
+      return `
+        <div class="bg-arena-card rounded-lg p-3 flex items-center gap-3 cursor-pointer hover:bg-gray-800/50 transition ${isMe ? 'border border-purple-500/50' : ''}"
+          onclick="showProfilePopup('${u.wallet}')">
+          <span class="text-gray-500 font-bold w-8 text-right">#${i + 1}</span>
+          <img src="${esc(u.pfp || '')}" class="w-8 h-8 rounded-full bg-gray-700" onerror="this.style.display='none'" />
+          <span class="font-medium flex-1">${esc(u.username)}</span>
+          <span class="text-gray-400 text-sm">${statVal}</span>
+        </div>
+      `;
+    }).join('');
+  } catch (err) {
+    console.error('Leaderboard error:', err);
+  }
 }
 
 // ===========================================
@@ -243,6 +290,15 @@ function switchTab(tab) {
 
 function loadProfile() {
   if (!currentUser) return;
+  // Banner
+  const bannerImg = document.getElementById('profile-banner-img');
+  if (currentUser.banner) {
+    bannerImg.src = currentUser.banner;
+    bannerImg.classList.remove('hidden');
+  } else {
+    bannerImg.classList.add('hidden');
+  }
+
   document.getElementById('profile-pfp').src = currentUser.pfp || '';
   document.getElementById('profile-username').textContent = currentUser.username;
   document.getElementById('profile-wallet').textContent = shortenAddress(currentUser.wallet);
@@ -252,7 +308,6 @@ function loadProfile() {
   document.getElementById('stat-losses').textContent = currentUser.stats?.losses || 0;
   document.getElementById('stat-earnings').textContent = formatPong(currentUser.stats?.totalEarnings || 0);
 
-  // Show current pfp in edit dropzone
   const editPreview = document.getElementById('edit-pfp-preview');
   const editLabel = document.getElementById('edit-pfp-label');
   if (currentUser.pfp) {
@@ -271,13 +326,11 @@ async function saveProfile() {
       username: document.getElementById('edit-username').value.trim(),
       bio: document.getElementById('edit-bio').value.trim(),
     };
-
     const res = await fetch('/api/profile', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json', Authorization: getAuthHeader() },
       body: JSON.stringify(body)
     }).then(r => r.json());
-
     if (res.error) {
       showProfileMsg(res.error, 'red');
     } else {
@@ -298,9 +351,32 @@ function showProfileMsg(msg, color) {
   setTimeout(() => el.classList.add('hidden'), 3000);
 }
 
-// --- Profile Picture Upload ---
+// --- Banner Upload ---
+async function uploadBanner(input) {
+  if (!input.files.length) return;
+  const formData = new FormData();
+  formData.append('banner', input.files[0]);
+  try {
+    const res = await fetch('/api/profile/upload-banner', {
+      method: 'POST',
+      headers: { Authorization: getAuthHeader() },
+      body: formData,
+    }).then(r => r.json());
+    if (res.banner) {
+      currentUser.banner = res.banner;
+      const bannerImg = document.getElementById('profile-banner-img');
+      bannerImg.src = res.banner;
+      bannerImg.classList.remove('hidden');
+      showProfileMsg('Banner updated!', 'green');
+    } else {
+      showProfileMsg(res.error || 'Upload failed', 'red');
+    }
+  } catch (err) {
+    showProfileMsg('Banner upload failed', 'red');
+  }
+}
 
-/** Upload a file to /api/profile/upload-pfp */
+// --- Profile Picture Upload ---
 async function uploadPfpFile(file) {
   const formData = new FormData();
   formData.append('pfp', file);
@@ -316,13 +392,10 @@ async function uploadPfpFile(file) {
   return res;
 }
 
-/** Handle file input change for pfp (registration or edit) */
 function handlePfpSelect(input, prefix) {
   if (!input.files.length) return;
   const file = input.files[0];
   showPfpPreview(file, prefix);
-
-  // If editing (not registering), upload immediately
   if (prefix === 'edit') {
     uploadPfpFile(file).then(res => {
       if (res.pfp) {
@@ -335,7 +408,6 @@ function handlePfpSelect(input, prefix) {
   }
 }
 
-/** Show preview thumbnail in the dropzone */
 function showPfpPreview(file, prefix) {
   const preview = document.getElementById(`${prefix}-pfp-preview`);
   const label = document.getElementById(`${prefix}-pfp-label`);
@@ -348,14 +420,12 @@ function showPfpPreview(file, prefix) {
   reader.readAsDataURL(file);
 }
 
-/** Initialize drag/drop for all pfp dropzones */
 function initPfpDropzones() {
   ['reg-pfp-drop', 'edit-pfp-drop'].forEach(id => {
     const zone = document.getElementById(id);
     if (!zone) return;
     const prefix = id.startsWith('reg') ? 'reg' : 'edit';
     const fileInput = document.getElementById(`${prefix}-pfp-file`);
-
     zone.addEventListener('dragover', (e) => { e.preventDefault(); zone.classList.add('drag-over'); });
     zone.addEventListener('dragleave', () => { zone.classList.remove('drag-over'); });
     zone.addEventListener('drop', (e) => {
@@ -369,7 +439,6 @@ function initPfpDropzones() {
   });
 }
 
-// Init dropzones once DOM is ready
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', initPfpDropzones);
 } else {
@@ -377,8 +446,128 @@ if (document.readyState === 'loading') {
 }
 
 // ===========================================
-// FRIENDS
+// PROFILE POPUP MODAL
 // ===========================================
+
+let popupWallet = null;
+
+async function showProfilePopup(wallet) {
+  popupWallet = wallet;
+  try {
+    const res = await fetch(`/api/profile/${wallet}`, {
+      headers: { Authorization: getAuthHeader() }
+    }).then(r => r.json());
+    if (!res.user) return;
+    const u = res.user;
+
+    // Banner
+    const bannerImg = document.getElementById('popup-banner-img');
+    if (u.banner) {
+      bannerImg.src = u.banner;
+      bannerImg.classList.remove('hidden');
+    } else {
+      bannerImg.classList.add('hidden');
+    }
+
+    document.getElementById('popup-pfp').src = u.pfp || '';
+    document.getElementById('popup-username').textContent = u.username;
+    document.getElementById('popup-bio').textContent = u.bio || '';
+    document.getElementById('popup-wins').textContent = u.stats?.wins || 0;
+    document.getElementById('popup-losses').textContent = u.stats?.losses || 0;
+    document.getElementById('popup-earnings').textContent = formatPong(u.stats?.totalEarnings || 0);
+
+    // Hide add button if already friends or self
+    const addBtn = document.getElementById('popup-add-btn');
+    const challengeBtn = document.getElementById('popup-challenge-btn');
+    const msgBtn = document.getElementById('popup-msg-btn');
+    const isSelf = currentUser && wallet === currentUser.wallet;
+    const isFriend = currentUser && currentUser.friends && currentUser.friends.includes(wallet);
+    addBtn.classList.toggle('hidden', isSelf || isFriend);
+    challengeBtn.classList.toggle('hidden', isSelf || !isFriend);
+    msgBtn.classList.toggle('hidden', isSelf || !isFriend);
+
+    document.getElementById('profile-popup').classList.remove('hidden');
+  } catch (err) {
+    console.error('Profile popup error:', err);
+  }
+}
+
+function closeProfilePopup() {
+  document.getElementById('profile-popup').classList.add('hidden');
+  popupWallet = null;
+}
+
+function popupAddFriend() {
+  if (!popupWallet) return;
+  addFriend(popupWallet);
+  closeProfilePopup();
+}
+
+function popupChallenge() {
+  if (!popupWallet) return;
+  const username = document.getElementById('popup-username').textContent;
+  closeProfilePopup();
+  openDuelModal(popupWallet, username);
+}
+
+function popupMessage() {
+  if (!popupWallet) return;
+  const username = document.getElementById('popup-username').textContent;
+  closeProfilePopup();
+  openDmPanel(popupWallet, username);
+}
+
+// ===========================================
+// FRIENDS (with autocomplete search)
+// ===========================================
+
+let searchDebounceTimer = null;
+
+// Init autocomplete on friend search input
+function initFriendSearch() {
+  const input = document.getElementById('friend-search');
+  if (!input) return;
+  input.addEventListener('input', () => {
+    clearTimeout(searchDebounceTimer);
+    const q = input.value.trim();
+    if (q.length < 2) {
+      document.getElementById('search-dropdown').classList.add('hidden');
+      return;
+    }
+    searchDebounceTimer = setTimeout(() => autocompleteSearch(q), 300);
+  });
+  // Close dropdown on click outside
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('#friend-search') && !e.target.closest('#search-dropdown')) {
+      document.getElementById('search-dropdown').classList.add('hidden');
+    }
+  });
+}
+
+async function autocompleteSearch(q) {
+  try {
+    const res = await fetch(`/api/friends/search?q=${encodeURIComponent(q)}`, {
+      headers: { Authorization: getAuthHeader() }
+    }).then(r => r.json());
+
+    const dropdown = document.getElementById('search-dropdown');
+    if (!res.users || res.users.length === 0) {
+      dropdown.innerHTML = '<p class="text-gray-500 text-sm p-3">No users found</p>';
+      dropdown.classList.remove('hidden');
+      return;
+    }
+    dropdown.innerHTML = res.users.map(u => `
+      <div class="autocomplete-item flex items-center gap-2 px-3 py-2 cursor-pointer"
+        onclick="showProfilePopup('${u.wallet}')">
+        <img src="${esc(u.pfp || '')}" class="w-7 h-7 rounded-full bg-gray-700" onerror="this.style.display='none'" />
+        <span class="font-medium text-sm">${esc(u.username)}</span>
+      </div>
+    `).join('');
+    dropdown.classList.remove('hidden');
+  } catch (err) {
+    console.error('Autocomplete search failed:', err);
+  }
+}
 
 async function loadFriends() {
   try {
@@ -387,7 +576,6 @@ async function loadFriends() {
       fetch('/api/friends', { headers: { Authorization: auth } }).then(r => r.json()),
       fetch('/api/friends/requests', { headers: { Authorization: auth } }).then(r => r.json()),
     ]);
-
     renderFriendList(friendRes.friends || []);
     renderFriendRequests(requestRes.requests || []);
   } catch (err) {
@@ -401,16 +589,25 @@ function renderFriendList(friends) {
     container.innerHTML = '<p class="text-gray-500 text-sm">No friends yet.</p>';
     return;
   }
-  container.innerHTML = friends.map(f => `
-    <div class="bg-arena-card rounded-lg p-3 flex items-center justify-between">
-      <div class="flex items-center gap-2">
-        <div class="w-2 h-2 rounded-full ${onlineUsers.includes(f.wallet) ? 'bg-green-400' : 'bg-gray-600'}"></div>
-        <span class="font-medium">${esc(f.username)}</span>
-        <span class="text-gray-500 text-xs">${shortenAddress(f.wallet)}</span>
+  container.innerHTML = friends.map(f => {
+    const isOnline = onlineUsers.includes(f.wallet);
+    const unread = unreadCounts[f.wallet] || 0;
+    return `
+      <div class="bg-arena-card rounded-lg p-3 flex items-center justify-between">
+        <div class="flex items-center gap-2 cursor-pointer" onclick="showProfilePopup('${f.wallet}')">
+          <div class="w-2 h-2 rounded-full ${isOnline ? 'bg-green-400' : 'bg-gray-600'}"></div>
+          <img src="${esc(f.pfp || '')}" class="w-7 h-7 rounded-full bg-gray-700" onerror="this.style.display='none'" />
+          <span class="font-medium">${esc(f.username)}</span>
+          ${unread > 0 ? `<span class="bg-red-500 text-white text-xs rounded-full px-1.5">${unread}</span>` : ''}
+        </div>
+        <div class="flex gap-2 items-center">
+          <button onclick="openDmPanel('${f.wallet}', '${esc(f.username)}')" class="text-blue-400 hover:text-blue-300 text-xs">Chat</button>
+          ${isOnline ? `<button onclick="openDuelModal('${f.wallet}', '${esc(f.username)}')" class="text-yellow-400 hover:text-yellow-300 text-xs">Challenge</button>` : ''}
+          <button onclick="removeFriend('${f.wallet}')" class="text-red-400 hover:text-red-300 text-xs">Remove</button>
+        </div>
       </div>
-      <button onclick="removeFriend('${f.wallet}')" class="text-red-400 hover:text-red-300 text-xs">Remove</button>
-    </div>
-  `).join('');
+    `;
+  }).join('');
 }
 
 function renderFriendRequests(requests) {
@@ -433,39 +630,19 @@ function renderFriendRequests(requests) {
 async function searchFriends() {
   const q = document.getElementById('friend-search').value.trim();
   if (q.length < 2) return;
-
-  try {
-    const auth = getAuthHeader();
-    const res = await fetch(`/api/friends/search?q=${encodeURIComponent(q)}`, {
-      headers: { Authorization: auth }
-    }).then(r => r.json());
-
-    const container = document.getElementById('search-results');
-    if (!res.users || res.users.length === 0) {
-      container.innerHTML = '<p class="text-gray-500 text-sm">No users found</p>';
-      return;
-    }
-    container.innerHTML = res.users.map(u => `
-      <div class="bg-arena-card rounded-lg p-3 flex items-center justify-between">
-        <span class="font-medium">${esc(u.username)}</span>
-        <button onclick="addFriend('${u.wallet}')" class="bg-purple-600 hover:bg-purple-700 px-3 py-1 rounded text-xs transition">
-          Add Friend
-        </button>
-      </div>
-    `).join('');
-  } catch (err) {
-    console.error('Search failed:', err);
-  }
+  autocompleteSearch(q);
 }
 
 async function addFriend(targetWallet) {
   const res = await apiPostAuth('/api/friends/add', { targetWallet }, getAuthHeader());
   alert(res.message || res.error || 'Done');
+  await refreshUserData();
   loadFriends();
 }
 
 async function acceptFriend(fromWallet) {
   await apiPostAuth('/api/friends/accept', { fromWallet }, getAuthHeader());
+  await refreshUserData();
   loadFriends();
 }
 
@@ -477,8 +654,311 @@ async function declineFriend(fromWallet) {
 async function removeFriend(friendWallet) {
   if (!confirm('Remove this friend?')) return;
   await apiPostAuth('/api/friends/remove', { friendWallet }, getAuthHeader());
+  await refreshUserData();
   loadFriends();
 }
+
+// ===========================================
+// RECENT OPPONENTS
+// ===========================================
+
+async function loadRecentOpponents() {
+  try {
+    const res = await fetch('/api/profile/history', {
+      headers: { Authorization: getAuthHeader() }
+    }).then(r => r.json());
+
+    const container = document.getElementById('opponents-list');
+    if (!res.matches || res.matches.length === 0) {
+      container.innerHTML = '<p class="text-gray-500 text-sm">No recent opponents yet.</p>';
+      return;
+    }
+
+    // Get unique opponents
+    const seen = new Set();
+    const opponents = [];
+    for (const m of res.matches) {
+      const oppWallet = m.player1 === currentUser.wallet ? m.player2 : m.player1;
+      const oppName = m.player1 === currentUser.wallet ? m.player2Username : m.player1Username;
+      if (!seen.has(oppWallet)) {
+        seen.add(oppWallet);
+        const won = m.winner === currentUser.wallet;
+        opponents.push({ wallet: oppWallet, username: oppName, won, score: m.score, tier: m.tier });
+      }
+    }
+
+    const isFriend = (wallet) => currentUser.friends && currentUser.friends.includes(wallet);
+
+    container.innerHTML = opponents.slice(0, 30).map(o => `
+      <div class="bg-arena-card rounded-lg p-3 flex items-center justify-between">
+        <div class="flex items-center gap-3 cursor-pointer" onclick="showProfilePopup('${o.wallet}')">
+          <div class="w-2 h-2 rounded-full ${onlineUsers.includes(o.wallet) ? 'bg-green-400' : 'bg-gray-600'}"></div>
+          <span class="font-medium">${esc(o.username || 'Unknown')}</span>
+          <span class="text-xs ${o.won ? 'text-green-400' : 'text-red-400'}">${o.won ? 'W' : 'L'}</span>
+          <span class="text-gray-500 text-xs">${o.tier}</span>
+        </div>
+        <div class="flex gap-2">
+          ${isFriend(o.wallet)
+            ? '<span class="text-green-400 text-xs">Friends</span>'
+            : `<button onclick="addFriend('${o.wallet}')" class="bg-purple-600 hover:bg-purple-700 px-3 py-1 rounded text-xs transition">Add Friend</button>`
+          }
+        </div>
+      </div>
+    `).join('');
+  } catch (err) {
+    console.error('Failed to load opponents:', err);
+  }
+}
+
+// ===========================================
+// DIRECT MESSAGES (DM Panel)
+// ===========================================
+
+async function fetchUnreadCounts() {
+  try {
+    const res = await fetch('/api/friends/unread', {
+      headers: { Authorization: getAuthHeader() }
+    }).then(r => r.json());
+    unreadCounts = res.unread || {};
+    updateFriendsBadge();
+  } catch (err) {
+    console.error('Failed to fetch unread:', err);
+  }
+}
+
+function updateFriendsBadge() {
+  const total = Object.values(unreadCounts).reduce((sum, c) => sum + c, 0);
+  const badge = document.getElementById('friends-badge');
+  if (total > 0) {
+    badge.textContent = total;
+    badge.classList.remove('hidden');
+  } else {
+    badge.classList.add('hidden');
+  }
+}
+
+function openDmPanel(wallet, username) {
+  dmOpenWallet = wallet;
+  dmOpenUsername = username;
+  document.getElementById('dm-panel-username').textContent = username;
+  document.getElementById('dm-panel-pfp').src = '';
+  document.getElementById('dm-messages').innerHTML = '<p class="text-gray-500 text-xs text-center">Loading...</p>';
+  document.getElementById('dm-panel').classList.add('open');
+  document.getElementById('dm-input').value = '';
+
+  // Mark as read
+  socket.emit('dm-read', { friendWallet: wallet });
+  delete unreadCounts[wallet];
+  updateFriendsBadge();
+
+  loadDmHistory(wallet);
+}
+
+function closeDmPanel() {
+  document.getElementById('dm-panel').classList.remove('open');
+  dmOpenWallet = null;
+  dmOpenUsername = null;
+}
+
+async function loadDmHistory(wallet) {
+  try {
+    const res = await fetch(`/api/friends/messages/${wallet}?limit=50`, {
+      headers: { Authorization: getAuthHeader() }
+    }).then(r => r.json());
+
+    const container = document.getElementById('dm-messages');
+    if (!res.messages || res.messages.length === 0) {
+      container.innerHTML = '<p class="text-gray-500 text-xs text-center">No messages yet. Say hi!</p>';
+      return;
+    }
+    container.innerHTML = res.messages.map(m => {
+      const isMe = m.from === currentUser.wallet;
+      return `
+        <div class="flex ${isMe ? 'justify-end' : 'justify-start'}">
+          <div class="max-w-[80%] px-3 py-1.5 rounded-lg text-sm ${isMe ? 'bg-purple-600/40' : 'bg-gray-700'}">
+            ${esc(m.text)}
+            <div class="text-[10px] text-gray-500 mt-0.5">${formatTime(m.createdAt)}</div>
+          </div>
+        </div>
+      `;
+    }).join('');
+    container.scrollTop = container.scrollHeight;
+  } catch (err) {
+    console.error('Failed to load DM history:', err);
+  }
+}
+
+function sendDm() {
+  const input = document.getElementById('dm-input');
+  const text = input.value.trim();
+  if (!text || !dmOpenWallet) return;
+  input.value = '';
+  socket.emit('dm-send', { to: dmOpenWallet, text });
+
+  // Optimistic add
+  const container = document.getElementById('dm-messages');
+  const emptyMsg = container.querySelector('p.text-gray-500');
+  if (emptyMsg) emptyMsg.remove();
+  container.innerHTML += `
+    <div class="flex justify-end">
+      <div class="max-w-[80%] px-3 py-1.5 rounded-lg text-sm bg-purple-600/40">
+        ${esc(text)}
+        <div class="text-[10px] text-gray-500 mt-0.5">now</div>
+      </div>
+    </div>
+  `;
+  container.scrollTop = container.scrollHeight;
+}
+
+// Socket: Receive DM
+socket.on('dm-receive', (data) => {
+  // If DM panel is open for this sender, add message
+  if (dmOpenWallet === data.from) {
+    const container = document.getElementById('dm-messages');
+    const emptyMsg = container.querySelector('p.text-gray-500');
+    if (emptyMsg) emptyMsg.remove();
+    container.innerHTML += `
+      <div class="flex justify-start">
+        <div class="max-w-[80%] px-3 py-1.5 rounded-lg text-sm bg-gray-700">
+          ${esc(data.text)}
+          <div class="text-[10px] text-gray-500 mt-0.5">now</div>
+        </div>
+      </div>
+    `;
+    container.scrollTop = container.scrollHeight;
+    socket.emit('dm-read', { friendWallet: data.from });
+  } else {
+    // Increment unread
+    unreadCounts[data.from] = (unreadCounts[data.from] || 0) + 1;
+    updateFriendsBadge();
+  }
+});
+
+function formatTime(dateStr) {
+  const d = new Date(dateStr);
+  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
+// ===========================================
+// DUEL INVITE
+// ===========================================
+
+function openDuelModal(targetWallet, username) {
+  duelTargetWallet = targetWallet;
+  document.getElementById('duel-target-name').textContent = username;
+  document.getElementById('duel-usd-input').value = '';
+  document.getElementById('duel-pong-display').textContent = '';
+  document.getElementById('duel-modal').classList.remove('hidden');
+}
+
+function closeDuelModal() {
+  document.getElementById('duel-modal').classList.add('hidden');
+  duelTargetWallet = null;
+}
+
+function updateDuelPongAmount() {
+  const usdInput = document.getElementById('duel-usd-input').value;
+  const display = document.getElementById('duel-pong-display');
+  if (!usdInput || pongPriceUsd <= 0) {
+    display.textContent = pongPriceUsd <= 0 ? 'Price unavailable — enter $PONG amount directly' : '';
+    return;
+  }
+  const pongAmount = Math.round(parseFloat(usdInput) / pongPriceUsd);
+  display.textContent = `≈ ${pongAmount.toLocaleString()} $PONG`;
+}
+
+function sendDuelInvite() {
+  const usdInput = parseFloat(document.getElementById('duel-usd-input').value);
+  if (!usdInput || usdInput <= 0) return alert('Enter a valid USD amount');
+  if (pongPriceUsd <= 0) return alert('Price unavailable. Try again later.');
+  if (!duelTargetWallet) return;
+
+  const pongAmount = Math.round(usdInput / pongPriceUsd);
+  const baseUnits = pongAmount * 1e6; // convert to base units (6 decimals)
+
+  socket.emit('duel-invite', { targetWallet: duelTargetWallet, stakeAmount: baseUnits });
+  closeDuelModal();
+}
+
+// Socket: Duel sent confirmation
+socket.on('duel-sent', (data) => {
+  // Could show a toast, but keeping it simple
+});
+
+// Socket: Duel error
+socket.on('duel-error', (data) => {
+  alert(data.error);
+});
+
+// Socket: Incoming duel invite
+socket.on('duel-incoming', (data) => {
+  pendingDuelId = data.duelId;
+  document.getElementById('duel-from-name').textContent = data.fromUsername;
+  const pongAmount = (data.stakeAmount / 1e6);
+  const usdAmount = pongPriceUsd > 0 ? ` (${formatUsd(pongAmount * pongPriceUsd)})` : '';
+  document.getElementById('duel-incoming-stake').textContent = pongAmount.toLocaleString() + ' $PONG' + usdAmount;
+  document.getElementById('duel-incoming-modal').classList.remove('hidden');
+});
+
+function acceptDuel() {
+  if (!pendingDuelId) return;
+  socket.emit('duel-accept', { duelId: pendingDuelId });
+  document.getElementById('duel-incoming-modal').classList.add('hidden');
+  pendingDuelId = null;
+}
+
+function declineDuel() {
+  if (!pendingDuelId) return;
+  socket.emit('duel-decline', { duelId: pendingDuelId });
+  document.getElementById('duel-incoming-modal').classList.add('hidden');
+  pendingDuelId = null;
+}
+
+socket.on('duel-declined', (data) => {
+  alert(`${data.byUsername} declined the duel.`);
+});
+
+socket.on('duel-expired', (data) => {
+  document.getElementById('duel-incoming-modal').classList.add('hidden');
+  pendingDuelId = null;
+});
+
+// ===========================================
+// IN-GAME CHAT
+// ===========================================
+
+function sendGameChat() {
+  const gameInput = document.getElementById('game-chat-input');
+  const postInput = document.getElementById('postgame-chat-input');
+  const input = gameInput && !gameInput.closest('.hidden') ? gameInput : postInput;
+  if (!input) return;
+  const text = input.value.trim();
+  if (!text || !currentGameId) return;
+  input.value = '';
+  socket.emit('game-chat', { gameId: currentGameId, text });
+}
+
+socket.on('game-chat-msg', (data) => {
+  if (data.gameId !== currentGameId) return;
+  const isMe = data.from === currentUser.wallet;
+  const msgHtml = `<div class="${isMe ? 'text-purple-300' : 'text-gray-300'}"><span class="font-bold">${esc(data.username)}:</span> ${esc(data.text)}</div>`;
+
+  // Add to in-game chat
+  const gameChat = document.getElementById('game-chat-messages');
+  if (gameChat) {
+    gameChat.innerHTML += msgHtml;
+    if (gameChat.children.length > 10) gameChat.removeChild(gameChat.firstChild);
+    gameChat.scrollTop = gameChat.scrollHeight;
+  }
+
+  // Also add to post-game chat
+  const postChat = document.getElementById('postgame-chat-messages');
+  if (postChat) {
+    postChat.innerHTML += msgHtml;
+    if (postChat.children.length > 10) postChat.removeChild(postChat.firstChild);
+    postChat.scrollTop = postChat.scrollHeight;
+  }
+});
 
 // ===========================================
 // SHOP (Crate-based)
@@ -489,15 +969,10 @@ async function loadShop() {
     const auth = getAuthHeader();
     const resp = await fetch('/api/shop', { headers: { Authorization: auth } });
     const res = await resp.json();
-
     if (res.error) {
-      console.error('Shop API error:', res.error);
-      document.getElementById('shop-standard-grid').innerHTML =
-        '<p class="text-red-400 text-sm col-span-full">Failed to load shop. Try reconnecting your wallet.</p>';
+      document.getElementById('shop-standard-grid').innerHTML = '<p class="text-red-400 text-sm col-span-full">Failed to load shop.</p>';
       return;
     }
-
-    // --- Limited crates ---
     const limitedSection = document.getElementById('shop-limited-section');
     const limitedGrid = document.getElementById('shop-limited-grid');
     if (res.limited && res.limited.length > 0) {
@@ -506,12 +981,8 @@ async function loadShop() {
     } else {
       limitedSection.classList.add('hidden');
     }
-
-    // --- Standard crates ---
     const standardGrid = document.getElementById('shop-standard-grid');
     standardGrid.innerHTML = (res.standard || []).map(c => renderCrateCard(c, false)).join('');
-
-    // --- Inventory ---
     const inventory = document.getElementById('shop-inventory');
     if (res.inventory && res.inventory.length > 0) {
       inventory.innerHTML = res.inventory.map(s => `
@@ -541,8 +1012,6 @@ async function loadShop() {
     }
   } catch (err) {
     console.error('Failed to load shop:', err);
-    document.getElementById('shop-standard-grid').innerHTML =
-      '<p class="text-red-400 text-sm col-span-full">Failed to load shop. Please try again.</p>';
   }
 }
 
@@ -576,19 +1045,11 @@ function renderCrateCard(c, isLimited) {
 async function buyCrate(crateId) {
   try {
     const auth = getAuthHeader();
-
-    // Step 1: Get transaction to sign
     const buyRes = await apiPostAuth('/api/shop/buy-crate', { crateId }, auth);
     if (buyRes.error) return alert(buyRes.error);
-
-    // Step 2: Sign and send transaction via Phantom
     const txSignature = await WalletManager.signAndSendTransaction(buyRes.transaction);
-
-    // Step 3: Confirm and get random skin
     const confirmRes = await apiPostAuth('/api/shop/confirm-crate', { crateId, txSignature }, auth);
     if (confirmRes.error) return alert(confirmRes.error);
-
-    // Show crate roller animation
     showCrateRoller(confirmRes.skin, confirmRes.crateSkins || [], confirmRes.duplicate);
   } catch (err) {
     alert('Purchase failed: ' + err.message);
@@ -600,13 +1061,11 @@ async function buyCrate(crateId) {
 // ===========================================
 
 let rollerAudioCtx = null;
-
 function getRollerAudioCtx() {
   if (!rollerAudioCtx) rollerAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
   return rollerAudioCtx;
 }
 
-/** Short click/tick sound — pitch rises as speed drops */
 function playTickSound(progress) {
   try {
     const ctx = getRollerAudioCtx();
@@ -614,26 +1073,22 @@ function playTickSound(progress) {
     const gain = ctx.createGain();
     osc.connect(gain);
     gain.connect(ctx.destination);
-    // Pitch rises from 400Hz to 800Hz as progress goes 0→1
     osc.frequency.value = 400 + progress * 400;
     osc.type = 'square';
     gain.gain.value = 0.08;
     gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.06);
     osc.start(ctx.currentTime);
     osc.stop(ctx.currentTime + 0.06);
-  } catch (e) { /* audio not available */ }
+  } catch (e) {}
 }
 
-/** Reveal chime — intensity scales with rarity */
 function playRevealSound(rarity) {
   try {
     const ctx = getRollerAudioCtx();
     const freqs = rarity === 'legendary' ? [523, 659, 784, 1047]
-                : rarity === 'rare' ? [523, 659, 784]
-                : [523, 659];
+                : rarity === 'rare' ? [523, 659, 784] : [523, 659];
     const duration = rarity === 'legendary' ? 1.2 : rarity === 'rare' ? 0.8 : 0.5;
     const volume = rarity === 'legendary' ? 0.15 : rarity === 'rare' ? 0.12 : 0.08;
-
     freqs.forEach((freq, i) => {
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
@@ -647,108 +1102,70 @@ function playRevealSound(rarity) {
       osc.start(startTime);
       osc.stop(startTime + duration);
     });
-  } catch (e) { /* audio not available */ }
+  } catch (e) {}
 }
 
-/** Build the roller strip with ~35 random cards, won skin placed near position 30 */
 function buildRollerStrip(wonSkin, crateSkins) {
   const TOTAL_CARDS = 36;
   const WIN_INDEX = 30;
   const strip = document.getElementById('roller-strip');
   strip.innerHTML = '';
   strip.style.transform = 'translateX(0px)';
-
   const pool = crateSkins.length > 0 ? crateSkins : [wonSkin];
   const cards = [];
-
   for (let i = 0; i < TOTAL_CARDS; i++) {
-    let skin;
-    if (i === WIN_INDEX) {
-      skin = wonSkin;
-    } else {
-      skin = pool[Math.floor(Math.random() * pool.length)];
-    }
-
+    let skin = i === WIN_INDEX ? wonSkin : pool[Math.floor(Math.random() * pool.length)];
     const card = document.createElement('div');
     card.className = `roller-card rarity-${skin.rarity}`;
     card.style.background = '#111128';
-
     if (skin.type === 'color') {
-      card.innerHTML = `
-        <div style="width:36px;height:36px;border-radius:50%;background:${esc(skin.cssValue)};box-shadow:0 0 10px ${esc(skin.cssValue)}"></div>
-        <div style="font-size:10px;color:#ccc;margin-top:4px;text-align:center;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;max-width:90px">${esc(skin.name)}</div>
-      `;
+      card.innerHTML = `<div style="width:36px;height:36px;border-radius:50%;background:${esc(skin.cssValue)};box-shadow:0 0 10px ${esc(skin.cssValue)}"></div><div style="font-size:10px;color:#ccc;margin-top:4px;text-align:center;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;max-width:90px">${esc(skin.name)}</div>`;
     } else {
-      card.innerHTML = `
-        <img src="${esc(skin.imageUrl)}" style="height:44px;object-fit:contain;" />
-        <div style="font-size:10px;color:#ccc;margin-top:4px;text-align:center;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;max-width:90px">${esc(skin.name)}</div>
-      `;
+      card.innerHTML = `<img src="${esc(skin.imageUrl)}" style="height:44px;object-fit:contain;" /><div style="font-size:10px;color:#ccc;margin-top:4px;text-align:center;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;max-width:90px">${esc(skin.name)}</div>`;
     }
-
     strip.appendChild(card);
     cards.push({ el: card, skin });
   }
-
   return { cards, winIndex: WIN_INDEX };
 }
 
-/** Animate the roller strip with cubic deceleration */
 function animateRoller(cards, winIndex) {
   return new Promise((resolve) => {
     const strip = document.getElementById('roller-strip');
     const container = strip.parentElement;
     const containerWidth = container.offsetWidth;
-    const cardWidth = 108; // 100px card + 4px margin each side
+    const cardWidth = 108;
     const centerOffset = containerWidth / 2 - cardWidth / 2;
-
-    // Target: center the winning card in the viewport
     const targetX = winIndex * cardWidth - centerOffset;
-    // Add small random offset within the card so it doesn't look perfectly centered every time
     const finalX = targetX + (Math.random() * 20 - 10);
-
-    const DURATION = 4500; // ms
+    const DURATION = 4500;
     const startTime = performance.now();
     let lastCardIndex = -1;
-
-    function easeOutCubic(t) {
-      return 1 - Math.pow(1 - t, 3);
-    }
-
+    function easeOutCubic(t) { return 1 - Math.pow(1 - t, 3); }
     function tick(now) {
       const elapsed = now - startTime;
       const progress = Math.min(elapsed / DURATION, 1);
       const easedProgress = easeOutCubic(progress);
       const currentX = easedProgress * finalX;
-
       strip.style.transform = `translateX(${-currentX}px)`;
-
-      // Determine which card is under the center marker
       const centerWorldX = currentX + centerOffset;
       const currentCardIndex = Math.floor(centerWorldX / cardWidth);
-
       if (currentCardIndex !== lastCardIndex && currentCardIndex >= 0) {
         lastCardIndex = currentCardIndex;
         playTickSound(progress);
       }
-
-      if (progress < 1) {
-        requestAnimationFrame(tick);
-      } else {
-        resolve();
-      }
+      if (progress < 1) requestAnimationFrame(tick);
+      else resolve();
     }
-
     requestAnimationFrame(tick);
   });
 }
 
-/** Show the final reveal card with glow + sound */
 function showFinalReveal(skin, isDuplicate) {
   const preview = document.getElementById('roller-reveal-preview');
   const nameEl = document.getElementById('roller-reveal-name');
   const rarityEl = document.getElementById('roller-reveal-rarity');
   const revealDiv = document.getElementById('roller-reveal');
-
   if (skin.type === 'color') {
     preview.innerHTML = `<div class="w-16 h-16 rounded-full" style="background:${esc(skin.cssValue)};box-shadow:0 0 20px ${esc(skin.cssValue)}"></div>`;
     preview.style.background = skin.cssValue + '22';
@@ -756,15 +1173,11 @@ function showFinalReveal(skin, isDuplicate) {
     preview.innerHTML = `<img src="${esc(skin.imageUrl)}" class="h-20 object-contain" />`;
     preview.style.background = '#1a1a3a';
   }
-
   nameEl.textContent = skin.name;
   const rarityColors = { common: 'text-gray-400', rare: 'text-purple-400', legendary: 'text-yellow-400' };
   rarityEl.textContent = isDuplicate ? skin.rarity.toUpperCase() + ' (DUPLICATE)' : skin.rarity.toUpperCase();
   rarityEl.className = `text-sm mb-4 font-bold ${isDuplicate ? 'text-gray-500' : (rarityColors[skin.rarity] || 'text-gray-400')}`;
-
-  // Rarity-based effects
   if (skin.rarity === 'legendary') {
-    // Screen flash
     const flash = document.getElementById('roller-flash');
     flash.style.opacity = '0.6';
     setTimeout(() => { flash.style.opacity = '0'; }, 300);
@@ -772,33 +1185,22 @@ function showFinalReveal(skin, isDuplicate) {
   } else if (skin.rarity === 'rare') {
     preview.classList.add('reveal-glow');
   }
-
   playRevealSound(skin.rarity);
   revealDiv.classList.remove('hidden');
 }
 
-/** Main entry: show the roller modal and run the animation */
 async function showCrateRoller(wonSkin, crateSkins, isDuplicate) {
   const modal = document.getElementById('crate-roller-modal');
   const revealDiv = document.getElementById('roller-reveal');
   const flash = document.getElementById('roller-flash');
   const preview = document.getElementById('roller-reveal-preview');
-
-  // Reset state
   revealDiv.classList.add('hidden');
   flash.style.opacity = '0';
   preview.classList.remove('reveal-glow');
   modal.classList.remove('hidden');
-
-  // Build strip and animate
   const { cards, winIndex } = buildRollerStrip(wonSkin, crateSkins);
-
-  // Small delay so the modal is visible before animation starts
   await new Promise(r => setTimeout(r, 300));
-
   await animateRoller(cards, winIndex);
-
-  // Show reveal
   showFinalReveal(wonSkin, isDuplicate);
 }
 
@@ -824,15 +1226,12 @@ async function equipSkin(skinId) {
 
 async function loadHistory() {
   try {
-    const auth = getAuthHeader();
-    const res = await fetch('/api/profile/history', { headers: { Authorization: auth } }).then(r => r.json());
-
+    const res = await fetch('/api/profile/history', { headers: { Authorization: getAuthHeader() } }).then(r => r.json());
     const container = document.getElementById('history-list');
     if (!res.matches || res.matches.length === 0) {
       container.innerHTML = '<p class="text-gray-500 text-sm">No matches played yet.</p>';
       return;
     }
-
     container.innerHTML = res.matches.map(m => {
       const won = m.winner === currentUser.wallet;
       const opponent = m.player1 === currentUser.wallet ? m.player2Username : m.player1Username;
@@ -864,8 +1263,7 @@ function joinQueue(tier) {
   showMatchmakingState('queue');
   const pongAmt = tier === 'low' ? '10K' : tier === 'medium' ? '50K' : '200K';
   const usdAmt = pongPriceUsd > 0 ? ` (${formatUsd(getTierUsd(tier))})` : '';
-  document.getElementById('queue-tier-display').textContent =
-    `${tier.toUpperCase()} tier — ${pongAmt} $PONG${usdAmt}`;
+  document.getElementById('queue-tier-display').textContent = `${tier.toUpperCase()} tier — ${pongAmt} $PONG${usdAmt}`;
 }
 
 function leaveQueue() {
@@ -881,39 +1279,49 @@ function showMatchmakingState(state) {
   document.getElementById('gameover-ui').classList.toggle('hidden', state !== 'gameover');
 }
 
-// Track which player we are in the current match
-let myPlayerSlot = null; // 'p1' or 'p2'
-let currentGameTier = null; // 'low', 'medium', 'high'
+let myPlayerSlot = null;
+let currentGameTier = null;
 
 function updateGameStakeDisplay() {
   const el = document.getElementById('game-stake-display');
   if (!el || !currentGameTier) return;
-  const pongAmt = TIER_PONG_AMOUNTS[currentGameTier];
-  const usdAmt = getTierUsd(currentGameTier);
-  if (pongPriceUsd > 0) {
-    el.textContent = `${formatUsd(usdAmt)} (${(pongAmt / 1000).toFixed(0)}K $PONG each)`;
+  if (currentGameTier === 'duel' && currentCustomStake) {
+    const pongAmt = currentCustomStake / 1e6;
+    const usdAmt = pongPriceUsd > 0 ? formatUsd(pongAmt * pongPriceUsd) : '';
+    el.textContent = usdAmt ? `${usdAmt} (${pongAmt.toLocaleString()} $PONG each)` : `${pongAmt.toLocaleString()} $PONG each`;
   } else {
-    el.textContent = `${(pongAmt / 1000).toFixed(0)}K $PONG each`;
+    const pongAmt = TIER_PONG_AMOUNTS[currentGameTier] || 0;
+    const usdAmt = getTierUsd(currentGameTier);
+    if (pongPriceUsd > 0 && pongAmt) {
+      el.textContent = `${formatUsd(usdAmt)} (${(pongAmt / 1000).toFixed(0)}K $PONG each)`;
+    } else if (pongAmt) {
+      el.textContent = `${(pongAmt / 1000).toFixed(0)}K $PONG each`;
+    } else {
+      el.textContent = '';
+    }
   }
 }
 
-// Socket: Match found → show escrow prompt
+let currentCustomStake = null;
+
+// Socket: Match found
 socket.on('match-found', (data) => {
   currentGameId = data.gameId;
   pendingEscrowTx = data.escrowTransaction;
-  myPlayerSlot = data.yourSlot; // server tells us if we're p1 or p2
-
+  myPlayerSlot = data.yourSlot;
   currentGameTier = data.tier;
+  currentCustomStake = data.tier === 'duel' ? data.stake : null;
+
   document.getElementById('escrow-opponent').textContent = data.opponent.username;
   const pongText = formatPong(data.stake) + ' $PONG';
-  const usdText = pongPriceUsd > 0 ? formatUsd(TIER_PONG_AMOUNTS[data.tier] * pongPriceUsd) : '';
+  const pongDisplayAmt = data.stake / 1e6;
+  const usdText = pongPriceUsd > 0 ? formatUsd(pongDisplayAmt * pongPriceUsd) : '';
   document.getElementById('escrow-stake').innerHTML = usdText
     ? `<span class="text-2xl">${usdText}</span> <span class="text-sm text-gray-400">(${pongText})</span>`
     : pongText;
 
-  // Reset escrow UI
   const btn = document.getElementById('btn-escrow-submit');
-  if (btn) { btn.disabled = false; btn.textContent = 'Approve & Stake'; }
+  if (btn) { btn.disabled = false; btn.textContent = 'Approve & Stake'; btn.classList.remove('hidden'); }
   setEscrowIcon('escrow-you-icon', 'escrow-you-status', '?', 'Waiting...', 'bg-gray-700');
   setEscrowIcon('escrow-opp-icon', 'escrow-opp-status', '?', 'Waiting...', 'bg-gray-700');
   document.getElementById('escrow-msg').textContent = 'Approve the transaction in Phantom to stake your $PONG.';
@@ -929,14 +1337,11 @@ function setEscrowIcon(iconId, statusId, icon, text, bgClass) {
   statusEl.textContent = text;
 }
 
-// Socket: Per-player escrow status updates
 socket.on('escrow-status', (data) => {
   if (data.gameId !== currentGameId) return;
-
   const isMe = data.player === myPlayerSlot;
   const iconId = isMe ? 'escrow-you-icon' : 'escrow-opp-icon';
   const statusId = isMe ? 'escrow-you-status' : 'escrow-opp-status';
-
   if (data.status === 'verifying') {
     setEscrowIcon(iconId, statusId, '...', 'Verifying...', 'bg-yellow-900');
   } else if (data.status === 'confirmed') {
@@ -959,12 +1364,8 @@ async function submitEscrow() {
   try {
     const btn = document.getElementById('btn-escrow-submit');
     if (btn) { btn.disabled = true; btn.textContent = 'Sign in Phantom...'; }
-
-    // Sign the escrow transaction via Phantom
     const txSignature = await WalletManager.signAndSendTransaction(pendingEscrowTx);
-
-    if (btn) { btn.textContent = 'Verifying on-chain...'; }
-
+    if (btn) btn.textContent = 'Verifying on-chain...';
     socket.emit('escrow-submit', { gameId: currentGameId, txSignature });
   } catch (err) {
     const btn = document.getElementById('btn-escrow-submit');
@@ -984,13 +1385,71 @@ socket.on('match-cancelled', (data) => {
 });
 
 // ===========================================
+// READY SYSTEM
+// ===========================================
+
+let isReady = false;
+
+function sendReady() {
+  if (!currentGameId || isReady) return;
+  isReady = true;
+  socket.emit('player-ready', { gameId: currentGameId });
+  const btn = document.getElementById('btn-ready');
+  if (btn) {
+    btn.textContent = 'READY!';
+    btn.className = 'bg-green-800 px-8 py-3 rounded-lg text-lg font-bold cursor-not-allowed';
+    btn.disabled = true;
+  }
+}
+
+socket.on('ready-status', (data) => {
+  if (data.gameId !== currentGameId) return;
+  const amP1 = myPlayerSlot === 'p1';
+  const myReady = amP1 ? data.p1Ready : data.p2Ready;
+  const oppReady = amP1 ? data.p2Ready : data.p1Ready;
+
+  document.getElementById('ready-you-dot').className = `w-4 h-4 rounded-full mx-auto mb-1 ${myReady ? 'bg-green-400' : 'bg-gray-600'}`;
+  document.getElementById('ready-opp-dot').className = `w-4 h-4 rounded-full mx-auto mb-1 ${oppReady ? 'bg-green-400' : 'bg-gray-600'}`;
+});
+
+socket.on('ready-countdown', (data) => {
+  if (data.gameId !== currentGameId) return;
+  const countdownEl = document.getElementById('intermission-countdown');
+  let sec = data.seconds;
+  function tick() {
+    if (countdownEl) countdownEl.textContent = sec;
+    GameClient.renderCountdown(sec);
+    sec--;
+    if (sec >= 0) setTimeout(tick, 1000);
+  }
+  tick();
+});
+
+socket.on('ready-expired', (data) => {
+  if (data.gameId !== currentGameId) return;
+  alert(data.reason || 'Ready timeout. Game cancelled.');
+  backToMatchmaking();
+});
+
+socket.on('ready-phase', (data) => {
+  // Reset ready UI
+  isReady = false;
+  const btn = document.getElementById('btn-ready');
+  if (btn) {
+    btn.textContent = 'READY';
+    btn.className = 'bg-green-600 hover:bg-green-700 px-8 py-3 rounded-lg text-lg font-bold transition';
+    btn.disabled = false;
+  }
+  document.getElementById('ready-you-dot').className = 'w-4 h-4 rounded-full bg-gray-600 mx-auto mb-1';
+  document.getElementById('ready-opp-dot').className = 'w-4 h-4 rounded-full bg-gray-600 mx-auto mb-1';
+});
+
+// ===========================================
 // SIDE PICKER
 // ===========================================
 
 function pickSide(side) {
   chosenSide = side;
-
-  // Update button styles
   const btnLeft = document.getElementById('btn-side-left');
   const btnRight = document.getElementById('btn-side-right');
   if (side === 'left') {
@@ -1002,24 +1461,42 @@ function pickSide(side) {
   }
 }
 
-// Socket: Game countdown (10s intermission)
-// Store skin data from countdown for use in game-start
+// Socket: Game countdown (30s ready-up phase)
 let pendingP1Skin = null;
 let pendingP2Skin = null;
+let intermissionCountdownInterval = null;
 
 socket.on('game-countdown', (data) => {
   showMatchmakingState('game');
-  GameClient.setGameInfo(data.gameId, null); // will be set on game-start
+  GameClient.setGameInfo(data.gameId, null);
+  currentGameId = data.gameId;
+  currentGameTier = data.tier;
+  currentCustomStake = data.stakeAmount || null;
 
-  // Store skin data for game-start
+  // Determine player slot
+  if (data.player1 && data.player2) {
+    myPlayerSlot = currentUser.wallet === data.player1.wallet ? 'p1' : 'p2';
+  }
+
   pendingP1Skin = data.player1?.skin || null;
   pendingP2Skin = data.player2?.skin || null;
 
-  // Reset side picker to left (default)
   chosenSide = 'left';
   pickSide('left');
 
-  // Show intermission overlay with opponent info + side picker
+  // Reset ready state
+  isReady = false;
+  const readyBtn = document.getElementById('btn-ready');
+  if (readyBtn) {
+    readyBtn.textContent = 'READY';
+    readyBtn.className = 'bg-green-600 hover:bg-green-700 px-8 py-3 rounded-lg text-lg font-bold transition';
+    readyBtn.disabled = false;
+  }
+
+  // Clear game chat
+  document.getElementById('game-chat-messages').innerHTML = '';
+  document.getElementById('postgame-chat-messages').innerHTML = '';
+
   const intermission = document.getElementById('intermission-info');
   const sidePicker = document.getElementById('side-picker');
   if (intermission && data.player1 && data.player2) {
@@ -1027,51 +1504,48 @@ socket.on('game-countdown', (data) => {
     const opp = currentUser.wallet === data.player1.wallet ? data.player2 : data.player1;
     document.getElementById('intermission-you').textContent = me.username;
     document.getElementById('intermission-opp').textContent = opp.username;
-    currentGameTier = data.tier;
-    const tierUsd = pongPriceUsd > 0 ? ` — ${formatUsd(getTierUsd(data.tier))} each` : '';
-    document.getElementById('intermission-tier').textContent =
-      (data.tier || '').toUpperCase() + ' TIER' + tierUsd;
+
+    const tierLabel = data.tier === 'duel' ? 'DUEL' : (data.tier || '').toUpperCase() + ' TIER';
+    const stakeUsd = pongPriceUsd > 0 && data.stakeAmount
+      ? ` — ${formatUsd((data.stakeAmount / 1e6) * pongPriceUsd)} each`
+      : '';
+    document.getElementById('intermission-tier').textContent = tierLabel + stakeUsd;
+
     intermission.classList.remove('hidden');
     if (sidePicker) sidePicker.classList.remove('hidden');
   }
 
-  let sec = data.seconds;
+  let sec = data.seconds || 30;
   const countdownEl = document.getElementById('intermission-countdown');
+  if (intermissionCountdownInterval) clearInterval(intermissionCountdownInterval);
   function updateCountdown() {
     GameClient.renderCountdown(sec);
     if (countdownEl) countdownEl.textContent = sec;
     sec--;
-    if (sec <= 0) {
-      clearInterval(countdownInterval);
-      // Don't hide intermission here — game-start handler does it
-    }
+    if (sec < 0) clearInterval(intermissionCountdownInterval);
   }
   updateCountdown();
-  const countdownInterval = setInterval(updateCountdown, 1000);
+  intermissionCountdownInterval = setInterval(updateCountdown, 1000);
 });
 
 // Socket: Game starts
 socket.on('game-start', (data) => {
   currentGameId = data.gameId;
+  if (intermissionCountdownInterval) { clearInterval(intermissionCountdownInterval); intermissionCountdownInterval = null; }
   showMatchmakingState('game');
   const intermission = document.getElementById('intermission-info');
   if (intermission) intermission.classList.add('hidden');
   GameClient.setGameInfo(data.gameId, data.player1.wallet);
 
-  // Set skin data from game-start (or fallback to countdown data)
   const p1Skin = data.player1.skin || pendingP1Skin || null;
   const p2Skin = data.player2.skin || pendingP2Skin || null;
   GameClient.setPlayerSkins(p1Skin, p2Skin);
 
-  // Compute mirroring: p1 is naturally on the LEFT, p2 on the RIGHT.
-  // Mirror when your chosen side doesn't match your natural side.
   const amP1 = (currentUser.wallet === data.player1.wallet);
   const myNaturalSide = amP1 ? 'left' : 'right';
   isMirrored = (chosenSide !== myNaturalSide);
-  console.log('Side picker:', { chosenSide, amP1, myNaturalSide, isMirrored });
   GameClient.setMirrored(isMirrored);
 
-  // Set player name labels to match the visual layout
   const leftLabel = document.getElementById('game-p1-name');
   const rightLabel = document.getElementById('game-p2-name');
   if (isMirrored) {
@@ -1082,9 +1556,13 @@ socket.on('game-start', (data) => {
     rightLabel.textContent = data.player2.username;
   }
 
-  // Show in-game stake display
-  updateGameStakeDisplay();
+  // Store opponent for post-game
+  lastGameOpponent = amP1
+    ? { wallet: data.player2.wallet, username: data.player2.username }
+    : { wallet: data.player1.wallet, username: data.player1.username };
 
+  currentCustomStake = data.stake || currentCustomStake;
+  updateGameStakeDisplay();
   GameClient.startRendering();
 });
 
@@ -1092,7 +1570,6 @@ socket.on('game-start', (data) => {
 socket.on('game-state', (data) => {
   if (data.gameId !== currentGameId) return;
   GameClient.updateState(data.state);
-  // Swap score display to match mirrored view
   if (isMirrored) {
     document.getElementById('game-score-p1').textContent = data.state.score.p2;
     document.getElementById('game-score-p2').textContent = data.state.score.p1;
@@ -1102,15 +1579,13 @@ socket.on('game-state', (data) => {
   }
 });
 
-// Socket: Opponent disconnected (15s grace period with live countdown)
+// Socket: Opponent disconnected
 let disconnectCountdownInterval = null;
 socket.on('opponent-disconnected', (data) => {
   if (data.gameId !== currentGameId) return;
   const banner = document.getElementById('disconnect-banner');
   const countEl = document.getElementById('disconnect-countdown');
   if (banner) banner.classList.remove('hidden');
-
-  // Start live countdown
   let remaining = 15;
   if (countEl) countEl.textContent = remaining;
   if (disconnectCountdownInterval) clearInterval(disconnectCountdownInterval);
@@ -1121,41 +1596,26 @@ socket.on('opponent-disconnected', (data) => {
   }, 1000);
 });
 
-// Socket: Opponent reconnected
 socket.on('opponent-reconnected', (data) => {
   if (data.gameId !== currentGameId) return;
   const banner = document.getElementById('disconnect-banner');
   if (banner) banner.classList.add('hidden');
-  if (disconnectCountdownInterval) {
-    clearInterval(disconnectCountdownInterval);
-    disconnectCountdownInterval = null;
-  }
+  if (disconnectCountdownInterval) { clearInterval(disconnectCountdownInterval); disconnectCountdownInterval = null; }
 });
 
-// Socket: Rejoin active game after reconnection
+// Socket: Rejoin active game
 socket.on('rejoin-game', (data) => {
-  console.log('Rejoining game:', data.gameId);
   currentGameId = data.gameId;
   currentGameTier = data.tier;
   showMatchmakingState('game');
-
-  // Hide intermission if it was showing
   const intermission = document.getElementById('intermission-info');
   if (intermission) intermission.classList.add('hidden');
-
-  // Set up game client
   GameClient.setGameInfo(data.gameId, data.player1.wallet);
-
-  // Set skin data for both players
   GameClient.setPlayerSkins(data.player1.skin || null, data.player2.skin || null);
-
-  // Restore mirroring based on chosen side
   const amP1 = (currentUser.wallet === data.player1.wallet);
   const myNaturalSide = amP1 ? 'left' : 'right';
   isMirrored = (chosenSide !== myNaturalSide);
   GameClient.setMirrored(isMirrored);
-
-  // Set player name labels
   const leftLabel = document.getElementById('game-p1-name');
   const rightLabel = document.getElementById('game-p2-name');
   if (isMirrored) {
@@ -1165,8 +1625,6 @@ socket.on('rejoin-game', (data) => {
     leftLabel.textContent = data.player1.username;
     rightLabel.textContent = data.player2.username;
   }
-
-  // Restore score
   if (data.state) {
     GameClient.updateState(data.state);
     if (isMirrored) {
@@ -1177,7 +1635,9 @@ socket.on('rejoin-game', (data) => {
       document.getElementById('game-score-p2').textContent = data.state.score.p2;
     }
   }
-
+  lastGameOpponent = amP1
+    ? { wallet: data.player2.wallet, username: data.player2.username }
+    : { wallet: data.player1.wallet, username: data.player1.username };
   updateGameStakeDisplay();
   GameClient.startRendering();
 });
@@ -1191,14 +1651,28 @@ socket.on('game-over', (data) => {
   const won = data.winner === currentUser.wallet;
 
   document.getElementById('gameover-title').textContent = won ? 'VICTORY!' : 'DEFEAT';
-  document.getElementById('gameover-title').className =
-    `text-2xl font-bold mb-2 ${won ? 'text-green-400' : 'text-red-400'}`;
-  document.getElementById('gameover-score').textContent =
-    `Final Score: ${data.score.p1} - ${data.score.p2}`;
+  document.getElementById('gameover-title').className = `text-2xl font-bold mb-2 ${won ? 'text-green-400' : 'text-red-400'}`;
+  document.getElementById('gameover-score').textContent = `Final Score: ${data.score.p1} - ${data.score.p2}`;
   document.getElementById('gameover-payout').textContent = won ? 'Payout processing...' : '';
 
+  // Show add friend button if not already friends
+  const addSection = document.getElementById('gameover-add-friend');
+  if (lastGameOpponent && currentUser.friends && !currentUser.friends.includes(lastGameOpponent.wallet)) {
+    document.getElementById('btn-add-opponent').textContent = `Add ${lastGameOpponent.username}`;
+    addSection.classList.remove('hidden');
+  } else {
+    addSection.classList.add('hidden');
+  }
+
+  // Keep currentGameId alive for post-game chat
   showMatchmakingState('gameover');
 });
+
+function addGameOpponent() {
+  if (!lastGameOpponent) return;
+  addFriend(lastGameOpponent.wallet);
+  document.getElementById('gameover-add-friend').classList.add('hidden');
+}
 
 // Socket: Payout complete
 socket.on('payout-complete', (data) => {
@@ -1207,11 +1681,9 @@ socket.on('payout-complete', (data) => {
   const burnPong = formatPong(data.burned);
   const winUsd = pongPriceUsd > 0 ? ` (${formatUsd((data.winnerShare / 1e6) * pongPriceUsd)})` : '';
   if (won) {
-    document.getElementById('gameover-payout').textContent =
-      `You won ${winPong} $PONG${winUsd}! (${burnPong} burned)`;
+    document.getElementById('gameover-payout').textContent = `You won ${winPong} $PONG${winUsd}! (${burnPong} burned)`;
   } else {
-    document.getElementById('gameover-payout').textContent =
-      `Your stake was lost. ${burnPong} $PONG was burned.`;
+    document.getElementById('gameover-payout').textContent = `Your stake was lost. ${burnPong} $PONG was burned.`;
   }
   refreshUserData();
 });
@@ -1224,8 +1696,7 @@ socket.on('game-forfeit', (data) => {
   if (disconnectCountdownInterval) { clearInterval(disconnectCountdownInterval); disconnectCountdownInterval = null; }
   const won = data.winner === currentUser.wallet;
   document.getElementById('gameover-title').textContent = won ? 'OPPONENT LEFT — YOU WIN!' : 'DISCONNECTED — FORFEIT';
-  document.getElementById('gameover-title').className =
-    `text-2xl font-bold mb-2 ${won ? 'text-green-400' : 'text-red-400'}`;
+  document.getElementById('gameover-title').className = `text-2xl font-bold mb-2 ${won ? 'text-green-400' : 'text-red-400'}`;
   document.getElementById('gameover-score').textContent = data.reason || '';
   showMatchmakingState('gameover');
 });
@@ -1233,16 +1704,23 @@ socket.on('game-forfeit', (data) => {
 function backToMatchmaking() {
   currentGameId = null;
   currentGameTier = null;
+  currentCustomStake = null;
   isMirrored = false;
   chosenSide = 'left';
+  isReady = false;
+  lastGameOpponent = null;
   const intermission = document.getElementById('intermission-info');
   if (intermission) intermission.classList.add('hidden');
+  if (intermissionCountdownInterval) { clearInterval(intermissionCountdownInterval); intermissionCountdownInterval = null; }
   showMatchmakingState('select');
 }
 
 // Socket: Online users update
 socket.on('online-users', (users) => {
   onlineUsers = users;
+  // Update online count display
+  const countEl = document.getElementById('online-count-num');
+  if (countEl) countEl.textContent = users.length;
 });
 
 // Socket: Errors
@@ -1293,10 +1771,16 @@ async function apiPostAuth(url, body, authHeader) {
 
 async function refreshUserData() {
   try {
-    const auth = getAuthHeader();
-    const res = await fetch('/api/profile', { headers: { Authorization: auth } }).then(r => r.json());
+    const res = await fetch('/api/profile', { headers: { Authorization: getAuthHeader() } }).then(r => r.json());
     if (res.user) currentUser = res.user;
   } catch (err) {
     console.error('Failed to refresh user:', err);
   }
+}
+
+// Init autocomplete on DOM ready
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initFriendSearch);
+} else {
+  initFriendSearch();
 }

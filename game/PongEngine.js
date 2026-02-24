@@ -20,9 +20,10 @@ const BALL_MAX_SPEED = 14;
 const WIN_SCORE = 5;
 const TICK_RATE = 1000 / 60;
 const SCORE_PAUSE_TICKS = 90;   // 1.5 second pause after scoring
+const READY_TIMEOUT_MS = 30000; // 30 seconds to ready up
 
 class PongEngine {
-  constructor(gameId, player1, player2, tier, io, activeGames) {
+  constructor(gameId, player1, player2, tier, io, activeGames, customStake) {
     this.gameId = gameId;
     this.player1 = player1;
     this.player2 = player2;
@@ -30,6 +31,17 @@ class PongEngine {
     this.io = io;
     this.activeGames = activeGames;
     this.pauseTicks = 0;
+    this.customStake = customStake || null; // for duel matches
+
+    // Ready system
+    this.readyPhase = true;
+    this.p1Ready = false;
+    this.p2Ready = false;
+    this.readyTimeout = null;
+    this.gameStarted = false;
+
+    // In-game chat messages (last 20)
+    this.chatMessages = [];
 
     this.state = {
       ball: { x: CANVAS_W / 2, y: CANVAS_H / 2, vx: 0, vy: 0 },
@@ -39,7 +51,7 @@ class PongEngine {
       status: 'playing',
       winner: null,
       paused: false,
-      sound: null, // 'paddle'|'wall'|'score' — client plays sound then clears
+      sound: null,
     };
 
     this.input = {
@@ -48,7 +60,7 @@ class PongEngine {
     };
 
     this.interval = null;
-    this.disconnected = new Set(); // wallets of disconnected players
+    this.disconnected = new Set();
   }
 
   setDisconnect(wallet) {
@@ -63,16 +75,82 @@ class PongEngine {
     return this.disconnected.has(wallet);
   }
 
+  /** Get the stake amount (custom for duels, tier-based otherwise) */
+  getStakeAmount() {
+    if (this.customStake) return this.customStake;
+    return STAKE_TIERS[this.tier] || 0;
+  }
+
+  /** Begin the ready phase — both players must press READY within 30s */
+  startReadyPhase() {
+    this.readyPhase = true;
+    this.p1Ready = false;
+    this.p2Ready = false;
+
+    this.emit('ready-phase', {
+      gameId: this.gameId,
+      p1Ready: false,
+      p2Ready: false,
+      timeout: READY_TIMEOUT_MS / 1000,
+    });
+
+    // 30s timeout — if both not ready, cancel game
+    this.readyTimeout = setTimeout(() => {
+      if (!this.p1Ready || !this.p2Ready) {
+        this.cancelReadyTimeout();
+      }
+    }, READY_TIMEOUT_MS);
+  }
+
+  /** Handle a player marking themselves as ready */
+  playerReady(wallet) {
+    if (!this.readyPhase) return;
+
+    if (wallet === this.player1.wallet) this.p1Ready = true;
+    if (wallet === this.player2.wallet) this.p2Ready = true;
+
+    this.emit('ready-status', {
+      gameId: this.gameId,
+      p1Ready: this.p1Ready,
+      p2Ready: this.p2Ready,
+    });
+
+    // Both ready — start 3-second countdown then game
+    if (this.p1Ready && this.p2Ready) {
+      if (this.readyTimeout) { clearTimeout(this.readyTimeout); this.readyTimeout = null; }
+      this.readyPhase = false;
+
+      this.emit('ready-countdown', { gameId: this.gameId, seconds: 3 });
+      setTimeout(() => this.start(), 3000);
+    }
+  }
+
+  /** Cancel game if ready timeout expires */
+  cancelReadyTimeout() {
+    this.readyPhase = false;
+    if (this.readyTimeout) { clearTimeout(this.readyTimeout); this.readyTimeout = null; }
+    this.emit('ready-expired', {
+      gameId: this.gameId,
+      reason: 'Not all players readied up in time. Game cancelled.',
+    });
+    // Mark match as cancelled
+    Match.findOneAndUpdate({ gameId: this.gameId }, { status: 'cancelled' }).catch(() => {});
+    this.activeGames.delete(this.gameId);
+  }
+
   start() {
+    if (this.gameStarted) return;
+    this.gameStarted = true;
+
+    const stakeAmount = this.getStakeAmount();
     this.emit('game-start', {
       gameId: this.gameId,
       player1: { wallet: this.player1.wallet, username: this.player1.username, skin: this.player1.skin || null },
       player2: { wallet: this.player2.wallet, username: this.player2.username, skin: this.player2.skin || null },
       tier: this.tier,
-      stake: STAKE_TIERS[this.tier],
+      stake: stakeAmount,
     });
 
-    // Start with a brief pause then launch ball
     this.launchBall();
     this.interval = setInterval(() => this.tick(), TICK_RATE);
   }
@@ -85,6 +163,25 @@ class PongEngine {
     if (direction === 'up' || direction === 'down' || direction === 'stop') {
       this.input[wallet] = direction;
     }
+  }
+
+  /** Handle in-game chat message */
+  handleChat(wallet, text) {
+    if (!text || text.length > 100) return;
+    const username = wallet === this.player1.wallet
+      ? this.player1.username
+      : this.player2.username;
+
+    const msg = { from: wallet, username, text, time: Date.now() };
+    this.chatMessages.push(msg);
+    if (this.chatMessages.length > 20) this.chatMessages.shift();
+
+    this.emit('game-chat-msg', {
+      gameId: this.gameId,
+      from: wallet,
+      username,
+      text,
+    });
   }
 
   tick() {
@@ -108,7 +205,7 @@ class PongEngine {
         this.state.paused = false;
         this.launchBall();
       }
-      this.broadcastState(); // force — pause state is important
+      this.broadcastState();
       return;
     }
 
@@ -135,14 +232,11 @@ class PongEngine {
     // --- Left paddle collision (player 1) — swept detection ---
     const p1Right = 10 + PADDLE_W;
     if (ball.vx < 0) {
-      // Check if ball's left edge crossed the paddle's right edge this tick
       const oldLeft = oldX;
       const newLeft = ball.x;
       if (newLeft <= p1Right && oldLeft >= p1Right) {
-        // Parametric time of crossing: when did left edge == p1Right?
         const t = (oldLeft - p1Right) / (oldLeft - newLeft);
         const hitY = oldY + ball.vy * t;
-        // Check Y overlap at the moment of crossing
         if (hitY + BALL_SIZE >= this.state.paddle1.y &&
             hitY <= this.state.paddle1.y + PADDLE_H) {
           const speed = Math.min(Math.abs(ball.vx) + BALL_SPEED_INCREMENT, BALL_MAX_SPEED);
@@ -156,7 +250,6 @@ class PongEngine {
       } else if (ball.x <= p1Right && ball.x + BALL_SIZE >= 10 &&
                  ball.y + BALL_SIZE >= this.state.paddle1.y &&
                  ball.y <= this.state.paddle1.y + PADDLE_H) {
-        // Standard overlap fallback (ball already inside paddle zone)
         const speed = Math.min(Math.abs(ball.vx) + BALL_SPEED_INCREMENT, BALL_MAX_SPEED);
         ball.vx = speed;
         ball.x = p1Right;
@@ -169,14 +262,11 @@ class PongEngine {
     // --- Right paddle collision (player 2) — swept detection ---
     const p2Left = CANVAS_W - 10 - PADDLE_W;
     if (ball.vx > 0) {
-      // Check if ball's right edge crossed the paddle's left edge this tick
       const oldRight = oldX + BALL_SIZE;
       const newRight = ball.x + BALL_SIZE;
       if (newRight >= p2Left && oldRight <= p2Left) {
-        // Parametric time of crossing
         const t = (p2Left - oldRight) / (newRight - oldRight);
         const hitY = oldY + ball.vy * t;
-        // Check Y overlap at the moment of crossing
         if (hitY + BALL_SIZE >= this.state.paddle2.y &&
             hitY <= this.state.paddle2.y + PADDLE_H) {
           const speed = Math.min(Math.abs(ball.vx) + BALL_SPEED_INCREMENT, BALL_MAX_SPEED);
@@ -190,7 +280,6 @@ class PongEngine {
       } else if (ball.x + BALL_SIZE >= p2Left && ball.x <= CANVAS_W - 10 &&
                  ball.y + BALL_SIZE >= this.state.paddle2.y &&
                  ball.y <= this.state.paddle2.y + PADDLE_H) {
-        // Standard overlap fallback
         const speed = Math.min(Math.abs(ball.vx) + BALL_SPEED_INCREMENT, BALL_MAX_SPEED);
         ball.vx = -speed;
         ball.x = p2Left - BALL_SIZE;
@@ -222,7 +311,6 @@ class PongEngine {
   }
 
   resetBall() {
-    // Center ball, zero velocity — pause before launching
     this.state.ball = {
       x: CANVAS_W / 2 - BALL_SIZE / 2,
       y: CANVAS_H / 2 - BALL_SIZE / 2,
@@ -234,7 +322,7 @@ class PongEngine {
   }
 
   launchBall() {
-    const angle = (Math.random() - 0.5) * Math.PI / 3; // -30 to +30 degrees
+    const angle = (Math.random() - 0.5) * Math.PI / 3;
     const dir = Math.random() > 0.5 ? 1 : -1;
     this.state.ball.vx = Math.cos(angle) * BALL_SPEED_INITIAL * dir;
     this.state.ball.vy = Math.sin(angle) * BALL_SPEED_INITIAL;
@@ -259,11 +347,15 @@ class PongEngine {
     this.emit('game-over', {
       gameId: this.gameId,
       winner: winnerWallet,
+      loser: loserWallet,
       score: this.state.score,
+      player1: { wallet: this.player1.wallet, username: this.player1.username },
+      player2: { wallet: this.player2.wallet, username: this.player2.username },
     });
 
     try {
-      const totalPot = STAKE_TIERS[this.tier] * 2;
+      const stakeAmount = this.getStakeAmount();
+      const totalPot = stakeAmount * 2;
       const result = await payoutWinner(winnerWallet, totalPot);
 
       await Match.findOneAndUpdate({ gameId: this.gameId }, {
@@ -293,7 +385,11 @@ class PongEngine {
       this.emit('payout-error', { gameId: this.gameId, error: err.message });
     }
 
-    this.activeGames.delete(this.gameId);
+    // Don't delete from activeGames immediately — keep for post-game chat
+    // Clean up after 5 minutes
+    setTimeout(() => {
+      this.activeGames.delete(this.gameId);
+    }, 300000);
   }
 
   forfeit(disconnectedWallet) {
@@ -301,6 +397,7 @@ class PongEngine {
       ? this.player2.wallet
       : this.player1.wallet;
     clearInterval(this.interval);
+    if (this.readyTimeout) { clearTimeout(this.readyTimeout); this.readyTimeout = null; }
     this.emit('game-forfeit', { gameId: this.gameId, winner: winnerWallet, reason: 'opponent disconnected' });
     this.endGame(winnerWallet);
   }
@@ -311,4 +408,4 @@ class PongEngine {
   }
 }
 
-module.exports = { PongEngine, STAKE_TIERS, WIN_SCORE, CANVAS_W, CANVAS_H };
+module.exports = { PongEngine, STAKE_TIERS, WIN_SCORE, CANVAS_W, CANVAS_H, READY_TIMEOUT_MS };

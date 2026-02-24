@@ -123,13 +123,28 @@ router.post('/upload-pfp', upload.single('pfp'), async (req, res) => {
 });
 
 /**
+ * POST /api/profile/upload-banner
+ * Upload a profile banner image. Returns the URL.
+ */
+router.post('/upload-banner', upload.single('banner'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+    const bannerUrl = '/uploads/' + req.file.filename;
+    await User.findOneAndUpdate({ wallet: req.wallet }, { $set: { banner: bannerUrl } });
+    res.json({ banner: bannerUrl });
+  } catch (err) {
+    res.status(500).json({ error: err.message || 'Upload failed' });
+  }
+});
+
+/**
  * GET /api/profile/:wallet
  * View another user's public profile.
  */
 router.get('/:wallet', async (req, res) => {
   try {
     const user = await User.findOne({ wallet: req.params.wallet })
-      .select('wallet username pfp bio stats equippedSkin createdAt');
+      .select('wallet username pfp banner bio stats equippedSkin createdAt');
     if (!user) return res.status(404).json({ error: 'User not found' });
     res.json({ user });
   } catch (err) {

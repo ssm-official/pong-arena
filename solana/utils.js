@@ -257,6 +257,54 @@ async function payoutWinner(winnerWallet, totalPot) {
 }
 
 /**
+ * Build a custom escrow transaction for duel stakes (any amount).
+ * @param {string} playerWallet - player's wallet address
+ * @param {number} amount - stake amount in base units (not display units)
+ */
+async function buildCustomEscrowTransaction(playerWallet, amount) {
+  if (!amount || amount <= 0) throw new Error('Invalid stake amount');
+
+  const player = new PublicKey(playerWallet);
+  const treasury = getTreasuryKeypair();
+  const mint = PONG_MINT();
+
+  const playerATA = await getATA(mint, player);
+  const treasuryATA = await getATA(mint, treasury.publicKey);
+
+  const balance = await getPlayerBalance(playerWallet);
+  if (balance < amount) {
+    const needed = amount / (10 ** PONG_DECIMALS);
+    const has = balance / (10 ** PONG_DECIMALS);
+    throw new Error(`Insufficient $PONG. Need ${needed.toLocaleString()}, have ${has.toLocaleString()}`);
+  }
+
+  const tx = new Transaction();
+
+  const treasuryExists = await tokenAccountExists(treasuryATA);
+  if (!treasuryExists) {
+    tx.add(
+      createAssociatedTokenAccountInstruction(
+        player, treasuryATA, treasury.publicKey, mint, TOKEN_PROGRAM, ASSOCIATED_TOKEN_PROGRAM_ID
+      )
+    );
+  }
+
+  tx.add(
+    createTransferInstruction(
+      playerATA, treasuryATA, player, amount, [], TOKEN_PROGRAM
+    )
+  );
+
+  tx.feePayer = player;
+  tx.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
+
+  return {
+    transaction: tx.serialize({ requireAllSignatures: false }).toString('base64'),
+    amount
+  };
+}
+
+/**
  * Build skin purchase transaction (player -> treasury).
  */
 async function buildSkinPurchaseTransaction(playerWallet, price) {
@@ -323,9 +371,11 @@ module.exports = {
   STAKE_TIERS,
   PONG_DECIMALS,
   buildEscrowTransaction,
+  buildCustomEscrowTransaction,
   verifyEscrowTx,
   payoutWinner,
   refundPlayer,
   buildSkinPurchaseTransaction,
   burnSkinRevenue,
+  getPlayerBalance,
 };

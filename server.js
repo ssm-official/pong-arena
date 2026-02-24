@@ -19,10 +19,12 @@ const profileRoutes = require('./routes/profile');
 const friendRoutes = require('./routes/friends');
 const shopRoutes = require('./routes/shop');
 const adminRoutes = require('./routes/admin');
+const leaderboardRoutes = require('./routes/leaderboard');
 const { authMiddleware } = require('./middleware/auth');
 const { setupMatchmaking } = require('./game/matchmaking');
 const { PongEngine } = require('./game/PongEngine');
 const { seedSkins } = require('./models/Skin');
+const Message = require('./models/Message');
 
 const app = express();
 const server = http.createServer(app);
@@ -31,8 +33,8 @@ const io = new Server(server, {
 });
 
 // --------------- Middleware ---------------
-app.set('trust proxy', 1); // trust Railway's reverse proxy
-app.use(helmet({ contentSecurityPolicy: false })); // relaxed CSP for dev
+app.set('trust proxy', 1);
+app.use(helmet({ contentSecurityPolicy: false }));
 app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public'), {
@@ -45,7 +47,7 @@ app.use(express.static(path.join(__dirname, 'public'), {
 
 // Rate limit API routes
 const apiLimiter = rateLimit({
-  windowMs: 1 * 60 * 1000, // 1 minute
+  windowMs: 1 * 60 * 1000,
   max: 60,
   message: { error: 'Too many requests, slow down.' }
 });
@@ -57,6 +59,7 @@ app.use('/api/profile', authMiddleware, profileRoutes);
 app.use('/api/friends', authMiddleware, friendRoutes);
 app.use('/api/shop', authMiddleware, shopRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/leaderboard', leaderboardRoutes);
 
 // Admin console
 app.get('/admin.html', (req, res) => {
@@ -74,10 +77,8 @@ app.get('*', (req, res) => {
 });
 
 // --------------- In-Memory State ---------------
-// Tracks online users: wallet -> { socketId, username }
-const onlineUsers = new Map();
-// Active games: gameId -> PongEngine instance
-const activeGames = new Map();
+const onlineUsers = new Map();    // wallet -> { socketId, username }
+const activeGames = new Map();    // gameId -> PongEngine instance
 
 // --------------- Socket.io ---------------
 io.on('connection', (socket) => {
@@ -108,7 +109,6 @@ io.on('connection', (socket) => {
         console.log(`${isP1 ? 'Player1' : 'Player2'} reconnected to game ${gameId}`);
       }
 
-      // Always send rejoin data so the client can restore game UI
       socket.emit('rejoin-game', {
         gameId,
         player1: { wallet: game.player1.wallet, username: game.player1.username, skin: game.player1.skin || null },
@@ -119,14 +119,60 @@ io.on('connection', (socket) => {
     }
   });
 
-  // --- Matchmaking ---
+  // --- Matchmaking (includes duel, ready, game-chat handlers) ---
   setupMatchmaking(io, socket, onlineUsers, activeGames);
 
   // --- In-Game Paddle Input ---
   socket.on('paddle-move', ({ gameId, direction }) => {
     const game = activeGames.get(gameId);
     if (!game) return;
-    game.handleInput(socket.wallet, direction); // 'up' | 'down' | 'stop'
+    game.handleInput(socket.wallet, direction);
+  });
+
+  // --- Direct Messages ---
+  socket.on('dm-send', async ({ to, text }) => {
+    if (!socket.wallet || !to || !text) return;
+    if (typeof text !== 'string' || text.length > 500) return;
+
+    try {
+      const msg = await Message.create({
+        from: socket.wallet,
+        to,
+        text: text.trim(),
+      });
+
+      // Emit to recipient if online
+      const recipientInfo = onlineUsers.get(to);
+      if (recipientInfo) {
+        io.to(recipientInfo.socketId).emit('dm-receive', {
+          from: socket.wallet,
+          fromUsername: socket.username,
+          text: msg.text,
+          createdAt: msg.createdAt,
+        });
+      }
+
+      // Confirm to sender
+      socket.emit('dm-sent', {
+        to,
+        text: msg.text,
+        createdAt: msg.createdAt,
+      });
+    } catch (err) {
+      console.error('DM send error:', err.message);
+    }
+  });
+
+  socket.on('dm-read', async ({ friendWallet }) => {
+    if (!socket.wallet || !friendWallet) return;
+    try {
+      await Message.updateMany(
+        { from: friendWallet, to: socket.wallet, read: false },
+        { $set: { read: true } }
+      );
+    } catch (err) {
+      console.error('DM read error:', err.message);
+    }
   });
 
   // --- Disconnect ---
@@ -135,19 +181,16 @@ io.on('connection', (socket) => {
       onlineUsers.delete(socket.wallet);
       io.emit('online-users', Array.from(onlineUsers.keys()));
 
-      // Mark disconnected in active games — 15s grace period before forfeit
       const wallet = socket.wallet;
       for (const [gameId, game] of activeGames) {
         if (game.hasPlayer(wallet)) {
           game.setDisconnect(wallet);
 
-          // Notify opponent
           const oppSocketId = wallet === game.player1.wallet
             ? game.player2.socketId : game.player1.socketId;
           io.to(oppSocketId).emit('opponent-disconnected', { gameId });
 
           setTimeout(() => {
-            // Only forfeit if still disconnected after grace period
             if (activeGames.has(gameId) && game.isDisconnected(wallet)) {
               game.forfeit(wallet);
               activeGames.delete(gameId);
@@ -166,7 +209,7 @@ const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/pong-a
 mongoose.connect(MONGODB_URI)
   .then(async () => {
     console.log('Connected to MongoDB');
-    await seedSkins(); // populate default skins
+    await seedSkins();
     const PORT = process.env.PORT || 3000;
     server.listen(PORT, () => {
       console.log(`Pong Arena running at http://localhost:${PORT}`);

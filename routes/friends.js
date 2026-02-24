@@ -5,6 +5,7 @@
 const express = require('express');
 const router = express.Router();
 const User = require('../models/User');
+const Message = require('../models/Message');
 
 /**
  * GET /api/friends
@@ -171,6 +172,83 @@ router.post('/remove', async (req, res) => {
     res.json({ status: 'removed' });
   } catch (err) {
     res.status(500).json({ error: 'Failed to remove friend' });
+  }
+});
+
+// ===========================================
+// MESSAGING (DMs)
+// ===========================================
+
+/**
+ * GET /api/friends/messages/:friendWallet?before=timestamp&limit=50
+ * Get paginated message history with a friend.
+ */
+router.get('/messages/:friendWallet', async (req, res) => {
+  try {
+    const { friendWallet } = req.params;
+    const limit = Math.min(parseInt(req.query.limit) || 50, 100);
+    const before = req.query.before ? new Date(parseInt(req.query.before)) : new Date();
+
+    const messages = await Message.find({
+      $or: [
+        { from: req.wallet, to: friendWallet },
+        { from: friendWallet, to: req.wallet }
+      ],
+      createdAt: { $lt: before }
+    })
+    .sort({ createdAt: -1 })
+    .limit(limit);
+
+    // Mark messages from friend as read
+    await Message.updateMany(
+      { from: friendWallet, to: req.wallet, read: false },
+      { $set: { read: true } }
+    );
+
+    res.json({ messages: messages.reverse() });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch messages' });
+  }
+});
+
+/**
+ * POST /api/friends/messages
+ * Send a message. Body: { to, text }
+ */
+router.post('/messages', async (req, res) => {
+  try {
+    const { to, text } = req.body;
+    if (!to || !text) return res.status(400).json({ error: 'Missing to or text' });
+    if (text.length > 500) return res.status(400).json({ error: 'Message too long (max 500)' });
+
+    const msg = await Message.create({
+      from: req.wallet,
+      to,
+      text: text.trim()
+    });
+
+    res.json({ message: msg });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to send message' });
+  }
+});
+
+/**
+ * GET /api/friends/unread
+ * Get unread message count per friend.
+ */
+router.get('/unread', async (req, res) => {
+  try {
+    const unread = await Message.aggregate([
+      { $match: { to: req.wallet, read: false } },
+      { $group: { _id: '$from', count: { $sum: 1 } } }
+    ]);
+
+    const counts = {};
+    unread.forEach(u => { counts[u._id] = u.count; });
+    res.json({ unread: counts });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch unread counts' });
   }
 });
 
