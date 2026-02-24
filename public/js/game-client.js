@@ -1,11 +1,12 @@
 // ===========================================
 // Game Client — Canvas rendering + input
 // ===========================================
-// APPROACH: Client-side prediction (like practice mode).
-//   Ball: runs local physics (position += velocity, wall bounces).
-//         On each server snapshot, smoothly corrects toward server pos.
-//   Opponent paddle: smoothly lerps toward latest server position.
-//   Own paddle: instant local movement, server just confirms.
+// APPROACH: Mirror practice mode exactly.
+//   Own paddle: 100% local, never overwritten by server.
+//   Ball: accept server position each snapshot, run local physics between.
+//   Opponent paddle: lerp toward latest server position.
+// The server is authoritative but we never "fight" it — we just accept
+// its snapshots and predict smoothly between them.
 
 const GameClient = (() => {
   const CANVAS_W = 800;
@@ -16,9 +17,6 @@ const GameClient = (() => {
   const BALL_SIZE = 16;
   const PHYSICS_DT = 1000 / 60; // fixed physics timestep
 
-  // How fast we correct toward server position (0 = never, 1 = instant snap)
-  const BALL_CORRECTION_RATE = 0.3;    // blend 30% toward server each snapshot
-  const BALL_SNAP_THRESHOLD = 40;      // snap instantly if error > 40px
   const OPP_PADDLE_LERP = 0.25;       // lerp opponent paddle 25% per frame
 
   // Skin image render dimensions (centered on paddle hitbox)
@@ -162,7 +160,9 @@ const GameClient = (() => {
 
   /**
    * Called when a server state snapshot arrives (~20Hz).
-   * We correct our local prediction toward the server's authoritative state.
+   * Own paddle: NEVER touched (100% local like practice mode).
+   * Ball: accept server position + velocity, then local physics predicts between snapshots.
+   * Opponent paddle: set target for smooth lerp.
    */
   function updateState(state, sounds) {
     displayScore = state.score;
@@ -175,37 +175,18 @@ const GameClient = (() => {
       playGameSound(state.sound);
     }
 
-    // --- Own paddle: just snap to server (our input is already there) ---
-    const serverMyY = amPlayer1 ? state.paddle1.y : state.paddle2.y;
-    myY = serverMyY;
+    // --- Own paddle: DO NOT TOUCH. Local input is authoritative for rendering. ---
 
     // --- Opponent paddle: set target, display lerps toward it each frame ---
     oppTargetY = amPlayer1 ? state.paddle2.y : state.paddle1.y;
 
-    // --- Ball: correct local prediction toward server position ---
-    const serverBallX = state.ball.x;
-    const serverBallY = state.ball.y;
-    const serverBallVx = state.ball.vx || 0;
-    const serverBallVy = state.ball.vy || 0;
-
-    // Always adopt server velocity (it changes on paddle hits, we can't predict those)
-    ballVx = serverBallVx;
-    ballVy = serverBallVy;
-
-    // How far off is our prediction?
-    const errX = serverBallX - ballX;
-    const errY = serverBallY - ballY;
-    const errDist = Math.sqrt(errX * errX + errY * errY);
-
-    if (errDist > BALL_SNAP_THRESHOLD || isPaused) {
-      // Large error or paused (score reset) — snap immediately
-      ballX = serverBallX;
-      ballY = serverBallY;
-    } else {
-      // Small error — blend smoothly toward server position
-      ballX += errX * BALL_CORRECTION_RATE;
-      ballY += errY * BALL_CORRECTION_RATE;
-    }
+    // --- Ball: accept server state directly (no blending/fighting) ---
+    ballX = state.ball.x;
+    ballY = state.ball.y;
+    ballVx = state.ball.vx || 0;
+    ballVy = state.ball.vy || 0;
+    // Reset accumulator so local physics starts fresh from this snapshot
+    accumulator = 0;
   }
 
   function startRendering() {
@@ -220,38 +201,32 @@ const GameClient = (() => {
   }
 
   function renderLoop(timestamp) {
-    if (!lastFrameTime) lastFrameTime = timestamp;
+    if (!lastFrameTime) {
+      lastFrameTime = timestamp;
+      animFrameId = requestAnimationFrame(renderLoop);
+      return;
+    }
     let delta = timestamp - lastFrameTime;
     lastFrameTime = timestamp;
 
     // Cap delta to prevent spiral of death on tab switch
-    if (delta > 100) delta = 100;
+    if (delta > 200) delta = 200;
 
-    // --- Own paddle: move locally based on input ---
-    const paddleTicks = delta / PHYSICS_DT;
-    if (currentInput === 'up') {
-      myY = Math.max(0, myY - PADDLE_SPEED * paddleTicks);
-    } else if (currentInput === 'down') {
-      myY = Math.min(CANVAS_H - PADDLE_H, myY + PADDLE_SPEED * paddleTicks);
-    }
+    // --- Fixed-timestep accumulator (identical to practice mode) ---
+    accumulator += delta;
 
-    // --- Opponent paddle: smooth lerp toward target ---
-    const oppDiff = oppTargetY - oppDisplayY;
-    if (Math.abs(oppDiff) < 1) {
-      oppDisplayY = oppTargetY;
-    } else {
-      oppDisplayY += oppDiff * OPP_PADDLE_LERP;
-    }
+    while (accumulator >= PHYSICS_DT) {
+      accumulator -= PHYSICS_DT;
 
-    // --- Ball: fixed-timestep physics prediction ---
-    if (!isPaused) {
-      accumulator += delta;
-      // Run up to 4 physics steps per frame to prevent spiral
-      let steps = 0;
-      while (accumulator >= PHYSICS_DT && steps < 4) {
-        accumulator -= PHYSICS_DT;
-        steps++;
+      // Own paddle: move exactly like practice mode — one PADDLE_SPEED per tick
+      if (currentInput === 'up') {
+        myY = Math.max(0, myY - PADDLE_SPEED);
+      } else if (currentInput === 'down') {
+        myY = Math.min(CANVAS_H - PADDLE_H, myY + PADDLE_SPEED);
+      }
 
+      // Ball: predict between server snapshots
+      if (!isPaused) {
         ballX += ballVx;
         ballY += ballVy;
 
@@ -265,11 +240,17 @@ const GameClient = (() => {
           ballVy = -Math.abs(ballVy);
         }
       }
-      // Don't let accumulator grow unbounded
-      if (accumulator > PHYSICS_DT * 4) accumulator = 0;
     }
 
-    // Clamp ball to canvas
+    // --- Opponent paddle: smooth lerp toward target (outside fixed timestep) ---
+    const oppDiff = oppTargetY - oppDisplayY;
+    if (Math.abs(oppDiff) < 1) {
+      oppDisplayY = oppTargetY;
+    } else {
+      oppDisplayY += oppDiff * OPP_PADDLE_LERP;
+    }
+
+    // Clamp ball to canvas for drawing
     const drawBallX = Math.max(0, Math.min(CANVAS_W - BALL_SIZE, ballX));
     const drawBallY = Math.max(0, Math.min(CANVAS_H - BALL_SIZE, ballY));
 
