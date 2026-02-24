@@ -42,6 +42,33 @@
     <!-- ADMIN PANEL -->
     <div id="admin-view" class="hidden">
 
+      <!-- SVG TEMPLATE DOWNLOAD -->
+      <div class="bg-arena-card rounded-xl p-6 glow-border mb-6">
+        <div class="flex items-center justify-between">
+          <div>
+            <h3 class="text-lg font-bold text-purple-400">Skin Template</h3>
+            <p class="text-gray-500 text-xs mt-1">SVG template at correct scale: 120x400px canvas, rounded paddle body centered. Design for LEFT paddle — game auto-mirrors for right side.</p>
+          </div>
+          <div class="flex gap-2">
+            <button onclick="downloadTemplate()" class="bg-purple-600 hover:bg-purple-700 px-4 py-2 rounded-lg text-sm font-medium transition">
+              Download Template SVG
+            </button>
+            <button onclick="previewTemplate()" class="bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded-lg text-sm font-medium transition">
+              Preview
+            </button>
+          </div>
+        </div>
+        <div id="template-preview" class="hidden mt-4 flex items-center gap-6">
+          <div class="bg-gray-900 rounded-lg p-4 border border-gray-700" id="template-preview-container"></div>
+          <div class="text-xs text-gray-500 space-y-1">
+            <p><span class="text-purple-400">Purple outline</span> = paddle hitbox (14x110, game scale)</p>
+            <p><span class="text-gray-400">Gray rect</span> = paddle body zone (~28x220)</p>
+            <p>Full canvas = 120x400 (decoration zone)</p>
+            <p>Rendered in-game at 60x200px</p>
+          </div>
+        </div>
+      </div>
+
       <!-- CREATE CRATE -->
       <div class="bg-arena-card rounded-xl p-6 glow-border mb-6">
         <h3 class="text-lg font-bold mb-3 text-purple-400">Create Crate</h3>
@@ -78,7 +105,7 @@
           <div>
             <label class="block text-sm text-gray-400 mb-1">Type</label>
             <select id="skin-type" onchange="toggleSkinInputs()" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:border-purple-500 focus:outline-none">
-              <option value="image">Image (PNG)</option>
+              <option value="image">Image (SVG/PNG)</option>
               <option value="color">Color</option>
             </select>
           </div>
@@ -88,8 +115,8 @@
           </div>
         </div>
         <div id="skin-file-input" class="mt-3">
-          <label class="block text-sm text-gray-400 mb-1">PNG File (120x400, transparent bg)</label>
-          <input id="skin-file" type="file" accept=".png" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white" />
+          <label class="block text-sm text-gray-400 mb-1">SVG or PNG file (120x400, transparent bg)</label>
+          <input id="skin-file" type="file" accept=".svg,.png" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white" />
         </div>
         <button onclick="uploadSkin()" class="mt-3 bg-purple-600 hover:bg-purple-700 px-4 py-2 rounded-lg text-sm font-medium transition">
           Upload Skin
@@ -104,10 +131,7 @@
   <script>
     let adminPw = sessionStorage.getItem('adminPw') || '';
 
-    // Auto-login if password cached
-    if (adminPw) {
-      verifyLogin(adminPw);
-    }
+    if (adminPw) { verifyLogin(adminPw); }
 
     function headers() {
       return { 'Content-Type': 'application/json', 'x-admin-password': adminPw };
@@ -142,22 +166,92 @@
       }
     }
 
+    // ============================
+    // SVG TEMPLATE
+    // ============================
+    function getSkinTemplateSVG() {
+      return `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 400" width="120" height="400">
+  <!--
+    PONG ARENA SKIN TEMPLATE
+    Canvas: 120x400px
+    Rendered in-game at: 60x200px
+    Paddle hitbox: 14x110 (centered)
+    Design for LEFT-side paddle; game auto-mirrors for right side.
+
+    ZONES:
+    - Hat/crown zone: y 0-90 (above paddle)
+    - Paddle body:    y 90-310 (center 28px wide, x 46-74)
+    - Trail zone:     y 310-400 (below paddle)
+    - Wings/shields:  x 0-46 and x 74-120 (sides)
+
+    DELETE THIS GUIDE LAYER WHEN DONE — keep your art only.
+  -->
+
+  <!-- GUIDE LAYER (delete before exporting) -->
+  <g id="guides" opacity="0.3">
+    <!-- Full canvas border -->
+    <rect x="1" y="1" width="118" height="398" fill="none" stroke="#555" stroke-width="1" stroke-dasharray="4,4"/>
+    <!-- Paddle body zone -->
+    <rect x="46" y="90" width="28" height="220" rx="8" ry="8" fill="none" stroke="#a855f7" stroke-width="2"/>
+    <!-- Center crosshair -->
+    <line x1="60" y1="190" x2="60" y2="210" stroke="#a855f7" stroke-width="1"/>
+    <line x1="50" y1="200" x2="70" y2="200" stroke="#a855f7" stroke-width="1"/>
+    <!-- Zone labels -->
+    <text x="60" y="50" text-anchor="middle" fill="#888" font-size="10" font-family="sans-serif">HAT ZONE</text>
+    <text x="60" y="200" text-anchor="middle" fill="#a855f7" font-size="10" font-family="sans-serif">PADDLE</text>
+    <text x="60" y="360" text-anchor="middle" fill="#888" font-size="10" font-family="sans-serif">TRAIL ZONE</text>
+  </g>
+
+  <!-- YOUR ART GOES HERE -->
+  <!-- Example: a basic rounded paddle shape -->
+  <rect x="46" y="90" width="28" height="220" rx="8" ry="8" fill="#a855f7"/>
+</svg>`;
+    }
+
+    function downloadTemplate() {
+      const svg = getSkinTemplateSVG();
+      const blob = new Blob([svg], { type: 'image/svg+xml' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'pong-arena-skin-template.svg';
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    function previewTemplate() {
+      const container = document.getElementById('template-preview-container');
+      const wrapper = document.getElementById('template-preview');
+      if (wrapper.classList.contains('hidden')) {
+        // Show at 50% scale for preview
+        container.innerHTML = `<div style="width:60px;height:200px;overflow:visible">${getSkinTemplateSVG().replace('width="120"', 'width="60"').replace('height="400"', 'height="200"')}</div>`;
+        wrapper.classList.remove('hidden');
+      } else {
+        wrapper.classList.add('hidden');
+      }
+    }
+
+    // ============================
+    // SKIN INPUTS TOGGLE
+    // ============================
     function toggleSkinInputs() {
       const type = document.getElementById('skin-type').value;
       document.getElementById('skin-file-input').style.display = type === 'image' ? '' : 'none';
       document.getElementById('skin-color-input').style.display = type === 'color' ? '' : 'none';
     }
 
+    // ============================
+    // CRATE CRUD
+    // ============================
     async function loadCrates() {
       const res = await fetch('/api/admin/crates', { headers: { 'x-admin-password': adminPw } }).then(r => r.json());
       const crates = res.crates || [];
 
-      // Populate crate dropdown for skin upload
       const sel = document.getElementById('skin-crate');
       sel.innerHTML = '<option value="">Select crate...</option>' +
         crates.map(c => `<option value="${c.crateId}">${esc(c.name)}</option>`).join('');
 
-      // Render crate list
       const container = document.getElementById('crate-list');
       if (crates.length === 0) {
         container.innerHTML = '<p class="text-gray-500">No crates yet. Create one above.</p>';
@@ -211,13 +305,10 @@
         imageColor: document.getElementById('crate-color').value,
         limited: document.getElementById('crate-limited').checked,
       };
-
       if (!body.name) return alert('Crate name is required');
-
       const res = await fetch('/api/admin/crate', {
         method: 'POST', headers: headers(), body: JSON.stringify(body)
       }).then(r => r.json());
-
       if (res.error) return alert(res.error);
       document.getElementById('crate-name').value = '';
       document.getElementById('crate-desc').value = '';
@@ -228,7 +319,6 @@
       const crateId = document.getElementById('skin-crate').value;
       const name = document.getElementById('skin-name').value;
       const type = document.getElementById('skin-type').value;
-
       if (!crateId || !name) return alert('Select a crate and enter a name');
 
       const formData = new FormData();
@@ -240,9 +330,10 @@
 
       if (type === 'image') {
         const file = document.getElementById('skin-file').files[0];
-        if (!file) return alert('Select a PNG file');
+        if (!file) return alert('Select an SVG or PNG file');
+        const ext = file.name.match(/\.(svg|png)$/i)?.[0] || '.svg';
         formData.append('image', file);
-        formData.append('fileName', name.toLowerCase().replace(/[^a-z0-9]+/g, '-') + '.png');
+        formData.append('fileName', name.toLowerCase().replace(/[^a-z0-9]+/g, '-') + ext);
       } else {
         const css = document.getElementById('skin-css').value;
         if (!css) return alert('Enter a CSS color value');

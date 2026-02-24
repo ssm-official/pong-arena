@@ -157,10 +157,50 @@
     const keys = {};
     let playerInput = 'stop';
 
+    // Skin support
+    const SKIN_DRAW_W = 60;
+    const SKIN_DRAW_H = 200;
+    let playerSkin = null;      // { type, cssValue, imageUrl }
+    let playerSkinImage = null;  // preloaded Image for image-type skins
+
     // Bot AI state
     let botTargetY = CANVAS_H / 2;
     let botLastUpdateTime = 0;
     let botIntentionalMiss = false;
+
+    // =============================================
+    // LOAD EQUIPPED SKIN (if logged in)
+    // =============================================
+    (async function loadEquippedSkin() {
+      try {
+        const session = JSON.parse(localStorage.getItem('pong_session') || 'null');
+        if (!session || !session.token) return;
+        const res = await fetch('/api/profile', {
+          headers: { 'Authorization': 'Bearer ' + session.token }
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        const equippedId = data.user && data.user.equippedSkin;
+        if (!equippedId || equippedId === 'default') return;
+        // Fetch shop to find skin details
+        const shopRes = await fetch('/api/shop', {
+          headers: { 'Authorization': 'Bearer ' + session.token }
+        });
+        if (!shopRes.ok) return;
+        const shopData = await shopRes.json();
+        // Search inventory for the equipped skin
+        const skin = (shopData.inventory || []).find(s => s.skinId === equippedId);
+        if (!skin) return;
+        playerSkin = skin;
+        if (skin.type === 'image' && skin.imageUrl) {
+          const img = new Image();
+          img.src = skin.imageUrl;
+          img.onload = () => { playerSkinImage = img; };
+        }
+      } catch (e) {
+        // Silent fail — just use default purple
+      }
+    })();
 
     // =============================================
     // VIEW MANAGEMENT
@@ -681,9 +721,42 @@
     }
 
     function drawPaddle(x, y, isPlayer) {
-      const color = isPlayer ? '#a855f7' : '#6b7280';
-      ctx.fillStyle = color;
-      ctx.shadowColor = isPlayer ? '#a855f7' : 'transparent';
+      const skin = isPlayer ? playerSkin : null;
+      const skinImage = isPlayer ? playerSkinImage : null;
+      const isRightSide = !isPlayer; // bot is on the right
+
+      // Determine paddle color
+      let paddleColor;
+      if (skin && skin.type === 'color' && skin.cssValue) {
+        paddleColor = skin.cssValue;
+      } else if (isPlayer) {
+        paddleColor = '#a855f7';
+      } else {
+        paddleColor = '#6b7280';
+      }
+
+      // If image skin with loaded image, draw centered on paddle hitbox
+      if (skin && skin.type === 'image' && skinImage) {
+        const centerX = x + PADDLE_W / 2;
+        const centerY = y + PADDLE_H / 2;
+        const drawX = centerX - SKIN_DRAW_W / 2;
+        const drawY = centerY - SKIN_DRAW_H / 2;
+
+        ctx.save();
+        if (isRightSide) {
+          ctx.translate(centerX * 2, 0);
+          ctx.scale(-1, 1);
+          ctx.drawImage(skinImage, drawX, drawY, SKIN_DRAW_W, SKIN_DRAW_H);
+        } else {
+          ctx.drawImage(skinImage, drawX, drawY, SKIN_DRAW_W, SKIN_DRAW_H);
+        }
+        ctx.restore();
+        return;
+      }
+
+      // Color skin or default — rounded rect with glow
+      ctx.fillStyle = paddleColor;
+      ctx.shadowColor = isPlayer ? paddleColor : 'transparent';
       ctx.shadowBlur = isPlayer ? 18 : 0;
 
       const r = 6;

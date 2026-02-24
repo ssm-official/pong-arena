@@ -22,12 +22,14 @@ if (!fs.existsSync(skinsDir)) {
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, skinsDir),
   filename: (req, file, cb) => {
-    // Use provided name or generate one
-    const safeName = (req.body.fileName || file.originalname)
+    // Use provided name or generate one, preserve extension
+    const ext = file.originalname.match(/\.(svg|png)$/i)?.[0] || '.svg';
+    const baseName = (req.body.fileName || file.originalname)
+      .replace(/\.(svg|png)$/i, '')
       .toLowerCase()
-      .replace(/[^a-z0-9\-\.]/g, '-')
+      .replace(/[^a-z0-9\-]/g, '-')
       .replace(/--+/g, '-');
-    cb(null, safeName);
+    cb(null, baseName + ext);
   }
 });
 
@@ -35,10 +37,11 @@ const upload = multer({
   storage,
   limits: { fileSize: 2 * 1024 * 1024 }, // 2MB max
   fileFilter: (req, file, cb) => {
-    if (file.mimetype === 'image/png') {
+    const allowed = ['image/svg+xml', 'image/png'];
+    if (allowed.includes(file.mimetype)) {
       cb(null, true);
     } else {
-      cb(new Error('Only PNG files are allowed'));
+      cb(new Error('Only SVG and PNG files are allowed'));
     }
   }
 });

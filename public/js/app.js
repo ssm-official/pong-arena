@@ -87,8 +87,39 @@ socket.on('connect', () => {
 });
 
 // ===========================================
-// WALLET CONNECTION & AUTH
+// WALLET CONNECTION & AUTH (with localStorage persistence)
 // ===========================================
+
+// Try to restore session on page load
+(async function tryAutoLogin() {
+  const saved = localStorage.getItem('pong_session');
+  if (!saved) return;
+  try {
+    const { token } = JSON.parse(saved);
+    // Verify session is still valid by hitting /api/profile
+    const res = await fetch('/api/profile', {
+      headers: { Authorization: 'Bearer ' + token }
+    }).then(r => r.json());
+    if (res.user) {
+      sessionToken = token;
+      currentUser = res.user;
+      showApp();
+    } else {
+      localStorage.removeItem('pong_session');
+    }
+  } catch {
+    localStorage.removeItem('pong_session');
+  }
+})();
+
+function saveSession() {
+  if (sessionToken && currentUser) {
+    localStorage.setItem('pong_session', JSON.stringify({
+      token: sessionToken,
+      wallet: currentUser.wallet,
+    }));
+  }
+}
 
 async function connectWallet() {
   try {
@@ -101,6 +132,7 @@ async function connectWallet() {
 
     if (res.status === 'existing') {
       currentUser = res.user;
+      saveSession();
       showApp();
     } else if (res.status === 'new') {
       showView('register');
@@ -128,6 +160,7 @@ async function registerUser() {
     if (res.error) return showRegError(res.error);
     sessionToken = res.token;
     currentUser = res.user;
+    saveSession();
     showApp();
   } catch (err) {
     showRegError(err.message);
