@@ -214,83 +214,105 @@ class PongEngine {
       return;
     }
 
-    // --- Move ball (swept collision detection) ---
+    // --- Move ball (sub-step swept collision detection) ---
     const ball = this.state.ball;
-    const oldX = ball.x;
-    const oldY = ball.y;
-
-    ball.x += ball.vx;
-    ball.y += ball.vy;
-
-    // Top/bottom wall bounce
-    if (ball.y <= 0) {
-      ball.vy = Math.abs(ball.vy);
-      ball.y = 0;
-      this.state.sound = 'wall';
-    }
-    if (ball.y >= CANVAS_H - BALL_SIZE) {
-      ball.vy = -Math.abs(ball.vy);
-      ball.y = CANVAS_H - BALL_SIZE;
-      this.state.sound = 'wall';
-    }
-
-    // --- Left paddle collision (player 1) — swept detection ---
-    const p1Right = 10 + PADDLE_W;
-    if (ball.vx < 0) {
-      const oldLeft = oldX;
-      const newLeft = ball.x;
-      if (newLeft <= p1Right && oldLeft >= p1Right) {
-        const t = (oldLeft - p1Right) / (oldLeft - newLeft);
-        const hitY = oldY + ball.vy * t;
-        if (hitY + BALL_SIZE >= this.state.paddle1.y &&
-            hitY <= this.state.paddle1.y + PADDLE_H) {
-          const speed = Math.min(Math.abs(ball.vx) + BALL_SPEED_INCREMENT, BALL_MAX_SPEED);
-          ball.vx = speed;
-          ball.x = p1Right;
-          ball.y = hitY;
-          const hitPos = (ball.y + BALL_SIZE / 2 - this.state.paddle1.y) / PADDLE_H;
-          ball.vy = (hitPos - 0.5) * speed * 1.5;
-          this.state.sound = 'paddle';
-        }
-      } else if (ball.x <= p1Right && ball.x + BALL_SIZE >= 10 &&
-                 ball.y + BALL_SIZE >= this.state.paddle1.y &&
-                 ball.y <= this.state.paddle1.y + PADDLE_H) {
-        const speed = Math.min(Math.abs(ball.vx) + BALL_SPEED_INCREMENT, BALL_MAX_SPEED);
-        ball.vx = speed;
-        ball.x = p1Right;
-        const hitPos = (ball.y + BALL_SIZE / 2 - this.state.paddle1.y) / PADDLE_H;
-        ball.vy = (hitPos - 0.5) * speed * 1.5;
-        this.state.sound = 'paddle';
-      }
-    }
-
-    // --- Right paddle collision (player 2) — swept detection ---
+    const paddle1 = this.state.paddle1;
+    const paddle2 = this.state.paddle2;
+    const P1_X = 10;
+    const p1Right = P1_X + PADDLE_W;
     const p2Left = CANVAS_W - 10 - PADDLE_W;
-    if (ball.vx > 0) {
-      const oldRight = oldX + BALL_SIZE;
-      const newRight = ball.x + BALL_SIZE;
-      if (newRight >= p2Left && oldRight <= p2Left) {
-        const t = (p2Left - oldRight) / (newRight - oldRight);
-        const hitY = oldY + ball.vy * t;
-        if (hitY + BALL_SIZE >= this.state.paddle2.y &&
-            hitY <= this.state.paddle2.y + PADDLE_H) {
-          const speed = Math.min(Math.abs(ball.vx) + BALL_SPEED_INCREMENT, BALL_MAX_SPEED);
-          ball.vx = -speed;
-          ball.x = p2Left - BALL_SIZE;
-          ball.y = hitY;
-          const hitPos = (ball.y + BALL_SIZE / 2 - this.state.paddle2.y) / PADDLE_H;
-          ball.vy = (hitPos - 0.5) * speed * 1.5;
-          this.state.sound = 'paddle';
+    const P2_RIGHT = CANVAS_W - 10;
+
+    // Break movement into sub-steps to prevent pass-through at any speed
+    const speed = Math.sqrt(ball.vx * ball.vx + ball.vy * ball.vy);
+    const steps = Math.max(1, Math.ceil(speed / (PADDLE_W / 2)));
+    const stepVx = ball.vx / steps;
+    const stepVy = ball.vy / steps;
+    let collided = false;
+
+    for (let s = 0; s < steps; s++) {
+      const oldX = ball.x;
+      const oldY = ball.y;
+
+      ball.x += stepVx;
+      ball.y += stepVy;
+
+      // Top/bottom wall bounce
+      if (ball.y <= 0) {
+        ball.vy = Math.abs(ball.vy);
+        ball.y = -ball.y;
+        this.state.sound = 'wall';
+      }
+      if (ball.y >= CANVAS_H - BALL_SIZE) {
+        ball.vy = -Math.abs(ball.vy);
+        ball.y = 2 * (CANVAS_H - BALL_SIZE) - ball.y;
+        this.state.sound = 'wall';
+      }
+
+      // --- Left paddle collision (player 1) ---
+      if (ball.vx < 0 && !collided) {
+        // Swept: ball left edge crossed paddle right edge this sub-step
+        if (oldX >= p1Right && ball.x < p1Right) {
+          const t = (oldX - p1Right) / (oldX - ball.x);
+          const hitY = oldY + (ball.y - oldY) * t;
+          if (hitY + BALL_SIZE >= paddle1.y && hitY <= paddle1.y + PADDLE_H) {
+            const spd = Math.min(Math.abs(ball.vx) + BALL_SPEED_INCREMENT, BALL_MAX_SPEED);
+            ball.vx = spd;
+            ball.x = p1Right;
+            ball.y = hitY;
+            const hitPos = (ball.y + BALL_SIZE / 2 - paddle1.y) / PADDLE_H;
+            ball.vy = (hitPos - 0.5) * spd * 1.5;
+            this.state.sound = 'paddle';
+            collided = true;
+            break;
+          }
         }
-      } else if (ball.x + BALL_SIZE >= p2Left && ball.x <= CANVAS_W - 10 &&
-                 ball.y + BALL_SIZE >= this.state.paddle2.y &&
-                 ball.y <= this.state.paddle2.y + PADDLE_H) {
-        const speed = Math.min(Math.abs(ball.vx) + BALL_SPEED_INCREMENT, BALL_MAX_SPEED);
-        ball.vx = -speed;
-        ball.x = p2Left - BALL_SIZE;
-        const hitPos = (ball.y + BALL_SIZE / 2 - this.state.paddle2.y) / PADDLE_H;
-        ball.vy = (hitPos - 0.5) * speed * 1.5;
-        this.state.sound = 'paddle';
+        // Overlap fallback: ball is inside paddle zone
+        if (ball.x < p1Right && ball.x + BALL_SIZE > P1_X &&
+            ball.y + BALL_SIZE > paddle1.y && ball.y < paddle1.y + PADDLE_H) {
+          const spd = Math.min(Math.abs(ball.vx) + BALL_SPEED_INCREMENT, BALL_MAX_SPEED);
+          ball.vx = spd;
+          ball.x = p1Right;
+          const hitPos = (ball.y + BALL_SIZE / 2 - paddle1.y) / PADDLE_H;
+          ball.vy = (hitPos - 0.5) * spd * 1.5;
+          this.state.sound = 'paddle';
+          collided = true;
+          break;
+        }
+      }
+
+      // --- Right paddle collision (player 2) ---
+      if (ball.vx > 0 && !collided) {
+        // Swept: ball right edge crossed paddle left edge this sub-step
+        const oldRight = oldX + BALL_SIZE;
+        const newRight = ball.x + BALL_SIZE;
+        if (oldRight <= p2Left && newRight > p2Left) {
+          const t = (p2Left - oldRight) / (newRight - oldRight);
+          const hitY = oldY + (ball.y - oldY) * t;
+          if (hitY + BALL_SIZE >= paddle2.y && hitY <= paddle2.y + PADDLE_H) {
+            const spd = Math.min(Math.abs(ball.vx) + BALL_SPEED_INCREMENT, BALL_MAX_SPEED);
+            ball.vx = -spd;
+            ball.x = p2Left - BALL_SIZE;
+            ball.y = hitY;
+            const hitPos = (ball.y + BALL_SIZE / 2 - paddle2.y) / PADDLE_H;
+            ball.vy = (hitPos - 0.5) * spd * 1.5;
+            this.state.sound = 'paddle';
+            collided = true;
+            break;
+          }
+        }
+        // Overlap fallback: ball is inside paddle zone
+        if (ball.x + BALL_SIZE > p2Left && ball.x < P2_RIGHT &&
+            ball.y + BALL_SIZE > paddle2.y && ball.y < paddle2.y + PADDLE_H) {
+          const spd = Math.min(Math.abs(ball.vx) + BALL_SPEED_INCREMENT, BALL_MAX_SPEED);
+          ball.vx = -spd;
+          ball.x = p2Left - BALL_SIZE;
+          const hitPos = (ball.y + BALL_SIZE / 2 - paddle2.y) / PADDLE_H;
+          ball.vy = (hitPos - 0.5) * spd * 1.5;
+          this.state.sound = 'paddle';
+          collided = true;
+          break;
+        }
       }
     }
 

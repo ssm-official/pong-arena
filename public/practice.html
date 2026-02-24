@@ -441,131 +441,117 @@
     }
 
     // =============================================
-    // BALL PHYSICS — SWEPT COLLISION DETECTION
+    // BALL PHYSICS — SUB-STEP SWEPT COLLISION
     // =============================================
     function moveBallWithSweptCollision() {
-      const oldX = ball.x;
-      const oldY = ball.y;
-
-      ball.x += ball.vx;
-      ball.y += ball.vy;
-
-      // --- Top/bottom wall bounce ---
-      if (ball.y <= 0) {
-        ball.vy = Math.abs(ball.vy);
-        ball.y = 0;
-        playPracticeSound('wall');
-      }
-      if (ball.y >= CANVAS_H - BALL_SIZE) {
-        ball.vy = -Math.abs(ball.vy);
-        ball.y = CANVAS_H - BALL_SIZE;
-        playPracticeSound('wall');
-      }
-
-      // --- Swept collision: LEFT paddle (player) ---
-      // The right edge of the left paddle
       const p1Right = P1_X + PADDLE_W;
-      const p1Left = P1_X;
-
-      if (ball.vx < 0) {
-        // Ball moving left. Check if it crossed the paddle's right edge this frame.
-        const ballLeadingEdgeOld = oldX;
-        const ballLeadingEdgeNew = ball.x;
-
-        // Did the leading edge cross from right of paddle to left of paddle?
-        if (ballLeadingEdgeOld >= p1Right && ballLeadingEdgeNew < p1Right) {
-          // Find the exact t (0..1) where ball's left edge = paddle's right edge
-          const t = (ballLeadingEdgeOld - p1Right) / (ballLeadingEdgeOld - ballLeadingEdgeNew);
-          // Ball y at intersection
-          const intersectY = oldY + (ball.y - oldY) * t;
-
-          // Check y overlap at intersection point
-          if (intersectY + BALL_SIZE >= playerPaddle.y && intersectY <= playerPaddle.y + PADDLE_H) {
-            // Hit! Reflect
-            const speed = Math.min(Math.abs(ball.vx) + BALL_SPEED_INCREMENT, BALL_MAX_SPEED);
-            ball.vx = speed;
-            ball.x = p1Right;
-            const hitPos = (intersectY + BALL_SIZE / 2 - playerPaddle.y) / PADDLE_H;
-            ball.vy = (hitPos - 0.5) * speed * 1.5;
-            playPracticeSound('paddle');
-            return;
-          }
-        }
-        // Fallback: standard overlap check for ball already overlapping paddle zone
-        else if (
-          ball.x <= p1Right &&
-          ball.x + BALL_SIZE >= p1Left &&
-          ball.y + BALL_SIZE >= playerPaddle.y &&
-          ball.y <= playerPaddle.y + PADDLE_H
-        ) {
-          const speed = Math.min(Math.abs(ball.vx) + BALL_SPEED_INCREMENT, BALL_MAX_SPEED);
-          ball.vx = speed;
-          ball.x = p1Right;
-          const hitPos = (ball.y + BALL_SIZE / 2 - playerPaddle.y) / PADDLE_H;
-          ball.vy = (hitPos - 0.5) * speed * 1.5;
-          playPracticeSound('paddle');
-          return;
-        }
-      }
-
-      // --- Swept collision: RIGHT paddle (bot) ---
       const p2Left = P2_X;
       const p2Right = P2_X + PADDLE_W;
 
-      if (ball.vx > 0) {
-        // Ball moving right. Check if its right edge crossed the paddle's left edge.
-        const ballTrailingEdgeOld = oldX + BALL_SIZE;
-        const ballTrailingEdgeNew = ball.x + BALL_SIZE;
+      // Break movement into sub-steps to prevent pass-through at any speed
+      const speed = Math.sqrt(ball.vx * ball.vx + ball.vy * ball.vy);
+      const steps = Math.max(1, Math.ceil(speed / (PADDLE_W / 2)));
+      const stepVx = ball.vx / steps;
+      const stepVy = ball.vy / steps;
 
-        if (ballTrailingEdgeOld <= p2Left && ballTrailingEdgeNew > p2Left) {
-          const t = (p2Left - ballTrailingEdgeOld) / (ballTrailingEdgeNew - ballTrailingEdgeOld);
-          const intersectY = oldY + (ball.y - oldY) * t;
+      for (let s = 0; s < steps; s++) {
+        const oldX = ball.x;
+        const oldY = ball.y;
 
-          if (intersectY + BALL_SIZE >= botPaddle.y && intersectY <= botPaddle.y + PADDLE_H) {
-            const speed = Math.min(Math.abs(ball.vx) + BALL_SPEED_INCREMENT, BALL_MAX_SPEED);
-            ball.vx = -speed;
-            ball.x = p2Left - BALL_SIZE;
-            const hitPos = (intersectY + BALL_SIZE / 2 - botPaddle.y) / PADDLE_H;
-            ball.vy = (hitPos - 0.5) * speed * 1.5;
+        ball.x += stepVx;
+        ball.y += stepVy;
+
+        // --- Top/bottom wall bounce ---
+        if (ball.y <= 0) {
+          ball.vy = Math.abs(ball.vy);
+          ball.y = -ball.y;
+          playPracticeSound('wall');
+        }
+        if (ball.y >= CANVAS_H - BALL_SIZE) {
+          ball.vy = -Math.abs(ball.vy);
+          ball.y = 2 * (CANVAS_H - BALL_SIZE) - ball.y;
+          playPracticeSound('wall');
+        }
+
+        // --- Left paddle (player) collision ---
+        if (ball.vx < 0) {
+          // Swept: ball left edge crossed paddle right edge
+          if (oldX >= p1Right && ball.x < p1Right) {
+            const t = (oldX - p1Right) / (oldX - ball.x);
+            const hitY = oldY + (ball.y - oldY) * t;
+            if (hitY + BALL_SIZE >= playerPaddle.y && hitY <= playerPaddle.y + PADDLE_H) {
+              const spd = Math.min(Math.abs(ball.vx) + BALL_SPEED_INCREMENT, BALL_MAX_SPEED);
+              ball.vx = spd;
+              ball.x = p1Right;
+              ball.y = hitY;
+              const hitPos = (ball.y + BALL_SIZE / 2 - playerPaddle.y) / PADDLE_H;
+              ball.vy = (hitPos - 0.5) * spd * 1.5;
+              playPracticeSound('paddle');
+              return;
+            }
+          }
+          // Overlap fallback
+          if (ball.x < p1Right && ball.x + BALL_SIZE > P1_X &&
+              ball.y + BALL_SIZE > playerPaddle.y && ball.y < playerPaddle.y + PADDLE_H) {
+            const spd = Math.min(Math.abs(ball.vx) + BALL_SPEED_INCREMENT, BALL_MAX_SPEED);
+            ball.vx = spd;
+            ball.x = p1Right;
+            const hitPos = (ball.y + BALL_SIZE / 2 - playerPaddle.y) / PADDLE_H;
+            ball.vy = (hitPos - 0.5) * spd * 1.5;
             playPracticeSound('paddle');
             return;
           }
         }
-        // Fallback overlap check
-        else if (
-          ball.x + BALL_SIZE >= p2Left &&
-          ball.x <= p2Right &&
-          ball.y + BALL_SIZE >= botPaddle.y &&
-          ball.y <= botPaddle.y + PADDLE_H
-        ) {
-          const speed = Math.min(Math.abs(ball.vx) + BALL_SPEED_INCREMENT, BALL_MAX_SPEED);
-          ball.vx = -speed;
-          ball.x = p2Left - BALL_SIZE;
-          const hitPos = (ball.y + BALL_SIZE / 2 - botPaddle.y) / PADDLE_H;
-          ball.vy = (hitPos - 0.5) * speed * 1.5;
-          playPracticeSound('paddle');
+
+        // --- Right paddle (bot) collision ---
+        if (ball.vx > 0) {
+          const oldRight = oldX + BALL_SIZE;
+          const newRight = ball.x + BALL_SIZE;
+          // Swept: ball right edge crossed paddle left edge
+          if (oldRight <= p2Left && newRight > p2Left) {
+            const t = (p2Left - oldRight) / (newRight - oldRight);
+            const hitY = oldY + (ball.y - oldY) * t;
+            if (hitY + BALL_SIZE >= botPaddle.y && hitY <= botPaddle.y + PADDLE_H) {
+              const spd = Math.min(Math.abs(ball.vx) + BALL_SPEED_INCREMENT, BALL_MAX_SPEED);
+              ball.vx = -spd;
+              ball.x = p2Left - BALL_SIZE;
+              ball.y = hitY;
+              const hitPos = (ball.y + BALL_SIZE / 2 - botPaddle.y) / PADDLE_H;
+              ball.vy = (hitPos - 0.5) * spd * 1.5;
+              playPracticeSound('paddle');
+              return;
+            }
+          }
+          // Overlap fallback
+          if (ball.x + BALL_SIZE > p2Left && ball.x < p2Right &&
+              ball.y + BALL_SIZE > botPaddle.y && ball.y < botPaddle.y + PADDLE_H) {
+            const spd = Math.min(Math.abs(ball.vx) + BALL_SPEED_INCREMENT, BALL_MAX_SPEED);
+            ball.vx = -spd;
+            ball.x = p2Left - BALL_SIZE;
+            const hitPos = (ball.y + BALL_SIZE / 2 - botPaddle.y) / PADDLE_H;
+            ball.vy = (hitPos - 0.5) * spd * 1.5;
+            playPracticeSound('paddle');
+            return;
+          }
+        }
+
+        // --- Scoring ---
+        if (ball.x + BALL_SIZE < 0) {
+          score.bot++;
+          updateScoreDisplay();
+          playPracticeSound('score');
+          if (score.bot >= WIN_SCORE) { gameOver(false); return; }
+          resetBall();
           return;
         }
-      }
-
-      // --- Scoring ---
-      if (ball.x + BALL_SIZE < 0) {
-        // Bot scores
-        score.bot++;
-        updateScoreDisplay();
-        playPracticeSound('score');
-        if (score.bot >= WIN_SCORE) { gameOver(false); return; }
-        resetBall();
-        return;
-      }
-      if (ball.x > CANVAS_W) {
-        // Player scores
-        score.player++;
-        updateScoreDisplay();
-        playPracticeSound('score');
-        if (score.player >= WIN_SCORE) { gameOver(true); return; }
-        resetBall();
-        return;
+        if (ball.x > CANVAS_W) {
+          score.player++;
+          updateScoreDisplay();
+          playPracticeSound('score');
+          if (score.player >= WIN_SCORE) { gameOver(true); return; }
+          resetBall();
+          return;
+        }
       }
     }
 
