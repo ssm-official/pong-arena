@@ -17,6 +17,7 @@ router.get('/', async (req, res) => {
   try {
     const crates = await Crate.find({ active: true });
     const skins = await Skin.find({});
+    console.log(`Shop: ${crates.length} active crates, ${skins.length} total skins`);
     const user = await User.findOne({ wallet: req.wallet }).select('skins equippedSkin');
     const ownedIds = user ? user.skins.map(s => s.skinId) : [];
 

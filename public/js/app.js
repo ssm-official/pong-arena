@@ -487,7 +487,15 @@ async function removeFriend(friendWallet) {
 async function loadShop() {
   try {
     const auth = getAuthHeader();
-    const res = await fetch('/api/shop', { headers: { Authorization: auth } }).then(r => r.json());
+    const resp = await fetch('/api/shop', { headers: { Authorization: auth } });
+    const res = await resp.json();
+
+    if (res.error) {
+      console.error('Shop API error:', res.error);
+      document.getElementById('shop-standard-grid').innerHTML =
+        '<p class="text-red-400 text-sm col-span-full">Failed to load shop. Try reconnecting your wallet.</p>';
+      return;
+    }
 
     // --- Limited crates ---
     const limitedSection = document.getElementById('shop-limited-section');
@@ -533,6 +541,8 @@ async function loadShop() {
     }
   } catch (err) {
     console.error('Failed to load shop:', err);
+    document.getElementById('shop-standard-grid').innerHTML =
+      '<p class="text-red-400 text-sm col-span-full">Failed to load shop. Please try again.</p>';
   }
 }
 
