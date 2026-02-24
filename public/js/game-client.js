@@ -1,11 +1,11 @@
 // ===========================================
 // Game Client — Canvas rendering + input
 // ===========================================
-// Your paddle: client-side prediction (offset reconciliation).
-// Opponent + ball: interpolation between server snapshots.
-//   Uses performance.now() directly — no accumulated delta drift.
-//   Renders behind latest snapshot by RENDER_DELAY_MS to absorb jitter.
-//   Extrapolates using ball velocity when past all snapshots.
+// APPROACH: Client-side prediction (like practice mode).
+//   Ball: runs local physics (position += velocity, wall bounces).
+//         On each server snapshot, smoothly corrects toward server pos.
+//   Opponent paddle: smoothly lerps toward latest server position.
+//   Own paddle: instant local movement, server just confirms.
 
 const GameClient = (() => {
   const CANVAS_W = 800;
@@ -14,12 +14,12 @@ const GameClient = (() => {
   const PADDLE_H = 110;
   const PADDLE_SPEED = 6;
   const BALL_SIZE = 16;
-  const SERVER_TICK_MS = 1000 / 60;
+  const PHYSICS_DT = 1000 / 60; // fixed physics timestep
 
-  // --- Interpolation ---
-  const RENDER_DELAY_MS = 80;  // render 80ms behind latest snapshot
-  const MAX_SNAPS = 20;        // ring buffer capacity
-  const MAX_EXTRAP_MS = 150;   // max extrapolation beyond last snapshot
+  // How fast we correct toward server position (0 = never, 1 = instant snap)
+  const BALL_CORRECTION_RATE = 0.3;    // blend 30% toward server each snapshot
+  const BALL_SNAP_THRESHOLD = 40;      // snap instantly if error > 40px
+  const OPP_PADDLE_LERP = 0.25;       // lerp opponent paddle 25% per frame
 
   // Skin image render dimensions (centered on paddle hitbox)
   const SKIN_DRAW_W = 60;
@@ -73,26 +73,25 @@ const GameClient = (() => {
   let skinConfig = { paddle: '#a855f7', ball: '#ffffff', background: '#0f0f2a' };
   let mirrored = false;
 
-  // Skin data for both players: { type, cssValue, imageUrl } or null
+  // Skin data for both players
   let mySkin = null;
   let opponentSkin = null;
-  // Preloaded Image objects for image-type skins
   let mySkinImage = null;
   let opponentSkinImage = null;
 
-  // --- Your paddle: offset reconciliation ---
-  let serverMyY = CANVAS_H / 2 - PADDLE_H / 2;
-  let myOffset = 0;
+  // --- Own paddle ---
+  let myY = CANVAS_H / 2 - PADDLE_H / 2;
 
-  // --- Snapshot buffer for opponent + ball ---
-  // Each snap: { time (performance.now), remoteY, ballX, ballY, ballVx, ballVy }
-  const snapBuffer = [];
-  // Offset: serverTime = performance.now() + timeOffset
-  // We compute renderTime = performance.now() - RENDER_DELAY_MS
-  // Then find snapshots that straddle renderTime.
-  // timeOffset is recalculated on each snapshot to keep clocks aligned.
-  let timeOffset = 0;
-  let firstSnapReceived = false;
+  // --- Opponent paddle (smoothed) ---
+  let oppTargetY = CANVAS_H / 2 - PADDLE_H / 2;
+  let oppDisplayY = CANVAS_H / 2 - PADDLE_H / 2;
+
+  // --- Ball: local prediction ---
+  let ballX = CANVAS_W / 2;
+  let ballY = CANVAS_H / 2;
+  let ballVx = 0;
+  let ballVy = 0;
+  let accumulator = 0; // for fixed-timestep physics
 
   let displayScore = { p1: 0, p2: 0 };
   let isPaused = false;
@@ -110,11 +109,14 @@ const GameClient = (() => {
   function setGameInfo(gId, player1Wallet) {
     gameId = gId;
     amPlayer1 = (myWallet === player1Wallet);
-    serverMyY = CANVAS_H / 2 - PADDLE_H / 2;
-    myOffset = 0;
-    snapBuffer.length = 0;
-    firstSnapReceived = false;
-    timeOffset = 0;
+    myY = CANVAS_H / 2 - PADDLE_H / 2;
+    oppTargetY = CANVAS_H / 2 - PADDLE_H / 2;
+    oppDisplayY = CANVAS_H / 2 - PADDLE_H / 2;
+    ballX = CANVAS_W / 2;
+    ballY = CANVAS_H / 2;
+    ballVx = 0;
+    ballVy = 0;
+    accumulator = 0;
     lastFrameTime = 0;
   }
 
@@ -124,10 +126,6 @@ const GameClient = (() => {
     if (config.background) skinConfig.background = config.background;
   }
 
-  /**
-   * Set skin data for both players from game-start / game-countdown events.
-   * p1Skin/p2Skin: { type, cssValue, imageUrl } or null
-   */
   function setPlayerSkins(p1Skin, p2Skin) {
     if (amPlayer1) {
       mySkin = p1Skin;
@@ -137,7 +135,6 @@ const GameClient = (() => {
       opponentSkin = p1Skin;
     }
 
-    // Preload images
     mySkinImage = null;
     opponentSkinImage = null;
 
@@ -152,11 +149,10 @@ const GameClient = (() => {
       img.onload = () => { opponentSkinImage = img; };
     }
 
-    // Set paddle color from own skin for backward-compat glow
     if (mySkin && mySkin.type === 'color' && mySkin.cssValue) {
       skinConfig.paddle = mySkin.cssValue;
     } else if (!mySkin) {
-      skinConfig.paddle = '#a855f7'; // default purple
+      skinConfig.paddle = '#a855f7';
     }
   }
 
@@ -164,46 +160,58 @@ const GameClient = (() => {
     mirrored = !!val;
   }
 
+  /**
+   * Called when a server state snapshot arrives (~20Hz).
+   * We correct our local prediction toward the server's authoritative state.
+   */
   function updateState(state, sounds) {
     displayScore = state.score;
     isPaused = state.paused;
 
-    // Play accumulated sound effects from server
+    // Play sounds
     if (sounds && sounds.length > 0) {
       sounds.forEach(s => playGameSound(s));
     } else if (state.sound) {
       playGameSound(state.sound);
     }
 
-    // Own paddle reconciliation
-    const newServerY = amPlayer1 ? state.paddle1.y : state.paddle2.y;
-    myOffset -= (newServerY - serverMyY);
-    serverMyY = newServerY;
-    myOffset *= 0.97;
-    if (myOffset > 30) myOffset = 30;
-    if (myOffset < -30) myOffset = -30;
+    // --- Own paddle: just snap to server (our input is already there) ---
+    const serverMyY = amPlayer1 ? state.paddle1.y : state.paddle2.y;
+    myY = serverMyY;
 
-    const now = performance.now();
+    // --- Opponent paddle: set target, display lerps toward it each frame ---
+    oppTargetY = amPlayer1 ? state.paddle2.y : state.paddle1.y;
 
-    // Push snapshot with local arrival time
-    snapBuffer.push({
-      time: now,
-      remoteY: amPlayer1 ? state.paddle2.y : state.paddle1.y,
-      ballX: state.ball.x,
-      ballY: state.ball.y,
-      ballVx: state.ball.vx || 0,
-      ballVy: state.ball.vy || 0,
-    });
+    // --- Ball: correct local prediction toward server position ---
+    const serverBallX = state.ball.x;
+    const serverBallY = state.ball.y;
+    const serverBallVx = state.ball.vx || 0;
+    const serverBallVy = state.ball.vy || 0;
 
-    // Keep buffer bounded
-    while (snapBuffer.length > MAX_SNAPS) snapBuffer.shift();
+    // Always adopt server velocity (it changes on paddle hits, we can't predict those)
+    ballVx = serverBallVx;
+    ballVy = serverBallVy;
 
-    firstSnapReceived = true;
+    // How far off is our prediction?
+    const errX = serverBallX - ballX;
+    const errY = serverBallY - ballY;
+    const errDist = Math.sqrt(errX * errX + errY * errY);
+
+    if (errDist > BALL_SNAP_THRESHOLD || isPaused) {
+      // Large error or paused (score reset) — snap immediately
+      ballX = serverBallX;
+      ballY = serverBallY;
+    } else {
+      // Small error — blend smoothly toward server position
+      ballX += errX * BALL_CORRECTION_RATE;
+      ballY += errY * BALL_CORRECTION_RATE;
+    }
   }
 
   function startRendering() {
     if (animFrameId) cancelAnimationFrame(animFrameId);
     lastFrameTime = 0;
+    accumulator = 0;
     animFrameId = requestAnimationFrame(renderLoop);
   }
 
@@ -213,86 +221,64 @@ const GameClient = (() => {
 
   function renderLoop(timestamp) {
     if (!lastFrameTime) lastFrameTime = timestamp;
-    const delta = Math.min(timestamp - lastFrameTime, 100); // cap at 100ms
+    let delta = timestamp - lastFrameTime;
     lastFrameTime = timestamp;
-    const ticks = delta / SERVER_TICK_MS;
 
-    // Own paddle prediction
+    // Cap delta to prevent spiral of death on tab switch
+    if (delta > 100) delta = 100;
+
+    // --- Own paddle: move locally based on input ---
+    const paddleTicks = delta / PHYSICS_DT;
     if (currentInput === 'up') {
-      myOffset -= PADDLE_SPEED * ticks;
+      myY = Math.max(0, myY - PADDLE_SPEED * paddleTicks);
     } else if (currentInput === 'down') {
-      myOffset += PADDLE_SPEED * ticks;
+      myY = Math.min(CANVAS_H - PADDLE_H, myY + PADDLE_SPEED * paddleTicks);
     }
-    const myY = Math.round(
-      Math.max(0, Math.min(CANVAS_H - PADDLE_H, serverMyY + myOffset))
-    );
 
-    let oppY, bx, by;
+    // --- Opponent paddle: smooth lerp toward target ---
+    const oppDiff = oppTargetY - oppDisplayY;
+    if (Math.abs(oppDiff) < 1) {
+      oppDisplayY = oppTargetY;
+    } else {
+      oppDisplayY += oppDiff * OPP_PADDLE_LERP;
+    }
 
-    if (snapBuffer.length >= 2) {
-      // Render time = now minus delay, using snapshot arrival times directly
-      const renderTime = performance.now() - RENDER_DELAY_MS;
+    // --- Ball: fixed-timestep physics prediction ---
+    if (!isPaused) {
+      accumulator += delta;
+      // Run up to 4 physics steps per frame to prevent spiral
+      let steps = 0;
+      while (accumulator >= PHYSICS_DT && steps < 4) {
+        accumulator -= PHYSICS_DT;
+        steps++;
 
-      // Prune snapshots that are too old (keep at least the one before renderTime)
-      while (snapBuffer.length > 2 && snapBuffer[1].time < renderTime) {
-        snapBuffer.shift();
-      }
+        ballX += ballVx;
+        ballY += ballVy;
 
-      // Find interpolation pair
-      let s0 = snapBuffer[0];
-      let s1 = snapBuffer[1];
-      for (let i = 0; i < snapBuffer.length - 1; i++) {
-        if (snapBuffer[i + 1].time >= renderTime) {
-          s0 = snapBuffer[i];
-          s1 = snapBuffer[i + 1];
-          break;
+        // Wall bounces (top/bottom only — paddle hits come from server)
+        if (ballY <= 0) {
+          ballY = -ballY;
+          ballVy = Math.abs(ballVy);
+        }
+        if (ballY >= CANVAS_H - BALL_SIZE) {
+          ballY = 2 * (CANVAS_H - BALL_SIZE) - ballY;
+          ballVy = -Math.abs(ballVy);
         }
       }
-
-      if (renderTime <= s0.time) {
-        // Before first snapshot — just use it
-        oppY = s0.remoteY;
-        bx = s0.ballX;
-        by = s0.ballY;
-      } else if (renderTime >= s1.time) {
-        // Past all snapshots — extrapolate from the latest using velocity
-        const latest = snapBuffer[snapBuffer.length - 1];
-        const msAhead = Math.min(renderTime - latest.time, MAX_EXTRAP_MS);
-        const ticksAhead = msAhead / SERVER_TICK_MS;
-        oppY = latest.remoteY;
-        bx = latest.ballX + latest.ballVx * ticksAhead;
-        by = latest.ballY + latest.ballVy * ticksAhead;
-        // Simple wall bounce during extrapolation
-        if (by < 0) { by = -by; }
-        if (by > CANVAS_H - BALL_SIZE) { by = 2 * (CANVAS_H - BALL_SIZE) - by; }
-        bx = Math.max(0, Math.min(CANVAS_W - BALL_SIZE, bx));
-      } else {
-        // Normal interpolation between s0 and s1
-        const range = s1.time - s0.time;
-        const t = (renderTime - s0.time) / range;
-        oppY = s0.remoteY + (s1.remoteY - s0.remoteY) * t;
-        bx = s0.ballX + (s1.ballX - s0.ballX) * t;
-        by = s0.ballY + (s1.ballY - s0.ballY) * t;
-      }
-    } else if (snapBuffer.length === 1) {
-      // Single snapshot — extrapolate using velocity
-      const s = snapBuffer[0];
-      const msElapsed = Math.min(performance.now() - s.time, MAX_EXTRAP_MS);
-      const ticksElapsed = msElapsed / SERVER_TICK_MS;
-      oppY = s.remoteY;
-      bx = s.ballX + s.ballVx * ticksElapsed;
-      by = s.ballY + s.ballVy * ticksElapsed;
-      if (by < 0) by = -by;
-      if (by > CANVAS_H - BALL_SIZE) by = 2 * (CANVAS_H - BALL_SIZE) - by;
-      bx = Math.max(0, Math.min(CANVAS_W - BALL_SIZE, bx));
-    } else {
-      // No data yet
-      oppY = CANVAS_H / 2 - PADDLE_H / 2;
-      bx = CANVAS_W / 2;
-      by = CANVAS_H / 2;
+      // Don't let accumulator grow unbounded
+      if (accumulator > PHYSICS_DT * 4) accumulator = 0;
     }
 
-    render(myY, Math.round(oppY), Math.round(bx), Math.round(by));
+    // Clamp ball to canvas
+    const drawBallX = Math.max(0, Math.min(CANVAS_W - BALL_SIZE, ballX));
+    const drawBallY = Math.max(0, Math.min(CANVAS_H - BALL_SIZE, ballY));
+
+    render(
+      Math.round(myY),
+      Math.round(oppDisplayY),
+      Math.round(drawBallX),
+      Math.round(drawBallY)
+    );
     animFrameId = requestAnimationFrame(renderLoop);
   }
 
@@ -333,16 +319,14 @@ const GameClient = (() => {
       drawPaddle(CANVAS_W - PADDLE_W - 10, p1Y, amPlayer1, amPlayer1 ? mySkin : opponentSkin, amPlayer1 ? mySkinImage : opponentSkinImage, true);
     }
 
-    // Ball — larger, softer glow
+    // Ball
     const drawBx = mirrored ? (CANVAS_W - bx - BALL_SIZE) : bx;
     const bcx = drawBx + BALL_SIZE / 2;
     const bcy = by + BALL_SIZE / 2;
-    // Outer glow
     ctx.fillStyle = 'rgba(168, 85, 247, 0.15)';
     ctx.beginPath();
     ctx.arc(bcx, bcy, BALL_SIZE, 0, Math.PI * 2);
     ctx.fill();
-    // Main ball
     ctx.fillStyle = skinConfig.ball;
     ctx.shadowColor = skinConfig.ball;
     ctx.shadowBlur = 18;
@@ -362,17 +346,7 @@ const GameClient = (() => {
     }
   }
 
-  /**
-   * Draw a paddle with skin support.
-   * @param {number} x - paddle x position
-   * @param {number} y - paddle y position
-   * @param {boolean} isMe - is this the local player's paddle
-   * @param {object|null} skin - { type, cssValue, imageUrl } or null
-   * @param {Image|null} skinImage - preloaded Image for image-type skins
-   * @param {boolean} isRightSide - true if paddle is on right side (mirror image skins)
-   */
   function drawPaddle(x, y, isMe, skin, skinImage, isRightSide) {
-    // Determine paddle color
     let paddleColor;
     if (skin && skin.type === 'color' && skin.cssValue) {
       paddleColor = skin.cssValue;
@@ -382,7 +356,6 @@ const GameClient = (() => {
       paddleColor = '#6b7280';
     }
 
-    // If image skin with loaded image, draw the image centered on paddle hitbox
     if (skin && skin.type === 'image' && skinImage) {
       const centerX = x + PADDLE_W / 2;
       const centerY = y + PADDLE_H / 2;
@@ -391,7 +364,6 @@ const GameClient = (() => {
 
       ctx.save();
       if (isRightSide) {
-        // Mirror the image for right-side paddle
         ctx.translate(centerX * 2, 0);
         ctx.scale(-1, 1);
         ctx.drawImage(skinImage, drawX, drawY, SKIN_DRAW_W, SKIN_DRAW_H);
@@ -402,7 +374,6 @@ const GameClient = (() => {
       return;
     }
 
-    // Color skin or default — draw rounded rect with glow
     ctx.fillStyle = paddleColor;
     ctx.shadowColor = isMe ? paddleColor : 'transparent';
     ctx.shadowBlur = isMe ? 10 : 0;
@@ -470,10 +441,14 @@ const GameClient = (() => {
     gameId = null;
     currentInput = 'stop';
     lastFrameTime = 0;
-    myOffset = 0;
-    snapBuffer.length = 0;
-    firstSnapReceived = false;
-    timeOffset = 0;
+    accumulator = 0;
+    myY = CANVAS_H / 2 - PADDLE_H / 2;
+    oppTargetY = CANVAS_H / 2 - PADDLE_H / 2;
+    oppDisplayY = CANVAS_H / 2 - PADDLE_H / 2;
+    ballX = CANVAS_W / 2;
+    ballY = CANVAS_H / 2;
+    ballVx = 0;
+    ballVy = 0;
     mySkin = null;
     opponentSkin = null;
     mySkinImage = null;

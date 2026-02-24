@@ -1646,13 +1646,25 @@ socket.on('ready-status', (data) => {
 
 socket.on('ready-countdown', (data) => {
   if (data.gameId !== currentGameId) return;
+  // Stop the intermission countdown so it doesn't overlap
+  if (intermissionCountdownInterval) {
+    clearInterval(intermissionCountdownInterval);
+    intermissionCountdownInterval = null;
+  }
+  // Hide side picker / ready UI during countdown
+  const sidePicker = document.getElementById('side-picker');
+  if (sidePicker) sidePicker.classList.add('hidden');
+
   const countdownEl = document.getElementById('intermission-countdown');
   let sec = data.seconds;
+  let countdownTimer = null;
   function tick() {
     if (countdownEl) countdownEl.textContent = sec;
     GameClient.renderCountdown(sec);
     sec--;
-    if (sec >= 0) setTimeout(tick, 1000);
+    if (sec >= 0) {
+      countdownTimer = setTimeout(tick, 1000);
+    }
   }
   tick();
 });
@@ -1747,17 +1759,11 @@ socket.on('game-countdown', (data) => {
     if (sidePicker) sidePicker.classList.remove('hidden');
   }
 
-  let sec = data.seconds || 30;
   const countdownEl = document.getElementById('intermission-countdown');
   if (intermissionCountdownInterval) clearInterval(intermissionCountdownInterval);
-  function updateCountdown() {
-    GameClient.renderCountdown(sec);
-    if (countdownEl) countdownEl.textContent = sec;
-    sec--;
-    if (sec < 0) clearInterval(intermissionCountdownInterval);
-  }
-  updateCountdown();
-  intermissionCountdownInterval = setInterval(updateCountdown, 1000);
+  // Don't show a countdown during ready phase — just show "READY UP"
+  if (countdownEl) countdownEl.textContent = '';
+  GameClient.renderCountdown('?');
 });
 
 // Socket: Game starts

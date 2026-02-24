@@ -14,12 +14,12 @@ const PADDLE_W = 26;
 const PADDLE_H = 110;
 const PADDLE_SPEED = 6;
 const BALL_SIZE = 16;
-const BALL_SPEED_INITIAL = 6;
+const BALL_SPEED_INITIAL = 4;
 const BALL_SPEED_INCREMENT = 0.25;
 const BALL_MAX_SPEED = 14;
 const WIN_SCORE = 5;
 const TICK_RATE = 1000 / 60;
-const SCORE_PAUSE_TICKS = 90;   // 1.5 second pause after scoring
+const SCORE_PAUSE_TICKS = 120;  // 2 second pause after scoring
 const READY_TIMEOUT_MS = 30000; // 30 seconds to ready up
 
 class PongEngine {
@@ -123,8 +123,8 @@ class PongEngine {
       if (this.readyTimeout) { clearTimeout(this.readyTimeout); this.readyTimeout = null; }
       this.readyPhase = false;
 
-      this.emit('ready-countdown', { gameId: this.gameId, seconds: 3 });
-      setTimeout(() => this.start(), 3000);
+      this.emit('ready-countdown', { gameId: this.gameId, seconds: 5 });
+      setTimeout(() => this.start(), 5000);
     }
   }
 
