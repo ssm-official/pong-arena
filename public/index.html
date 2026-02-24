@@ -4,6 +4,8 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Pong Arena — $PONG</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.2/cropper.min.css" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.2/cropper.min.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
     tailwind.config = {
@@ -46,6 +48,13 @@
     .badge { position: absolute; top: -4px; right: -8px; min-width: 16px; height: 16px; font-size: 10px; line-height: 16px; text-align: center; border-radius: 99px; background: #ef4444; color: white; padding: 0 4px; }
     /* Profile modal */
     .profile-modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 45; }
+    /* Crop modal */
+    .crop-modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.85); z-index: 55; display: flex; align-items: center; justify-content: center; }
+    .crop-modal-content { background: #111128; border-radius: 12px; padding: 20px; max-width: 500px; width: 90%; max-height: 90vh; overflow: auto; border: 1px solid rgba(168,85,247,0.3); }
+    .crop-modal-content img { max-width: 100%; display: block; }
+    /* Toast notification */
+    .toast-notification { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); z-index: 100; background: #16a34a; color: white; padding: 12px 24px; border-radius: 8px; font-size: 14px; font-weight: 500; opacity: 0; transition: opacity 0.3s ease; pointer-events: none; }
+    .toast-notification.show { opacity: 1; }
   </style>
 </head>
 <body class="text-gray-100 min-h-screen">
@@ -587,11 +596,28 @@
     </div>
   </div>
 
+  <!-- ============ CROP MODAL ============ -->
+  <div id="crop-modal" class="crop-modal-backdrop hidden">
+    <div class="crop-modal-content">
+      <h3 class="text-lg font-bold text-purple-400 mb-3" id="crop-modal-title">Crop Image</h3>
+      <div style="max-height:400px;overflow:hidden;">
+        <img id="crop-image" src="" alt="Crop preview" />
+      </div>
+      <div class="flex gap-2 mt-4">
+        <button id="crop-confirm-btn" class="flex-1 bg-purple-600 hover:bg-purple-700 py-2 rounded-lg font-medium transition">Crop & Upload</button>
+        <button id="crop-cancel-btn" class="bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded-lg text-sm transition">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ TOAST NOTIFICATION ============ -->
+  <div id="toast-notification" class="toast-notification"></div>
+
   <!-- ============ SCRIPTS ============ -->
   <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@solana/web3.js@1.87.6/lib/index.iife.min.js"></script>
-  <script src="/js/wallet.js?v=25"></script>
-  <script src="/js/game-client.js?v=25"></script>
-  <script src="/js/app.js?v=25"></script>
+  <script src="/js/wallet.js?v=26"></script>
+  <script src="/js/game-client.js?v=26"></script>
+  <script src="/js/app.js?v=26"></script>
 </body>
 </html>

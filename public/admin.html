@@ -128,6 +128,54 @@
     </div>
   </div>
 
+  <!-- EDIT SKIN MODAL -->
+  <div id="edit-skin-modal" class="hidden fixed inset-0 bg-black/80 z-50 flex items-center justify-center">
+    <div class="bg-arena-card rounded-xl p-6 max-w-md w-full mx-4 glow-border">
+      <h3 class="text-lg font-bold text-purple-400 mb-3">Edit Skin</h3>
+      <input type="hidden" id="edit-skin-id" />
+      <div class="space-y-3">
+        <div>
+          <label class="block text-sm text-gray-400 mb-1">Name</label>
+          <input id="edit-skin-name" type="text" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:border-purple-500 focus:outline-none" />
+        </div>
+        <div>
+          <label class="block text-sm text-gray-400 mb-1">Description</label>
+          <input id="edit-skin-desc" type="text" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:border-purple-500 focus:outline-none" />
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-sm text-gray-400 mb-1">Rarity</label>
+            <select id="edit-skin-rarity" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:border-purple-500 focus:outline-none">
+              <option value="common">Common</option>
+              <option value="rare">Rare</option>
+              <option value="legendary">Legendary</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-sm text-gray-400 mb-1">Type</label>
+            <select id="edit-skin-type" onchange="toggleEditSkinInputs()" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:border-purple-500 focus:outline-none">
+              <option value="image">Image (SVG/PNG)</option>
+              <option value="color">Color</option>
+            </select>
+          </div>
+        </div>
+        <div id="edit-skin-color-row">
+          <label class="block text-sm text-gray-400 mb-1">CSS Color</label>
+          <input id="edit-skin-css" type="text" placeholder="#ff0000" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:border-purple-500 focus:outline-none" />
+        </div>
+        <div id="edit-skin-file-row">
+          <label class="block text-sm text-gray-400 mb-1">Replace image (SVG/PNG) — leave empty to keep current</label>
+          <input id="edit-skin-file" type="file" accept=".svg,.png" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white" />
+          <div id="edit-skin-current-img" class="mt-2 text-xs text-gray-500"></div>
+        </div>
+      </div>
+      <div class="flex gap-2 mt-4">
+        <button onclick="saveEditSkin()" class="flex-1 bg-purple-600 hover:bg-purple-700 py-2 rounded-lg font-medium transition">Save</button>
+        <button onclick="closeEditSkin()" class="bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded-lg text-sm transition">Cancel</button>
+      </div>
+    </div>
+  </div>
+
   <script>
     let adminPw = sessionStorage.getItem('adminPw') || '';
 
@@ -244,9 +292,19 @@
     // ============================
     // CRATE CRUD
     // ============================
+    let allSkinsMap = {}; // skinId -> skin object for edit lookups
+
     async function loadCrates() {
       const res = await fetch('/api/admin/crates', { headers: { 'x-admin-password': adminPw } }).then(r => r.json());
       const crates = res.crates || [];
+
+      // Build skin lookup map
+      allSkinsMap = {};
+      for (const c of crates) {
+        for (const s of (c.skins || [])) {
+          allSkinsMap[s.skinId] = s;
+        }
+      }
 
       const sel = document.getElementById('skin-crate');
       sel.innerHTML = '<option value="">Select crate...</option>' +
@@ -288,7 +346,10 @@
                       <span class="text-xs ml-1 ${s.rarity === 'legendary' ? 'text-yellow-400' : s.rarity === 'rare' ? 'text-purple-400' : 'text-gray-500'}">${s.rarity}</span>
                     </div>
                   </div>
-                  <button onclick="deleteSkin('${s.skinId}')" class="text-red-400 hover:text-red-300 text-xs">X</button>
+                  <div class="flex gap-1">
+                    <button onclick="openEditSkin('${s.skinId}')" class="text-purple-400 hover:text-purple-300 text-xs">Edit</button>
+                    <button onclick="deleteSkin('${s.skinId}')" class="text-red-400 hover:text-red-300 text-xs">X</button>
+                  </div>
                 </div>
               `).join('')}
             </div>
@@ -374,6 +435,76 @@
       await fetch(`/api/admin/skin/${skinId}`, {
         method: 'DELETE', headers: { 'x-admin-password': adminPw }
       });
+      loadCrates();
+    }
+
+    // ============================
+    // EDIT SKIN MODAL
+    // ============================
+    function openEditSkin(skinId) {
+      const skin = allSkinsMap[skinId];
+      if (!skin) return alert('Skin not found');
+      document.getElementById('edit-skin-id').value = skin.skinId;
+      document.getElementById('edit-skin-name').value = skin.name || '';
+      document.getElementById('edit-skin-desc').value = skin.description || '';
+      document.getElementById('edit-skin-rarity').value = skin.rarity || 'common';
+      document.getElementById('edit-skin-type').value = skin.type || 'color';
+      document.getElementById('edit-skin-css').value = skin.cssValue || '';
+      document.getElementById('edit-skin-file').value = '';
+
+      const currentImg = document.getElementById('edit-skin-current-img');
+      if (skin.type === 'image' && skin.imageUrl) {
+        currentImg.innerHTML = `Current: <a href="${esc(skin.imageUrl)}" target="_blank" class="text-purple-400 underline">${esc(skin.imageUrl)}</a>`;
+      } else {
+        currentImg.innerHTML = '';
+      }
+
+      toggleEditSkinInputs();
+      document.getElementById('edit-skin-modal').classList.remove('hidden');
+    }
+
+    function closeEditSkin() {
+      document.getElementById('edit-skin-modal').classList.add('hidden');
+    }
+
+    function toggleEditSkinInputs() {
+      const type = document.getElementById('edit-skin-type').value;
+      document.getElementById('edit-skin-file-row').style.display = type === 'image' ? '' : 'none';
+      document.getElementById('edit-skin-color-row').style.display = type === 'color' ? '' : 'none';
+    }
+
+    async function saveEditSkin() {
+      const skinId = document.getElementById('edit-skin-id').value;
+      if (!skinId) return;
+
+      const type = document.getElementById('edit-skin-type').value;
+      const formData = new FormData();
+      formData.append('name', document.getElementById('edit-skin-name').value);
+      formData.append('description', document.getElementById('edit-skin-desc').value);
+      formData.append('rarity', document.getElementById('edit-skin-rarity').value);
+      formData.append('type', type);
+
+      if (type === 'color') {
+        formData.append('cssValue', document.getElementById('edit-skin-css').value);
+      }
+
+      if (type === 'image') {
+        const file = document.getElementById('edit-skin-file').files[0];
+        if (file) {
+          formData.append('image', file);
+          const ext = file.name.match(/\.(svg|png)$/i)?.[0] || '.png';
+          formData.append('fileName', document.getElementById('edit-skin-name').value.toLowerCase().replace(/[^a-z0-9]+/g, '-') + ext);
+        }
+      }
+
+      const res = await fetch(`/api/admin/skin/${skinId}`, {
+        method: 'PUT',
+        headers: { 'x-admin-password': adminPw },
+        body: formData
+      }).then(r => r.json());
+
+      if (res.error) return alert(res.error);
+      closeEditSkin();
       loadCrates();
     }
 

@@ -38,26 +38,67 @@ let currentLbSort = 'earnings';
 // ===========================================
 
 async function fetchPongPrice() {
+  // Source 1: DexScreener
   try {
     const res = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${PONG_TOKEN_MINT}`);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = await res.json();
-    if (data.pairs && data.pairs.length > 0) {
-      const price = parseFloat(data.pairs[0].priceUsd);
-      if (price && price > 0) {
-        pongPriceUsd = price;
-        priceLastFetched = Date.now();
-        priceFetchFailed = false;
-        updateAllUsdDisplays();
-        return;
+    if (res.ok) {
+      const data = await res.json();
+      if (data.pairs && data.pairs.length > 0) {
+        const price = parseFloat(data.pairs[0].priceUsd);
+        if (price && price > 0) {
+          pongPriceUsd = price;
+          priceLastFetched = Date.now();
+          priceFetchFailed = false;
+          updateAllUsdDisplays();
+          return;
+        }
       }
     }
-    throw new Error('No valid price data');
-  } catch (err) {
-    console.error('Failed to fetch $PONG price:', err);
-    priceFetchFailed = true;
-    updateAllUsdDisplays();
-  }
+  } catch (e) { console.warn('DexScreener price fetch failed:', e.message); }
+
+  // Source 2: GeckoTerminal
+  try {
+    const res = await fetch(`https://api.geckoterminal.com/api/v2/simple/networks/solana/token_price/${PONG_TOKEN_MINT}`);
+    if (res.ok) {
+      const data = await res.json();
+      const priceStr = data?.data?.attributes?.token_prices?.[PONG_TOKEN_MINT];
+      if (priceStr) {
+        const price = parseFloat(priceStr);
+        if (price && price > 0) {
+          pongPriceUsd = price;
+          priceLastFetched = Date.now();
+          priceFetchFailed = false;
+          updateAllUsdDisplays();
+          return;
+        }
+      }
+    }
+  } catch (e) { console.warn('GeckoTerminal price fetch failed:', e.message); }
+
+  // Source 3: Birdeye public API
+  try {
+    const res = await fetch(`https://public-api.birdeye.so/defi/price?address=${PONG_TOKEN_MINT}`, {
+      headers: { 'X-Chain': 'solana' }
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data?.data?.value) {
+        const price = parseFloat(data.data.value);
+        if (price && price > 0) {
+          pongPriceUsd = price;
+          priceLastFetched = Date.now();
+          priceFetchFailed = false;
+          updateAllUsdDisplays();
+          return;
+        }
+      }
+    }
+  } catch (e) { console.warn('Birdeye price fetch failed:', e.message); }
+
+  // All sources failed
+  console.error('All price sources failed for $PONG');
+  priceFetchFailed = true;
+  updateAllUsdDisplays();
 }
 
 function formatUsd(amount) {
@@ -175,8 +216,10 @@ async function registerUser() {
     sessionToken = res.token;
     currentUser = res.user;
     saveSession();
-    const fileInput = document.getElementById('reg-pfp-file');
-    if (fileInput.files.length > 0) await uploadPfpFile(fileInput.files[0]);
+    if (cropPendingFile) {
+      await uploadPfpFile(cropPendingFile);
+      cropPendingFile = null;
+    }
     showApp();
   } catch (err) {
     showRegError(err.message);
@@ -351,11 +394,94 @@ function showProfileMsg(msg, color) {
   setTimeout(() => el.classList.add('hidden'), 3000);
 }
 
-// --- Banner Upload ---
-async function uploadBanner(input) {
-  if (!input.files.length) return;
+// --- Toast Notification ---
+function showToast(message) {
+  const toast = document.getElementById('toast-notification');
+  if (!toast) return;
+  toast.textContent = message;
+  toast.classList.add('show');
+  setTimeout(() => toast.classList.remove('show'), 3000);
+}
+
+// --- Crop Modal State ---
+let activeCropper = null;
+let cropPendingFile = null;      // stored for registration flow
+let cropPendingPrefix = null;    // 'reg' or 'edit'
+
+function openCropModal(file, aspectRatio, uploadType) {
+  const modal = document.getElementById('crop-modal');
+  const image = document.getElementById('crop-image');
+  const title = document.getElementById('crop-modal-title');
+  const confirmBtn = document.getElementById('crop-confirm-btn');
+  const cancelBtn = document.getElementById('crop-cancel-btn');
+
+  title.textContent = uploadType === 'banner' ? 'Crop Banner' : 'Crop Profile Picture';
+
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    image.src = e.target.result;
+    modal.classList.remove('hidden');
+
+    // Destroy any previous cropper
+    if (activeCropper) { activeCropper.destroy(); activeCropper = null; }
+
+    // Wait for image to load before initializing Cropper
+    image.onload = () => {
+      activeCropper = new Cropper(image, {
+        aspectRatio: aspectRatio,
+        viewMode: 1,
+        dragMode: 'move',
+        autoCropArea: 1,
+        responsive: true,
+        background: false,
+      });
+    };
+  };
+  reader.readAsDataURL(file);
+
+  // Remove old listeners by cloning buttons
+  const newConfirm = confirmBtn.cloneNode(true);
+  confirmBtn.parentNode.replaceChild(newConfirm, confirmBtn);
+  const newCancel = cancelBtn.cloneNode(true);
+  cancelBtn.parentNode.replaceChild(newCancel, cancelBtn);
+
+  newCancel.addEventListener('click', closeCropModal);
+
+  newConfirm.addEventListener('click', () => {
+    if (!activeCropper) return;
+    const canvas = activeCropper.getCroppedCanvas({
+      maxWidth: uploadType === 'banner' ? 1200 : 400,
+      maxHeight: uploadType === 'banner' ? 300 : 400,
+    });
+    canvas.toBlob((blob) => {
+      if (!blob) return;
+      const ext = file.name.match(/\.\w+$/)?.[0] || '.png';
+      const croppedFile = new File([blob], 'cropped' + ext, { type: blob.type });
+
+      if (uploadType === 'banner') {
+        doUploadBanner(croppedFile);
+      } else if (uploadType === 'pfp-edit') {
+        doUploadPfp(croppedFile);
+      } else if (uploadType === 'pfp-reg') {
+        // Store cropped file for registration submit
+        cropPendingFile = croppedFile;
+        showPfpPreviewFromFile(croppedFile, 'reg');
+      }
+      closeCropModal();
+    }, file.type || 'image/png', 0.9);
+  });
+}
+
+function closeCropModal() {
+  const modal = document.getElementById('crop-modal');
+  modal.classList.add('hidden');
+  if (activeCropper) { activeCropper.destroy(); activeCropper = null; }
+}
+
+// --- Banner Upload (after crop) ---
+async function doUploadBanner(file) {
   const formData = new FormData();
-  formData.append('banner', input.files[0]);
+  formData.append('banner', file);
   try {
     const res = await fetch('/api/profile/upload-banner', {
       method: 'POST',
@@ -364,10 +490,8 @@ async function uploadBanner(input) {
     }).then(r => r.json());
     if (res.banner) {
       currentUser.banner = res.banner;
-      const bannerImg = document.getElementById('profile-banner-img');
-      bannerImg.src = res.banner;
-      bannerImg.classList.remove('hidden');
-      showProfileMsg('Banner updated!', 'green');
+      showToast('Banner added!');
+      setTimeout(() => location.reload(), 1500);
     } else {
       showProfileMsg(res.error || 'Upload failed', 'red');
     }
@@ -376,7 +500,36 @@ async function uploadBanner(input) {
   }
 }
 
-// --- Profile Picture Upload ---
+function uploadBanner(input) {
+  if (!input.files.length) return;
+  openCropModal(input.files[0], 16 / 4, 'banner');
+  input.value = '';
+}
+
+// --- Profile Picture Upload (after crop) ---
+async function doUploadPfp(file) {
+  const formData = new FormData();
+  formData.append('pfp', file);
+  try {
+    const res = await fetch('/api/profile/upload-pfp', {
+      method: 'POST',
+      headers: { Authorization: getAuthHeader() },
+      body: formData,
+    }).then(r => r.json());
+    if (res.pfp) {
+      currentUser.pfp = res.pfp;
+      updateNav();
+      showToast('Profile picture added!');
+      setTimeout(() => location.reload(), 1500);
+    } else {
+      showProfileMsg(res.error || 'Upload failed', 'red');
+    }
+  } catch (err) {
+    showProfileMsg('PFP upload failed', 'red');
+  }
+}
+
+// uploadPfpFile: called from registration flow with the pre-cropped file
 async function uploadPfpFile(file) {
   const formData = new FormData();
   formData.append('pfp', file);
@@ -395,17 +548,25 @@ async function uploadPfpFile(file) {
 function handlePfpSelect(input, prefix) {
   if (!input.files.length) return;
   const file = input.files[0];
-  showPfpPreview(file, prefix);
   if (prefix === 'edit') {
-    uploadPfpFile(file).then(res => {
-      if (res.pfp) {
-        showProfileMsg('Profile picture updated!', 'green');
-        document.getElementById('profile-pfp').src = res.pfp;
-      } else {
-        showProfileMsg(res.error || 'Upload failed', 'red');
-      }
-    });
+    openCropModal(file, 1, 'pfp-edit');
+  } else {
+    // Registration: crop, then store for submit
+    openCropModal(file, 1, 'pfp-reg');
   }
+  input.value = '';
+}
+
+function showPfpPreviewFromFile(file, prefix) {
+  const preview = document.getElementById(`${prefix}-pfp-preview`);
+  const label = document.getElementById(`${prefix}-pfp-label`);
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    preview.src = e.target.result;
+    preview.classList.remove('hidden');
+    label.textContent = 'Cropped image ready';
+  };
+  reader.readAsDataURL(file);
 }
 
 function showPfpPreview(file, prefix) {

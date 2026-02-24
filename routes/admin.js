@@ -198,6 +198,43 @@ router.post('/skin', adminAuth, upload.single('image'), async (req, res) => {
   }
 });
 
+// PUT /api/admin/skin/:skinId — update skin (name, description, rarity, image, cssValue)
+router.put('/skin/:skinId', adminAuth, upload.single('image'), async (req, res) => {
+  try {
+    const skin = await Skin.findOne({ skinId: req.params.skinId });
+    if (!skin) return res.status(404).json({ error: 'Skin not found' });
+
+    const update = {};
+    if (req.body.name !== undefined) update.name = req.body.name;
+    if (req.body.description !== undefined) update.description = req.body.description;
+    if (req.body.rarity !== undefined) update.rarity = req.body.rarity;
+    if (req.body.type !== undefined) update.type = req.body.type;
+    if (req.body.cssValue !== undefined) update.cssValue = req.body.cssValue;
+    if (req.body.crateId !== undefined) update.crateId = req.body.crateId;
+
+    // If a new image was uploaded, delete the old one and set new path
+    if (req.file) {
+      if (skin.imageUrl) {
+        const oldPath = path.join(__dirname, '..', 'public', skin.imageUrl);
+        if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
+      }
+      update.imageUrl = '/skins/' + req.file.filename;
+      update.type = 'image';
+    }
+
+    const updated = await Skin.findOneAndUpdate(
+      { skinId: req.params.skinId },
+      { $set: update },
+      { new: true }
+    );
+
+    res.json({ skin: updated });
+  } catch (err) {
+    console.error('Update skin error:', err);
+    res.status(500).json({ error: 'Failed to update skin' });
+  }
+});
+
 // DELETE /api/admin/skin/:skinId — delete skin + its image
 router.delete('/skin/:skinId', adminAuth, async (req, res) => {
   try {
