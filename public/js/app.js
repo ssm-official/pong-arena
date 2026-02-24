@@ -14,6 +14,7 @@ let chosenSide = 'left';
 const PONG_TOKEN_MINT = 'GVLfSudckNc8L1MGWUJP5vXUgFNtYJqjytLR7xm3pump';
 let pongPriceUsd = 0;
 let pongPriceChange24h = null;
+let pongMarketCap = null;
 let priceLastFetched = 0;
 let priceFetchFailed = false;
 const PRICE_REFRESH_MS = 60000;
@@ -52,6 +53,8 @@ async function fetchPongPrice() {
           if (pair.priceChange && pair.priceChange.h24 != null) {
             pongPriceChange24h = parseFloat(pair.priceChange.h24);
           }
+          if (pair.marketCap) pongMarketCap = parseFloat(pair.marketCap);
+          else if (pair.fdv) pongMarketCap = parseFloat(pair.fdv);
           priceLastFetched = Date.now();
           priceFetchFailed = false;
           updateAllUsdDisplays();
@@ -2015,8 +2018,10 @@ let currentDashLbSort = 'earnings';
 
 function loadDashboard() {
   loadDashboardLeaderboard(currentDashLbSort);
-  loadDashboardRecentMatches();
+  loadDashboardFriends();
+  loadDashboardSkins();
   updateDashboardStats();
+  fetchBurnedTotal();
 }
 
 async function loadDashboardLeaderboard(sort) {
@@ -2063,31 +2068,6 @@ async function loadDashboardLeaderboard(sort) {
     }).join('');
   } catch (err) {
     console.error('Dashboard leaderboard error:', err);
-  }
-}
-
-async function loadDashboardRecentMatches() {
-  try {
-    const res = await fetch('/api/profile/history', { headers: { Authorization: getAuthHeader() } }).then(r => r.json());
-    const container = document.getElementById('dash-recent-matches');
-    if (!container) return;
-    if (!res.matches || res.matches.length === 0) {
-      container.innerHTML = '<p class="text-gray-500 text-xs">No matches played yet.</p>';
-      return;
-    }
-    container.innerHTML = res.matches.slice(0, 3).map(m => {
-      const won = m.winner === currentUser.wallet;
-      const opponent = m.player1 === currentUser.wallet ? m.player2Username : m.player1Username;
-      return `
-        <div class="flex items-center gap-2 py-1.5 px-1">
-          <span class="text-xs font-bold px-1.5 py-0.5 rounded ${won ? 'bg-green-900/60 text-green-400' : 'bg-red-900/60 text-red-400'}">${won ? 'W' : 'L'}</span>
-          <span class="text-sm flex-1 truncate">vs ${esc(opponent || 'Unknown')}</span>
-          <span class="text-gray-400 text-xs">${m.score.player1} - ${m.score.player2}</span>
-        </div>
-      `;
-    }).join('');
-  } catch (err) {
-    console.error('Dashboard recent matches error:', err);
   }
 }
 
@@ -2157,29 +2137,29 @@ if (document.readyState === 'loading') {
 }
 
 // ===========================================
-// TOKEN PRICE CARD
+// TOKEN PRICE CARD (Market Cap + Burned)
 // ===========================================
 
+function formatMarketCap(val) {
+  if (!val || val <= 0) return '--';
+  if (val >= 1e9) return '$' + (val / 1e9).toFixed(2) + 'B';
+  if (val >= 1e6) return '$' + (val / 1e6).toFixed(2) + 'M';
+  if (val >= 1e3) return '$' + (val / 1e3).toFixed(1) + 'K';
+  return '$' + val.toFixed(0);
+}
+
 function updateTokenPriceCard() {
-  const priceEl = document.getElementById('dash-token-price');
+  const mcapEl = document.getElementById('dash-token-mcap');
   const changeEl = document.getElementById('dash-token-change');
-  if (!priceEl) return;
+  if (!mcapEl) return;
 
   if (priceFetchFailed || pongPriceUsd <= 0) {
-    priceEl.textContent = 'Price N/A';
-    if (changeEl) changeEl.textContent = '24h: --';
-    if (changeEl) changeEl.className = 'text-sm mt-1 text-gray-400';
+    mcapEl.textContent = '--';
+    if (changeEl) { changeEl.textContent = '24h: --'; changeEl.className = 'text-sm mt-1 text-gray-400'; }
     return;
   }
 
-  // Format price with appropriate decimals
-  if (pongPriceUsd < 0.0001) {
-    priceEl.textContent = '$' + pongPriceUsd.toExponential(2);
-  } else if (pongPriceUsd < 0.01) {
-    priceEl.textContent = '$' + pongPriceUsd.toFixed(6);
-  } else {
-    priceEl.textContent = '$' + pongPriceUsd.toFixed(4);
-  }
+  mcapEl.textContent = pongMarketCap ? formatMarketCap(pongMarketCap) : '--';
 
   if (changeEl) {
     if (pongPriceChange24h != null) {
@@ -2194,153 +2174,83 @@ function updateTokenPriceCard() {
   }
 }
 
-// ===========================================
-// BACKGROUND MUSIC — Procedural Chiptune (Web Audio API)
-// ===========================================
-
-let musicCtx = null;
-let musicGain = null;
-let musicPlaying = false;
-let musicScheduler = null;
-let musicNextNoteTime = 0;
-let musicBeatIndex = 0;
-
-const MUSIC_BPM = 90;
-const MUSIC_NOTE_DURATION = 60 / MUSIC_BPM / 2; // eighth notes
-
-// Pentatonic scale notes (C minor pentatonic across 2 octaves)
-const MELODY_NOTES = [
-  261.63, 311.13, 349.23, 392.00, 466.16,  // C4 Eb4 F4 G4 Bb4
-  523.25, 622.25, 698.46, 783.99, 932.33    // C5 Eb5 F5 G5 Bb5
-];
-
-// Pre-composed melody pattern (indices into MELODY_NOTES, -1 = rest)
-const MELODY_PATTERN = [
-  0, 2, 4, 5,  3, -1, 2, 4,
-  5, 7, 9, 7,  5, 4, 2, -1,
-  4, 5, 7, 5,  4, 2, 0, -1,
-  2, 4, 5, 7,  9, 7, 5, 4
-];
-
-const BASS_PATTERN = [
-  0, -1, 0, -1,  3, -1, 3, -1,
-  4, -1, 4, -1,  2, -1, 2, -1,
-  0, -1, 0, -1,  3, -1, 3, -1,
-  4, -1, 4, -1,  0, -1, 0, -1
-];
-const BASS_NOTES = [65.41, 77.78, 87.31, 98.00]; // C2 Eb2 F2 G2
-
-function initBackgroundMusic() {
-  if (musicCtx) return;
-  musicCtx = new (window.AudioContext || window.webkitAudioContext)();
-  musicGain = musicCtx.createGain();
-  musicGain.connect(musicCtx.destination);
-
-  // Restore saved preferences
-  const saved = loadMusicPrefs();
-  musicGain.gain.value = saved.volume;
-  const toggle = document.getElementById('music-toggle');
-  const slider = document.getElementById('music-volume');
-  const volLabel = document.getElementById('music-volume-label');
-  if (toggle) toggle.checked = saved.enabled;
-  if (slider) slider.value = Math.round(saved.volume * 100);
-  if (volLabel) volLabel.textContent = Math.round(saved.volume * 100) + '%';
-
-  if (saved.enabled) startMusicPlayback();
-}
-
-function startMusicPlayback() {
-  if (!musicCtx || musicPlaying) return;
-  if (musicCtx.state === 'suspended') musicCtx.resume();
-  musicPlaying = true;
-  musicBeatIndex = 0;
-  musicNextNoteTime = musicCtx.currentTime + 0.1;
-  scheduleMusicNotes();
-}
-
-function stopMusicPlayback() {
-  musicPlaying = false;
-  if (musicScheduler) { clearTimeout(musicScheduler); musicScheduler = null; }
-}
-
-function scheduleMusicNotes() {
-  if (!musicPlaying) return;
-  while (musicNextNoteTime < musicCtx.currentTime + 0.2) {
-    const beatIdx = musicBeatIndex % MELODY_PATTERN.length;
-
-    // Melody (square wave)
-    const melodyIdx = MELODY_PATTERN[beatIdx];
-    if (melodyIdx >= 0) {
-      playTone(MELODY_NOTES[melodyIdx], musicNextNoteTime, MUSIC_NOTE_DURATION * 0.8, 'square', 0.08);
-    }
-
-    // Bass (triangle wave, every other beat)
-    const bassPatternIdx = BASS_PATTERN[beatIdx];
-    if (bassPatternIdx >= 0) {
-      playTone(BASS_NOTES[bassPatternIdx], musicNextNoteTime, MUSIC_NOTE_DURATION * 1.5, 'triangle', 0.12);
-    }
-
-    musicNextNoteTime += MUSIC_NOTE_DURATION;
-    musicBeatIndex++;
-  }
-  musicScheduler = setTimeout(scheduleMusicNotes, 100);
-}
-
-function playTone(freq, startTime, duration, waveType, vol) {
-  const osc = musicCtx.createOscillator();
-  const envGain = musicCtx.createGain();
-  osc.type = waveType;
-  osc.frequency.value = freq;
-  envGain.gain.setValueAtTime(vol, startTime);
-  envGain.gain.exponentialRampToValueAtTime(0.001, startTime + duration);
-  osc.connect(envGain);
-  envGain.connect(musicGain);
-  osc.start(startTime);
-  osc.stop(startTime + duration + 0.05);
-}
-
-function toggleMusic(on) {
-  if (!musicCtx) initBackgroundMusic();
-  if (on) {
-    if (musicCtx.state === 'suspended') musicCtx.resume();
-    startMusicPlayback();
-  } else {
-    stopMusicPlayback();
-  }
-  saveMusicPrefs();
-}
-
-function setMusicVolume(val) {
-  const volume = parseInt(val, 10) / 100;
-  const volLabel = document.getElementById('music-volume-label');
-  if (volLabel) volLabel.textContent = val + '%';
-  if (musicGain) musicGain.gain.value = volume;
-  saveMusicPrefs();
-}
-
-function saveMusicPrefs() {
-  const toggle = document.getElementById('music-toggle');
-  const slider = document.getElementById('music-volume');
-  const prefs = {
-    enabled: toggle ? toggle.checked : false,
-    volume: slider ? parseInt(slider.value, 10) / 100 : 0.5
-  };
-  try { localStorage.setItem('pong_music_prefs', JSON.stringify(prefs)); } catch (e) {}
-}
-
-function loadMusicPrefs() {
+async function fetchBurnedTotal() {
   try {
-    const raw = localStorage.getItem('pong_music_prefs');
-    if (raw) {
-      const p = JSON.parse(raw);
-      return { enabled: !!p.enabled, volume: typeof p.volume === 'number' ? p.volume : 0.5 };
-    }
-  } catch (e) {}
-  return { enabled: false, volume: 0.5 };
+    const res = await fetch('/api/stats/burned').then(r => r.json());
+    const el = document.getElementById('dash-token-burned');
+    if (!el) return;
+    const burned = res.totalBurned || 0;
+    if (burned <= 0) { el.textContent = '0 $PONG'; return; }
+    const pong = burned / 1e6;
+    if (pong >= 1e6) el.textContent = (pong / 1e6).toFixed(2) + 'M $PONG';
+    else if (pong >= 1e3) el.textContent = (pong / 1e3).toFixed(1) + 'K $PONG';
+    else el.textContent = pong.toLocaleString() + ' $PONG';
+  } catch (e) {
+    const el = document.getElementById('dash-token-burned');
+    if (el) el.textContent = '--';
+  }
 }
 
-// Init music on first user interaction (required by browsers)
-document.addEventListener('click', function musicAutoInit() {
-  initBackgroundMusic();
-  document.removeEventListener('click', musicAutoInit);
-}, { once: true });
+// ===========================================
+// DASHBOARD: FRIENDS
+// ===========================================
+
+async function loadDashboardFriends() {
+  const container = document.getElementById('dash-friends-list');
+  if (!container) return;
+  try {
+    const res = await fetch('/api/friends', { headers: { Authorization: getAuthHeader() } }).then(r => r.json());
+    const friends = res.friends || [];
+    if (friends.length === 0) {
+      container.innerHTML = '<p class="text-gray-500 text-xs">No friends yet. Add players from the Friends tab!</p>';
+      return;
+    }
+    container.innerHTML = friends.slice(0, 5).map(f => {
+      const isOnline = onlineUsers.includes(f.wallet);
+      return `
+        <div class="flex items-center gap-2 py-1 cursor-pointer hover:bg-gray-800/50 rounded px-1 transition"
+          onclick="showProfilePopup('${f.wallet}')">
+          <span class="w-2 h-2 rounded-full ${isOnline ? 'bg-green-400' : 'bg-gray-600'} flex-shrink-0"></span>
+          <img src="${esc(f.pfp || '')}" class="w-5 h-5 rounded-full bg-gray-700 flex-shrink-0" onerror="this.style.display='none'" />
+          <span class="text-sm flex-1 truncate">${esc(f.username)}</span>
+          ${isOnline ? '<span class="text-green-400 text-xs">Online</span>' : '<span class="text-gray-600 text-xs">Offline</span>'}
+        </div>
+      `;
+    }).join('');
+  } catch (err) {
+    container.innerHTML = '<p class="text-gray-500 text-xs">Could not load friends.</p>';
+  }
+}
+
+// ===========================================
+// DASHBOARD: SKINS
+// ===========================================
+
+async function loadDashboardSkins() {
+  const container = document.getElementById('dash-skins-list');
+  if (!container) return;
+  try {
+    const res = await fetch('/api/shop', { headers: { Authorization: getAuthHeader() } }).then(r => r.json());
+    const inv = res.inventory || [];
+    if (inv.length === 0) {
+      container.innerHTML = '<p class="text-gray-500 text-xs col-span-4">No skins yet. Open a crate!</p>';
+      return;
+    }
+    container.innerHTML = inv.slice(0, 8).map(s => {
+      const borderCls = s.equipped ? 'border-purple-500' : 'border-gray-700';
+      const bg = s.type === 'color' ? esc(s.cssValue) + '33' : '#1a1a3a';
+      const inner = s.type === 'color'
+        ? `<div class="w-6 h-6 rounded-full" style="background:${esc(s.cssValue)};box-shadow:0 0 6px ${esc(s.cssValue)}"></div>`
+        : `<img src="${esc(s.imageUrl)}" class="h-7 object-contain" />`;
+      return `
+        <div class="rounded-lg border ${borderCls} p-2 flex flex-col items-center justify-center cursor-pointer hover:border-purple-400 transition" style="background:${bg}" title="${esc(s.name)}"
+          onclick="switchTab('shop')">
+          ${inner}
+          <span class="text-[10px] text-gray-400 mt-1 truncate w-full text-center">${esc(s.name)}</span>
+        </div>
+      `;
+    }).join('');
+  } catch (err) {
+    container.innerHTML = '<p class="text-gray-500 text-xs col-span-4">Could not load skins.</p>';
+  }
+}

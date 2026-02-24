@@ -61,6 +61,23 @@ app.use('/api/shop', authMiddleware, shopRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/leaderboard', leaderboardRoutes);
 
+// Stats: total burned $PONG (from match payouts)
+const Match = require('./models/Match');
+app.get('/api/stats/burned', async (req, res) => {
+  try {
+    const result = await Match.aggregate([
+      { $match: { status: 'completed' } },
+      { $group: { _id: null, totalStaked: { $sum: '$stakeAmount' } } }
+    ]);
+    // Each match: both players stake stakeAmount, total pot = 2x, 5% burned
+    const totalStaked = result.length > 0 ? result[0].totalStaked : 0;
+    const totalBurned = Math.floor(totalStaked * 2 * 0.05);
+    res.json({ totalBurned });
+  } catch (err) {
+    res.json({ totalBurned: 0 });
+  }
+});
+
 // Admin console
 app.get('/admin.html', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'admin.html'));

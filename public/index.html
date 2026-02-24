@@ -95,7 +95,7 @@
   </div>
 
   <!-- ============ MAIN CONTENT ============ -->
-  <div class="max-w-5xl mx-auto px-4 py-6">
+  <div class="max-w-7xl mx-auto px-4 py-6">
 
     <!-- Connect Prompt -->
     <div id="view-connect" class="text-center py-20">
@@ -164,10 +164,29 @@
       <div id="tab-play" class="tab-content">
         <!-- Tier Selection -->
         <div id="matchmaking-ui">
-          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
 
-            <!-- Quick Play Panel -->
-            <div class="bg-arena-card rounded-xl p-5 border border-gray-800">
+            <!-- Leaderboard Preview Panel -->
+            <div class="bg-arena-card rounded-xl p-6 border border-gray-800">
+              <div class="flex items-center justify-between mb-3">
+                <h3 class="text-lg font-bold">Leaderboard</h3>
+                <a href="#" onclick="event.preventDefault();switchTab('leaderboard')" class="text-purple-400 hover:text-purple-300 text-xs">View All &rarr;</a>
+              </div>
+              <div class="flex gap-1 mb-3">
+                <button onclick="loadDashboardLeaderboard('earnings')" id="dash-lb-btn-earnings"
+                  class="bg-purple-600 px-3 py-1 rounded text-xs font-medium transition">Earnings</button>
+                <button onclick="loadDashboardLeaderboard('wins')" id="dash-lb-btn-wins"
+                  class="bg-gray-700 hover:bg-gray-600 px-3 py-1 rounded text-xs font-medium transition">Wins</button>
+                <button onclick="loadDashboardLeaderboard('games')" id="dash-lb-btn-games"
+                  class="bg-gray-700 hover:bg-gray-600 px-3 py-1 rounded text-xs font-medium transition">Games</button>
+              </div>
+              <div id="dash-leaderboard-list" class="space-y-1">
+                <p class="text-gray-500 text-xs">Loading...</p>
+              </div>
+            </div>
+
+            <!-- Quick Play Panel (top middle) -->
+            <div class="bg-arena-card rounded-xl p-6 border border-gray-800">
               <h3 class="text-lg font-bold mb-3">Quick Play</h3>
               <div class="grid grid-cols-3 gap-2 mb-3">
                 <button onclick="joinQueue('low')"
@@ -192,35 +211,20 @@
               <a href="/practice.html" class="text-purple-400 hover:text-purple-300 text-xs underline">Practice against bots</a>
             </div>
 
-            <!-- Leaderboard Preview Panel -->
-            <div class="bg-arena-card rounded-xl p-5 border border-gray-800">
-              <div class="flex items-center justify-between mb-3">
-                <h3 class="text-lg font-bold">Leaderboard</h3>
-                <a href="#" onclick="event.preventDefault();switchTab('leaderboard')" class="text-purple-400 hover:text-purple-300 text-xs">View All &rarr;</a>
-              </div>
-              <div class="flex gap-1 mb-3">
-                <button onclick="loadDashboardLeaderboard('earnings')" id="dash-lb-btn-earnings"
-                  class="bg-purple-600 px-3 py-1 rounded text-xs font-medium transition">Earnings</button>
-                <button onclick="loadDashboardLeaderboard('wins')" id="dash-lb-btn-wins"
-                  class="bg-gray-700 hover:bg-gray-600 px-3 py-1 rounded text-xs font-medium transition">Wins</button>
-                <button onclick="loadDashboardLeaderboard('games')" id="dash-lb-btn-games"
-                  class="bg-gray-700 hover:bg-gray-600 px-3 py-1 rounded text-xs font-medium transition">Games</button>
-              </div>
-              <div id="dash-leaderboard-list" class="space-y-1">
-                <p class="text-gray-500 text-xs">Loading...</p>
-              </div>
-            </div>
-
             <!-- $PONG Token Panel -->
-            <div class="bg-arena-card rounded-xl p-5 border border-gray-800">
+            <div class="bg-arena-card rounded-xl p-6 border border-gray-800">
               <div class="flex items-center justify-between mb-3">
                 <h3 class="text-lg font-bold">$PONG Token</h3>
                 <span class="text-xs text-gray-500 bg-gray-800 px-2 py-0.5 rounded">LIVE</span>
               </div>
               <div class="bg-gray-800 rounded-lg p-4 mb-3 text-center">
-                <div class="text-xs text-gray-400 mb-1">Price</div>
-                <div id="dash-token-price" class="text-2xl font-bold text-white">--</div>
+                <div class="text-xs text-gray-400 mb-1">Market Cap</div>
+                <div id="dash-token-mcap" class="text-2xl font-bold text-white">--</div>
                 <div id="dash-token-change" class="text-sm mt-1 text-gray-400">24h: --</div>
+              </div>
+              <div class="flex items-center justify-between mb-3 px-1">
+                <span class="text-xs text-gray-400">Burned</span>
+                <span id="dash-token-burned" class="text-xs font-bold text-orange-400">--</span>
               </div>
               <a href="https://jup.ag/swap/SOL-GVLfSudckNc8L1MGWUJP5vXUgFNtYJqjytLR7xm3pump" target="_blank" rel="noopener noreferrer"
                 class="block w-full bg-purple-600 hover:bg-purple-700 text-center py-2.5 rounded-lg font-medium transition text-sm">
@@ -228,19 +232,19 @@
               </a>
             </div>
 
-            <!-- Recent Matches Panel -->
-            <div class="bg-arena-card rounded-xl p-5 border border-gray-800">
+            <!-- Friends Panel -->
+            <div class="bg-arena-card rounded-xl p-6 border border-gray-800">
               <div class="flex items-center justify-between mb-3">
-                <h3 class="text-lg font-bold">Recent Matches</h3>
-                <a href="#" onclick="event.preventDefault();switchTab('history')" class="text-purple-400 hover:text-purple-300 text-xs">View All &rarr;</a>
+                <h3 class="text-lg font-bold">Friends</h3>
+                <a href="#" onclick="event.preventDefault();switchTab('friends')" class="text-purple-400 hover:text-purple-300 text-xs">View All &rarr;</a>
               </div>
-              <div id="dash-recent-matches" class="space-y-1">
+              <div id="dash-friends-list" class="space-y-1">
                 <p class="text-gray-500 text-xs">Loading...</p>
               </div>
             </div>
 
             <!-- Arena Status Panel -->
-            <div class="bg-arena-card rounded-xl p-5 border border-gray-800">
+            <div class="bg-arena-card rounded-xl p-6 border border-gray-800">
               <h3 class="text-lg font-bold mb-3">Arena Status</h3>
               <div class="grid grid-cols-2 gap-3">
                 <div class="bg-gray-800 rounded-lg p-3 text-center">
@@ -257,31 +261,14 @@
               </div>
             </div>
 
-            <!-- Settings Panel -->
-            <div class="bg-arena-card rounded-xl p-5 border border-gray-800">
-              <h3 class="text-lg font-bold mb-3">Settings</h3>
-              <div class="space-y-4">
-                <!-- Music Toggle -->
-                <div class="flex items-center justify-between">
-                  <div>
-                    <div class="text-sm text-white">Background Music</div>
-                    <div id="music-label" class="text-xs text-gray-500">Retro Chill — 8-Bit Vibes</div>
-                  </div>
-                  <label class="relative inline-flex items-center cursor-pointer">
-                    <input id="music-toggle" type="checkbox" class="sr-only peer" onchange="toggleMusic(this.checked)" />
-                    <div class="w-9 h-5 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-purple-600"></div>
-                  </label>
-                </div>
-                <!-- Volume Slider -->
-                <div>
-                  <div class="flex items-center justify-between mb-1">
-                    <span class="text-sm text-gray-400">Volume</span>
-                    <span id="music-volume-label" class="text-xs text-gray-500">50%</span>
-                  </div>
-                  <input id="music-volume" type="range" min="0" max="100" value="50"
-                    class="w-full h-1.5 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-purple-500"
-                    oninput="setMusicVolume(this.value)" />
-                </div>
+            <!-- Skins Panel -->
+            <div class="bg-arena-card rounded-xl p-6 border border-gray-800">
+              <div class="flex items-center justify-between mb-3">
+                <h3 class="text-lg font-bold">Skins</h3>
+                <a href="#" onclick="event.preventDefault();switchTab('shop')" class="text-purple-400 hover:text-purple-300 text-xs">Shop &rarr;</a>
+              </div>
+              <div id="dash-skins-list" class="grid grid-cols-4 gap-2">
+                <p class="text-gray-500 text-xs col-span-4">Loading...</p>
               </div>
             </div>
 
@@ -730,6 +717,6 @@
   <script src="/js/wallet.js?v=33"></script>
   <script src="/js/pong-sim.js?v=34"></script>
   <script src="/js/game-client.js?v=34"></script>
-  <script src="/js/app.js?v=34"></script>
+  <script src="/js/app.js?v=35"></script>
 </body>
 </html>
