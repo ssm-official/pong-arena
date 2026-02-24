@@ -1824,13 +1824,16 @@ socket.on('opponent-disconnected', (data) => {
   const banner = document.getElementById('disconnect-banner');
   const countEl = document.getElementById('disconnect-countdown');
   if (banner) banner.classList.remove('hidden');
-  let remaining = 15;
+  let remaining = data.timeout || 15;
   if (countEl) countEl.textContent = remaining;
   if (disconnectCountdownInterval) clearInterval(disconnectCountdownInterval);
   disconnectCountdownInterval = setInterval(() => {
     remaining--;
-    if (countEl) countEl.textContent = Math.max(remaining, 0);
-    if (remaining <= 0) clearInterval(disconnectCountdownInterval);
+    if (countEl) countEl.textContent = Math.max(remaining, 1);
+    if (remaining <= 0) {
+      clearInterval(disconnectCountdownInterval);
+      disconnectCountdownInterval = null;
+    }
   }, 1000);
 });
 

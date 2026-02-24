@@ -33,7 +33,7 @@ class PongEngine {
     this.pauseTicks = 0;
     this.customStake = customStake || null; // for duel matches
     this.tickCount = 0;
-    this.broadcastInterval = 3; // broadcast every 3rd tick = ~20Hz
+    this.broadcastInterval = 1; // broadcast every tick = 60Hz
     this.pendingSounds = [];    // accumulate sounds between broadcasts
 
     // Ready system

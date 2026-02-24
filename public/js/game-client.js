@@ -15,8 +15,6 @@ const GameClient = (() => {
   const PADDLE_H = 110;
   const PADDLE_SPEED = 6;
   const BALL_SIZE = 16;
-  const BALL_SPEED_INCREMENT = 0.25;
-  const BALL_MAX_SPEED = 14;
   const PHYSICS_DT = 1000 / 60; // fixed physics timestep
 
   const OPP_PADDLE_LERP = 0.25;       // lerp opponent paddle 25% per frame
@@ -227,10 +225,11 @@ const GameClient = (() => {
         myY = Math.min(CANVAS_H - PADDLE_H, myY + PADDLE_SPEED);
       }
 
-      // Ball: predict between server snapshots (wall + paddle collisions)
+      // Ball: predict between server snapshots (wall bounces only)
+      // Paddle collisions are handled by the server — at 60Hz broadcasts
+      // the ball only moves ~1 tick between snapshots so it won't visually
+      // pass through paddles before the server corrects it.
       if (!isPaused) {
-        const oldBX = ballX;
-        const oldBY = ballY;
         ballX += ballVx;
         ballY += ballVy;
 
@@ -242,60 +241,6 @@ const GameClient = (() => {
         if (ballY >= CANVAS_H - BALL_SIZE) {
           ballY = 2 * (CANVAS_H - BALL_SIZE) - ballY;
           ballVy = -Math.abs(ballVy);
-        }
-
-        // Paddle positions mapped to p1/p2
-        const p1Y = amPlayer1 ? myY : oppDisplayY;
-        const p2Y = amPlayer1 ? oppDisplayY : myY;
-
-        // Left paddle collision (player 1)
-        const p1Right = 10 + PADDLE_W;
-        if (ballVx < 0) {
-          if (ballX <= p1Right && oldBX >= p1Right) {
-            const t = (oldBX - p1Right) / (oldBX - ballX);
-            const hitY = oldBY + ballVy * t;
-            if (hitY + BALL_SIZE >= p1Y && hitY <= p1Y + PADDLE_H) {
-              const speed = Math.min(Math.abs(ballVx) + BALL_SPEED_INCREMENT, BALL_MAX_SPEED);
-              ballVx = speed;
-              ballX = p1Right;
-              ballY = hitY;
-              const hitPos = (ballY + BALL_SIZE / 2 - p1Y) / PADDLE_H;
-              ballVy = (hitPos - 0.5) * speed * 1.5;
-            }
-          } else if (ballX <= p1Right && ballX + BALL_SIZE >= 10 &&
-                     ballY + BALL_SIZE >= p1Y && ballY <= p1Y + PADDLE_H) {
-            const speed = Math.min(Math.abs(ballVx) + BALL_SPEED_INCREMENT, BALL_MAX_SPEED);
-            ballVx = speed;
-            ballX = p1Right;
-            const hitPos = (ballY + BALL_SIZE / 2 - p1Y) / PADDLE_H;
-            ballVy = (hitPos - 0.5) * speed * 1.5;
-          }
-        }
-
-        // Right paddle collision (player 2)
-        const p2Left = CANVAS_W - 10 - PADDLE_W;
-        if (ballVx > 0) {
-          const oldRight = oldBX + BALL_SIZE;
-          const newRight = ballX + BALL_SIZE;
-          if (newRight >= p2Left && oldRight <= p2Left) {
-            const t = (p2Left - oldRight) / (newRight - oldRight);
-            const hitY = oldBY + ballVy * t;
-            if (hitY + BALL_SIZE >= p2Y && hitY <= p2Y + PADDLE_H) {
-              const speed = Math.min(Math.abs(ballVx) + BALL_SPEED_INCREMENT, BALL_MAX_SPEED);
-              ballVx = -speed;
-              ballX = p2Left - BALL_SIZE;
-              ballY = hitY;
-              const hitPos = (ballY + BALL_SIZE / 2 - p2Y) / PADDLE_H;
-              ballVy = (hitPos - 0.5) * speed * 1.5;
-            }
-          } else if (ballX + BALL_SIZE >= p2Left && ballX <= CANVAS_W - 10 &&
-                     ballY + BALL_SIZE >= p2Y && ballY <= p2Y + PADDLE_H) {
-            const speed = Math.min(Math.abs(ballVx) + BALL_SPEED_INCREMENT, BALL_MAX_SPEED);
-            ballVx = -speed;
-            ballX = p2Left - BALL_SIZE;
-            const hitPos = (ballY + BALL_SIZE / 2 - p2Y) / PADDLE_H;
-            ballVy = (hitPos - 0.5) * speed * 1.5;
-          }
         }
       }
     }
@@ -449,6 +394,9 @@ const GameClient = (() => {
   function setupInput() {
     document.addEventListener('keydown', (e) => {
       if (!gameId) return;
+      // Don't capture keys when typing in chat or any input field
+      const tag = document.activeElement && document.activeElement.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA') return;
       if (['w', 'W', 's', 'S', 'ArrowUp', 'ArrowDown'].includes(e.key)) {
         e.preventDefault();
       }
@@ -457,6 +405,8 @@ const GameClient = (() => {
     });
     document.addEventListener('keyup', (e) => {
       if (!gameId) return;
+      const tag = document.activeElement && document.activeElement.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA') return;
       keys[e.key] = false;
       sendInput();
     });
