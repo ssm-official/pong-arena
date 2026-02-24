@@ -13,6 +13,7 @@ let chosenSide = 'left';
 // --- $PONG Price in USD ---
 const PONG_TOKEN_MINT = 'GVLfSudckNc8L1MGWUJP5vXUgFNtYJqjytLR7xm3pump';
 let pongPriceUsd = 0;
+let pongPriceChange24h = null;
 let priceLastFetched = 0;
 let priceFetchFailed = false;
 const PRICE_REFRESH_MS = 60000;
@@ -44,9 +45,13 @@ async function fetchPongPrice() {
     if (res.ok) {
       const data = await res.json();
       if (data.pairs && data.pairs.length > 0) {
-        const price = parseFloat(data.pairs[0].priceUsd);
+        const pair = data.pairs[0];
+        const price = parseFloat(pair.priceUsd);
         if (price && price > 0) {
           pongPriceUsd = price;
+          if (pair.priceChange && pair.priceChange.h24 != null) {
+            pongPriceChange24h = parseFloat(pair.priceChange.h24);
+          }
           priceLastFetched = Date.now();
           priceFetchFailed = false;
           updateAllUsdDisplays();
@@ -128,6 +133,7 @@ function updateAllUsdDisplays() {
     if (highUsd) highUsd.textContent = formatUsd(getTierUsd('high'));
   }
   updateGameStakeDisplay();
+  updateTokenPriceCard();
 }
 
 function startPriceRefresh() {
@@ -2149,3 +2155,192 @@ if (document.readyState === 'loading') {
 } else {
   initFriendSearch();
 }
+
+// ===========================================
+// TOKEN PRICE CARD
+// ===========================================
+
+function updateTokenPriceCard() {
+  const priceEl = document.getElementById('dash-token-price');
+  const changeEl = document.getElementById('dash-token-change');
+  if (!priceEl) return;
+
+  if (priceFetchFailed || pongPriceUsd <= 0) {
+    priceEl.textContent = 'Price N/A';
+    if (changeEl) changeEl.textContent = '24h: --';
+    if (changeEl) changeEl.className = 'text-sm mt-1 text-gray-400';
+    return;
+  }
+
+  // Format price with appropriate decimals
+  if (pongPriceUsd < 0.0001) {
+    priceEl.textContent = '$' + pongPriceUsd.toExponential(2);
+  } else if (pongPriceUsd < 0.01) {
+    priceEl.textContent = '$' + pongPriceUsd.toFixed(6);
+  } else {
+    priceEl.textContent = '$' + pongPriceUsd.toFixed(4);
+  }
+
+  if (changeEl) {
+    if (pongPriceChange24h != null) {
+      const sign = pongPriceChange24h >= 0 ? '+' : '';
+      changeEl.textContent = `24h: ${sign}${pongPriceChange24h.toFixed(2)}%`;
+      changeEl.className = 'text-sm mt-1 font-medium ' +
+        (pongPriceChange24h >= 0 ? 'text-green-400' : 'text-red-400');
+    } else {
+      changeEl.textContent = '24h: --';
+      changeEl.className = 'text-sm mt-1 text-gray-400';
+    }
+  }
+}
+
+// ===========================================
+// BACKGROUND MUSIC — Procedural Chiptune (Web Audio API)
+// ===========================================
+
+let musicCtx = null;
+let musicGain = null;
+let musicPlaying = false;
+let musicScheduler = null;
+let musicNextNoteTime = 0;
+let musicBeatIndex = 0;
+
+const MUSIC_BPM = 90;
+const MUSIC_NOTE_DURATION = 60 / MUSIC_BPM / 2; // eighth notes
+
+// Pentatonic scale notes (C minor pentatonic across 2 octaves)
+const MELODY_NOTES = [
+  261.63, 311.13, 349.23, 392.00, 466.16,  // C4 Eb4 F4 G4 Bb4
+  523.25, 622.25, 698.46, 783.99, 932.33    // C5 Eb5 F5 G5 Bb5
+];
+
+// Pre-composed melody pattern (indices into MELODY_NOTES, -1 = rest)
+const MELODY_PATTERN = [
+  0, 2, 4, 5,  3, -1, 2, 4,
+  5, 7, 9, 7,  5, 4, 2, -1,
+  4, 5, 7, 5,  4, 2, 0, -1,
+  2, 4, 5, 7,  9, 7, 5, 4
+];
+
+const BASS_PATTERN = [
+  0, -1, 0, -1,  3, -1, 3, -1,
+  4, -1, 4, -1,  2, -1, 2, -1,
+  0, -1, 0, -1,  3, -1, 3, -1,
+  4, -1, 4, -1,  0, -1, 0, -1
+];
+const BASS_NOTES = [65.41, 77.78, 87.31, 98.00]; // C2 Eb2 F2 G2
+
+function initBackgroundMusic() {
+  if (musicCtx) return;
+  musicCtx = new (window.AudioContext || window.webkitAudioContext)();
+  musicGain = musicCtx.createGain();
+  musicGain.connect(musicCtx.destination);
+
+  // Restore saved preferences
+  const saved = loadMusicPrefs();
+  musicGain.gain.value = saved.volume;
+  const toggle = document.getElementById('music-toggle');
+  const slider = document.getElementById('music-volume');
+  const volLabel = document.getElementById('music-volume-label');
+  if (toggle) toggle.checked = saved.enabled;
+  if (slider) slider.value = Math.round(saved.volume * 100);
+  if (volLabel) volLabel.textContent = Math.round(saved.volume * 100) + '%';
+
+  if (saved.enabled) startMusicPlayback();
+}
+
+function startMusicPlayback() {
+  if (!musicCtx || musicPlaying) return;
+  if (musicCtx.state === 'suspended') musicCtx.resume();
+  musicPlaying = true;
+  musicBeatIndex = 0;
+  musicNextNoteTime = musicCtx.currentTime + 0.1;
+  scheduleMusicNotes();
+}
+
+function stopMusicPlayback() {
+  musicPlaying = false;
+  if (musicScheduler) { clearTimeout(musicScheduler); musicScheduler = null; }
+}
+
+function scheduleMusicNotes() {
+  if (!musicPlaying) return;
+  while (musicNextNoteTime < musicCtx.currentTime + 0.2) {
+    const beatIdx = musicBeatIndex % MELODY_PATTERN.length;
+
+    // Melody (square wave)
+    const melodyIdx = MELODY_PATTERN[beatIdx];
+    if (melodyIdx >= 0) {
+      playTone(MELODY_NOTES[melodyIdx], musicNextNoteTime, MUSIC_NOTE_DURATION * 0.8, 'square', 0.08);
+    }
+
+    // Bass (triangle wave, every other beat)
+    const bassPatternIdx = BASS_PATTERN[beatIdx];
+    if (bassPatternIdx >= 0) {
+      playTone(BASS_NOTES[bassPatternIdx], musicNextNoteTime, MUSIC_NOTE_DURATION * 1.5, 'triangle', 0.12);
+    }
+
+    musicNextNoteTime += MUSIC_NOTE_DURATION;
+    musicBeatIndex++;
+  }
+  musicScheduler = setTimeout(scheduleMusicNotes, 100);
+}
+
+function playTone(freq, startTime, duration, waveType, vol) {
+  const osc = musicCtx.createOscillator();
+  const envGain = musicCtx.createGain();
+  osc.type = waveType;
+  osc.frequency.value = freq;
+  envGain.gain.setValueAtTime(vol, startTime);
+  envGain.gain.exponentialRampToValueAtTime(0.001, startTime + duration);
+  osc.connect(envGain);
+  envGain.connect(musicGain);
+  osc.start(startTime);
+  osc.stop(startTime + duration + 0.05);
+}
+
+function toggleMusic(on) {
+  if (!musicCtx) initBackgroundMusic();
+  if (on) {
+    if (musicCtx.state === 'suspended') musicCtx.resume();
+    startMusicPlayback();
+  } else {
+    stopMusicPlayback();
+  }
+  saveMusicPrefs();
+}
+
+function setMusicVolume(val) {
+  const volume = parseInt(val, 10) / 100;
+  const volLabel = document.getElementById('music-volume-label');
+  if (volLabel) volLabel.textContent = val + '%';
+  if (musicGain) musicGain.gain.value = volume;
+  saveMusicPrefs();
+}
+
+function saveMusicPrefs() {
+  const toggle = document.getElementById('music-toggle');
+  const slider = document.getElementById('music-volume');
+  const prefs = {
+    enabled: toggle ? toggle.checked : false,
+    volume: slider ? parseInt(slider.value, 10) / 100 : 0.5
+  };
+  try { localStorage.setItem('pong_music_prefs', JSON.stringify(prefs)); } catch (e) {}
+}
+
+function loadMusicPrefs() {
+  try {
+    const raw = localStorage.getItem('pong_music_prefs');
+    if (raw) {
+      const p = JSON.parse(raw);
+      return { enabled: !!p.enabled, volume: typeof p.volume === 'number' ? p.volume : 0.5 };
+    }
+  } catch (e) {}
+  return { enabled: false, volume: 0.5 };
+}
+
+// Init music on first user interaction (required by browsers)
+document.addEventListener('click', function musicAutoInit() {
+  initBackgroundMusic();
+  document.removeEventListener('click', musicAutoInit);
+}, { once: true });
