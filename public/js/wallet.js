@@ -41,6 +41,9 @@ const WalletManager = (() => {
    * Returns { wallet, signature, timestamp } for server verification.
    */
   async function signAuthMessage() {
+    if (!provider || !publicKey) {
+      await reconnectIfTrusted();
+    }
     if (!provider || !publicKey) throw new Error('Wallet not connected');
 
     const timestamp = Date.now().toString();
@@ -61,6 +64,10 @@ const WalletManager = (() => {
    * Returns the transaction signature string.
    */
   async function signAndSendTransaction(serializedTxBase64) {
+    // Lazily reconnect if provider isn't set (e.g. session restored from localStorage)
+    if (!provider) {
+      await reconnectIfTrusted();
+    }
     if (!provider) throw new Error('Wallet not connected');
 
     // Decode base64 to Uint8Array
@@ -84,6 +91,24 @@ const WalletManager = (() => {
     return sig;
   }
 
+  /**
+   * Silently reconnect Phantom if the user previously approved this site.
+   * Uses onlyIfTrusted — no popup. Returns publicKey or null.
+   */
+  async function reconnectIfTrusted() {
+    provider = getProvider();
+    if (!provider) return null;
+    try {
+      const resp = await provider.connect({ onlyIfTrusted: true });
+      publicKey = resp.publicKey.toString();
+      connected = true;
+      return publicKey;
+    } catch {
+      // User hasn't approved or Phantom not ready — silent fail
+      return null;
+    }
+  }
+
   function getPublicKey() { return publicKey; }
   function isConnected() { return connected; }
 
@@ -98,7 +123,7 @@ const WalletManager = (() => {
   function getWallet() { return publicKey; }
 
   return {
-    connect, disconnect, signAuthMessage,
+    connect, disconnect, reconnectIfTrusted, signAuthMessage,
     signAndSendTransaction,
     getPublicKey, isConnected, getAuthHeader, getWallet,
   };

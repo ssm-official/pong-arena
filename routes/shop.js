@@ -147,7 +147,15 @@ router.post('/confirm-crate', async (req, res) => {
         type: droppedSkin.type,
         cssValue: droppedSkin.cssValue,
         imageUrl: droppedSkin.imageUrl,
-      }
+      },
+      crateSkins: crateSkins.map(s => ({
+        skinId: s.skinId,
+        name: s.name,
+        rarity: s.rarity,
+        type: s.type,
+        cssValue: s.cssValue,
+        imageUrl: s.imageUrl,
+      }))
     });
   } catch (err) {
     console.error('Confirm crate error:', err);

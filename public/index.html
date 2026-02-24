@@ -25,6 +25,12 @@
     .skin-card:hover { transform: translateY(-2px); transition: transform 0.2s; }
     @keyframes pulse-glow { 0%, 100% { box-shadow: 0 0 10px rgba(168, 85, 247, 0.4); } 50% { box-shadow: 0 0 25px rgba(168, 85, 247, 0.8); } }
     .queue-pulse { animation: pulse-glow 2s infinite; }
+    .roller-card { width: 100px; height: 100px; flex-shrink: 0; margin: 0 4px; border-radius: 8px; display: flex; flex-direction: column; align-items: center; justify-content: center; border: 2px solid #333; }
+    .roller-card.rarity-common { border-color: #6b7280; }
+    .roller-card.rarity-rare { border-color: #a855f7; box-shadow: 0 0 8px rgba(168, 85, 247, 0.3); }
+    .roller-card.rarity-legendary { border-color: #eab308; box-shadow: 0 0 12px rgba(234, 179, 8, 0.4); }
+    @keyframes reveal-glow { 0%, 100% { box-shadow: 0 0 20px rgba(168, 85, 247, 0.6); } 50% { box-shadow: 0 0 50px rgba(168, 85, 247, 1); } }
+    .reveal-glow { animation: reveal-glow 1.5s infinite; }
   </style>
 </head>
 <body class="text-gray-100 min-h-screen">
@@ -349,14 +355,30 @@
           <div id="shop-inventory" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3"></div>
         </div>
 
-        <!-- Skin Reveal Modal -->
-        <div id="skin-reveal-modal" class="hidden fixed inset-0 bg-black/80 z-50 flex items-center justify-center">
-          <div class="bg-arena-card rounded-xl p-8 max-w-sm text-center glow-border">
-            <p class="text-gray-400 text-sm mb-2">You received...</p>
-            <div id="reveal-skin-preview" class="w-24 h-24 rounded-lg mx-auto mb-3 flex items-center justify-center"></div>
-            <h3 id="reveal-skin-name" class="text-xl font-bold mb-1"></h3>
-            <p id="reveal-skin-rarity" class="text-sm mb-3"></p>
-            <button onclick="closeReveal()" class="bg-purple-600 hover:bg-purple-700 px-6 py-2 rounded-lg font-medium transition">
+        <!-- Crate Roller Modal -->
+        <div id="crate-roller-modal" class="hidden fixed inset-0 bg-black/90 z-50 flex flex-col items-center justify-center">
+          <!-- Screen flash overlay for legendary -->
+          <div id="roller-flash" class="fixed inset-0 bg-yellow-400 opacity-0 pointer-events-none z-[60] transition-opacity duration-200"></div>
+
+          <p class="text-gray-400 text-sm mb-4">Opening crate...</p>
+
+          <!-- Roller container -->
+          <div class="relative w-[340px] sm:w-[500px] md:w-[600px] overflow-hidden rounded-xl border border-gray-700 bg-arena-card" style="height:120px;">
+            <!-- Center marker -->
+            <div class="absolute top-0 bottom-0 left-1/2 -translate-x-1/2 w-[3px] bg-purple-500 z-10"></div>
+            <div class="absolute top-0 left-1/2 -translate-x-1/2 z-10 w-0 h-0 border-l-[8px] border-r-[8px] border-t-[10px] border-transparent border-t-purple-500"></div>
+            <div class="absolute bottom-0 left-1/2 -translate-x-1/2 z-10 w-0 h-0 border-l-[8px] border-r-[8px] border-b-[10px] border-transparent border-b-purple-500"></div>
+
+            <!-- Scrolling strip -->
+            <div id="roller-strip" class="absolute top-0 left-0 flex items-center h-full" style="will-change:transform;"></div>
+          </div>
+
+          <!-- Final reveal card (hidden until roller stops) -->
+          <div id="roller-reveal" class="hidden mt-6 text-center">
+            <div id="roller-reveal-preview" class="w-24 h-24 rounded-lg mx-auto mb-3 flex items-center justify-center"></div>
+            <h3 id="roller-reveal-name" class="text-xl font-bold mb-1"></h3>
+            <p id="roller-reveal-rarity" class="text-sm mb-4 font-bold"></p>
+            <button onclick="closeRoller()" class="bg-purple-600 hover:bg-purple-700 px-6 py-2 rounded-lg font-medium transition">
               Nice!
             </button>
           </div>
@@ -377,8 +399,8 @@
   <!-- ============ SCRIPTS ============ -->
   <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@solana/web3.js@1.87.6/lib/index.iife.min.js"></script>
-  <script src="/js/wallet.js?v=21"></script>
-  <script src="/js/game-client.js?v=21"></script>
-  <script src="/js/app.js?v=21"></script>
+  <script src="/js/wallet.js?v=22"></script>
+  <script src="/js/game-client.js?v=22"></script>
+  <script src="/js/app.js?v=22"></script>
 </body>
 </html>

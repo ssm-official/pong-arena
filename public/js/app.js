@@ -103,6 +103,8 @@ socket.on('connect', () => {
     if (res.user) {
       sessionToken = token;
       currentUser = res.user;
+      // Silently reconnect Phantom so signAndSendTransaction works
+      await WalletManager.reconnectIfTrusted();
       showApp();
     } else {
       localStorage.removeItem('pong_session');
@@ -485,19 +487,166 @@ async function buyCrate(crateId) {
     const confirmRes = await apiPostAuth('/api/shop/confirm-crate', { crateId, txSignature }, auth);
     if (confirmRes.error) return alert(confirmRes.error);
 
-    // Show skin reveal
-    showSkinReveal(confirmRes.skin);
-    loadShop();
+    // Show crate roller animation
+    showCrateRoller(confirmRes.skin, confirmRes.crateSkins || []);
   } catch (err) {
     alert('Purchase failed: ' + err.message);
   }
 }
 
-function showSkinReveal(skin) {
-  const modal = document.getElementById('skin-reveal-modal');
-  const preview = document.getElementById('reveal-skin-preview');
-  const nameEl = document.getElementById('reveal-skin-name');
-  const rarityEl = document.getElementById('reveal-skin-rarity');
+// ===========================================
+// CRATE ROLLER ANIMATION + SOUND EFFECTS
+// ===========================================
+
+let rollerAudioCtx = null;
+
+function getRollerAudioCtx() {
+  if (!rollerAudioCtx) rollerAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  return rollerAudioCtx;
+}
+
+/** Short click/tick sound — pitch rises as speed drops */
+function playTickSound(progress) {
+  try {
+    const ctx = getRollerAudioCtx();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    // Pitch rises from 400Hz to 800Hz as progress goes 0→1
+    osc.frequency.value = 400 + progress * 400;
+    osc.type = 'square';
+    gain.gain.value = 0.08;
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.06);
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + 0.06);
+  } catch (e) { /* audio not available */ }
+}
+
+/** Reveal chime — intensity scales with rarity */
+function playRevealSound(rarity) {
+  try {
+    const ctx = getRollerAudioCtx();
+    const freqs = rarity === 'legendary' ? [523, 659, 784, 1047]
+                : rarity === 'rare' ? [523, 659, 784]
+                : [523, 659];
+    const duration = rarity === 'legendary' ? 1.2 : rarity === 'rare' ? 0.8 : 0.5;
+    const volume = rarity === 'legendary' ? 0.15 : rarity === 'rare' ? 0.12 : 0.08;
+
+    freqs.forEach((freq, i) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.frequency.value = freq;
+      osc.type = 'sine';
+      const startTime = ctx.currentTime + i * 0.08;
+      gain.gain.setValueAtTime(volume, startTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, startTime + duration);
+      osc.start(startTime);
+      osc.stop(startTime + duration);
+    });
+  } catch (e) { /* audio not available */ }
+}
+
+/** Build the roller strip with ~35 random cards, won skin placed near position 30 */
+function buildRollerStrip(wonSkin, crateSkins) {
+  const TOTAL_CARDS = 36;
+  const WIN_INDEX = 30;
+  const strip = document.getElementById('roller-strip');
+  strip.innerHTML = '';
+  strip.style.transform = 'translateX(0px)';
+
+  const pool = crateSkins.length > 0 ? crateSkins : [wonSkin];
+  const cards = [];
+
+  for (let i = 0; i < TOTAL_CARDS; i++) {
+    let skin;
+    if (i === WIN_INDEX) {
+      skin = wonSkin;
+    } else {
+      skin = pool[Math.floor(Math.random() * pool.length)];
+    }
+
+    const card = document.createElement('div');
+    card.className = `roller-card rarity-${skin.rarity}`;
+    card.style.background = '#111128';
+
+    if (skin.type === 'color') {
+      card.innerHTML = `
+        <div style="width:36px;height:36px;border-radius:50%;background:${esc(skin.cssValue)};box-shadow:0 0 10px ${esc(skin.cssValue)}"></div>
+        <div style="font-size:10px;color:#ccc;margin-top:4px;text-align:center;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;max-width:90px">${esc(skin.name)}</div>
+      `;
+    } else {
+      card.innerHTML = `
+        <img src="${esc(skin.imageUrl)}" style="height:44px;object-fit:contain;" />
+        <div style="font-size:10px;color:#ccc;margin-top:4px;text-align:center;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;max-width:90px">${esc(skin.name)}</div>
+      `;
+    }
+
+    strip.appendChild(card);
+    cards.push({ el: card, skin });
+  }
+
+  return { cards, winIndex: WIN_INDEX };
+}
+
+/** Animate the roller strip with cubic deceleration */
+function animateRoller(cards, winIndex) {
+  return new Promise((resolve) => {
+    const strip = document.getElementById('roller-strip');
+    const container = strip.parentElement;
+    const containerWidth = container.offsetWidth;
+    const cardWidth = 108; // 100px card + 4px margin each side
+    const centerOffset = containerWidth / 2 - cardWidth / 2;
+
+    // Target: center the winning card in the viewport
+    const targetX = winIndex * cardWidth - centerOffset;
+    // Add small random offset within the card so it doesn't look perfectly centered every time
+    const finalX = targetX + (Math.random() * 20 - 10);
+
+    const DURATION = 4500; // ms
+    const startTime = performance.now();
+    let lastCardIndex = -1;
+
+    function easeOutCubic(t) {
+      return 1 - Math.pow(1 - t, 3);
+    }
+
+    function tick(now) {
+      const elapsed = now - startTime;
+      const progress = Math.min(elapsed / DURATION, 1);
+      const easedProgress = easeOutCubic(progress);
+      const currentX = easedProgress * finalX;
+
+      strip.style.transform = `translateX(${-currentX}px)`;
+
+      // Determine which card is under the center marker
+      const centerWorldX = currentX + centerOffset;
+      const currentCardIndex = Math.floor(centerWorldX / cardWidth);
+
+      if (currentCardIndex !== lastCardIndex && currentCardIndex >= 0) {
+        lastCardIndex = currentCardIndex;
+        playTickSound(progress);
+      }
+
+      if (progress < 1) {
+        requestAnimationFrame(tick);
+      } else {
+        resolve();
+      }
+    }
+
+    requestAnimationFrame(tick);
+  });
+}
+
+/** Show the final reveal card with glow + sound */
+function showFinalReveal(skin) {
+  const preview = document.getElementById('roller-reveal-preview');
+  const nameEl = document.getElementById('roller-reveal-name');
+  const rarityEl = document.getElementById('roller-reveal-rarity');
+  const revealDiv = document.getElementById('roller-reveal');
 
   if (skin.type === 'color') {
     preview.innerHTML = `<div class="w-16 h-16 rounded-full" style="background:${esc(skin.cssValue)};box-shadow:0 0 20px ${esc(skin.cssValue)}"></div>`;
@@ -510,13 +659,53 @@ function showSkinReveal(skin) {
   nameEl.textContent = skin.name;
   const rarityColors = { common: 'text-gray-400', rare: 'text-purple-400', legendary: 'text-yellow-400' };
   rarityEl.textContent = skin.rarity.toUpperCase();
-  rarityEl.className = `text-sm mb-3 font-bold ${rarityColors[skin.rarity] || 'text-gray-400'}`;
+  rarityEl.className = `text-sm mb-4 font-bold ${rarityColors[skin.rarity] || 'text-gray-400'}`;
 
-  modal.classList.remove('hidden');
+  // Rarity-based effects
+  if (skin.rarity === 'legendary') {
+    // Screen flash
+    const flash = document.getElementById('roller-flash');
+    flash.style.opacity = '0.6';
+    setTimeout(() => { flash.style.opacity = '0'; }, 300);
+    preview.classList.add('reveal-glow');
+  } else if (skin.rarity === 'rare') {
+    preview.classList.add('reveal-glow');
+  }
+
+  playRevealSound(skin.rarity);
+  revealDiv.classList.remove('hidden');
 }
 
-function closeReveal() {
-  document.getElementById('skin-reveal-modal').classList.add('hidden');
+/** Main entry: show the roller modal and run the animation */
+async function showCrateRoller(wonSkin, crateSkins) {
+  const modal = document.getElementById('crate-roller-modal');
+  const revealDiv = document.getElementById('roller-reveal');
+  const flash = document.getElementById('roller-flash');
+  const preview = document.getElementById('roller-reveal-preview');
+
+  // Reset state
+  revealDiv.classList.add('hidden');
+  flash.style.opacity = '0';
+  preview.classList.remove('reveal-glow');
+  modal.classList.remove('hidden');
+
+  // Build strip and animate
+  const { cards, winIndex } = buildRollerStrip(wonSkin, crateSkins);
+
+  // Small delay so the modal is visible before animation starts
+  await new Promise(r => setTimeout(r, 300));
+
+  await animateRoller(cards, winIndex);
+
+  // Show reveal
+  showFinalReveal(wonSkin);
+}
+
+function closeRoller() {
+  document.getElementById('crate-roller-modal').classList.add('hidden');
+  document.getElementById('roller-reveal').classList.add('hidden');
+  document.getElementById('roller-reveal-preview').classList.remove('reveal-glow');
+  loadShop();
 }
 
 async function equipSkin(skinId) {
