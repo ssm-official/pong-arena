@@ -1,23 +1,21 @@
 // ===========================================
 // Game Client — Canvas rendering + input
 // ===========================================
-// APPROACH: Mirror practice mode exactly.
-//   Own paddle: 100% local, never overwritten by server.
-//   Ball: accept server position each snapshot, run local physics between.
-//   Opponent paddle: lerp toward latest server position.
-// The server is authoritative but we never "fight" it — we just accept
-// its snapshots and predict smoothly between them.
+// Uses PongSim (browser global) for shared constants + prediction.
+// Own paddle: 100% local, never overwritten by server.
+// Ball: accept server position each snapshot, predict wall bounces between.
+// Opponent paddle: lerp toward latest server position.
 
 const GameClient = (() => {
-  const CANVAS_W = 800;
-  const CANVAS_H = 600;
-  const PADDLE_W = 26;
-  const PADDLE_H = 110;
-  const PADDLE_SPEED = 6;
-  const BALL_SIZE = 16;
-  const PHYSICS_DT = 1000 / 60; // fixed physics timestep
+  const CANVAS_W = PongSim.CANVAS_W;
+  const CANVAS_H = PongSim.CANVAS_H;
+  const PADDLE_W = PongSim.PADDLE_W;
+  const PADDLE_H = PongSim.PADDLE_H;
+  const PADDLE_SPEED = PongSim.PADDLE_SPEED;
+  const BALL_SIZE = PongSim.BALL_SIZE;
+  const PHYSICS_DT = 1000 / 60;
 
-  const OPP_PADDLE_LERP = 0.25;       // lerp opponent paddle 25% per frame
+  const OPP_PADDLE_LERP = 0.25;
 
   // Skin image render dimensions (centered on paddle hitbox)
   const SKIN_DRAW_W = 60;
@@ -89,7 +87,7 @@ const GameClient = (() => {
   let ballY = CANVAS_H / 2;
   let ballVx = 0;
   let ballVy = 0;
-  let accumulator = 0; // for fixed-timestep physics
+  let accumulator = 0;
 
   let displayScore = { p1: 0, p2: 0 };
   let isPaused = false;
@@ -159,9 +157,9 @@ const GameClient = (() => {
   }
 
   /**
-   * Called when a server state snapshot arrives (~20Hz).
-   * Own paddle: NEVER touched (100% local like practice mode).
-   * Ball: accept server position + velocity, then local physics predicts between snapshots.
+   * Called when a server state snapshot arrives.
+   * Own paddle: NEVER touched (100% local).
+   * Ball: accept server position + velocity, reset prediction.
    * Opponent paddle: set target for smooth lerp.
    */
   function updateState(state, sounds) {
@@ -176,16 +174,20 @@ const GameClient = (() => {
     }
 
     // --- Own paddle: DO NOT TOUCH. Local input is authoritative for rendering. ---
+    // Safety snap: if server paddle drifts too far, correct
+    const serverMyY = amPlayer1 ? state.paddle1.y : state.paddle2.y;
+    if (Math.abs(myY - serverMyY) > PADDLE_SPEED * 2) {
+      myY = serverMyY;
+    }
 
     // --- Opponent paddle: set target, display lerps toward it each frame ---
     oppTargetY = amPlayer1 ? state.paddle2.y : state.paddle1.y;
 
-    // --- Ball: accept server state directly (no blending/fighting) ---
+    // --- Ball: accept server state directly ---
     ballX = state.ball.x;
     ballY = state.ball.y;
     ballVx = state.ball.vx || 0;
     ballVy = state.ball.vy || 0;
-    // Reset accumulator so local physics starts fresh from this snapshot
     accumulator = 0;
   }
 
@@ -212,13 +214,12 @@ const GameClient = (() => {
     // Cap delta to prevent spiral of death on tab switch
     if (delta > 200) delta = 200;
 
-    // --- Fixed-timestep accumulator (identical to practice mode) ---
     accumulator += delta;
 
     while (accumulator >= PHYSICS_DT) {
       accumulator -= PHYSICS_DT;
 
-      // Own paddle: move exactly like practice mode — one PADDLE_SPEED per tick
+      // Own paddle: move using PongSim constants
       if (currentInput === 'up') {
         myY = Math.max(0, myY - PADDLE_SPEED);
       } else if (currentInput === 'down') {
@@ -226,9 +227,6 @@ const GameClient = (() => {
       }
 
       // Ball: predict between server snapshots (wall bounces only)
-      // Paddle collisions are handled by the server — at 60Hz broadcasts
-      // the ball only moves ~1 tick between snapshots so it won't visually
-      // pass through paddles before the server corrects it.
       if (!isPaused) {
         ballX += ballVx;
         ballY += ballVy;
@@ -245,7 +243,7 @@ const GameClient = (() => {
       }
     }
 
-    // --- Opponent paddle: smooth lerp toward target (outside fixed timestep) ---
+    // Opponent paddle: smooth lerp toward target
     const oppDiff = oppTargetY - oppDisplayY;
     if (Math.abs(oppDiff) < 1) {
       oppDisplayY = oppTargetY;
@@ -296,11 +294,11 @@ const GameClient = (() => {
     const p2Y = amPlayer1 ? oppY : myDisplayY;
 
     if (!mirrored) {
-      drawPaddle(10, p1Y, amPlayer1, amPlayer1 ? mySkin : opponentSkin, amPlayer1 ? mySkinImage : opponentSkinImage, false);
-      drawPaddle(CANVAS_W - PADDLE_W - 10, p2Y, !amPlayer1, !amPlayer1 ? mySkin : opponentSkin, !amPlayer1 ? mySkinImage : opponentSkinImage, true);
+      drawPaddle(PongSim.P1_X, p1Y, amPlayer1, amPlayer1 ? mySkin : opponentSkin, amPlayer1 ? mySkinImage : opponentSkinImage, false);
+      drawPaddle(PongSim.P2_LEFT, p2Y, !amPlayer1, !amPlayer1 ? mySkin : opponentSkin, !amPlayer1 ? mySkinImage : opponentSkinImage, true);
     } else {
-      drawPaddle(10, p2Y, !amPlayer1, !amPlayer1 ? mySkin : opponentSkin, !amPlayer1 ? mySkinImage : opponentSkinImage, false);
-      drawPaddle(CANVAS_W - PADDLE_W - 10, p1Y, amPlayer1, amPlayer1 ? mySkin : opponentSkin, amPlayer1 ? mySkinImage : opponentSkinImage, true);
+      drawPaddle(PongSim.P1_X, p2Y, !amPlayer1, !amPlayer1 ? mySkin : opponentSkin, !amPlayer1 ? mySkinImage : opponentSkinImage, false);
+      drawPaddle(PongSim.P2_LEFT, p1Y, amPlayer1, amPlayer1 ? mySkin : opponentSkin, amPlayer1 ? mySkinImage : opponentSkinImage, true);
     }
 
     // Ball
@@ -394,7 +392,6 @@ const GameClient = (() => {
   function setupInput() {
     document.addEventListener('keydown', (e) => {
       if (!gameId) return;
-      // Don't capture keys when typing in chat or any input field
       const tag = document.activeElement && document.activeElement.tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA') return;
       if (['w', 'W', 's', 'S', 'ArrowUp', 'ArrowDown'].includes(e.key)) {

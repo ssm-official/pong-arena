@@ -1,26 +1,17 @@
 // ===========================================
 // Pong Engine — Server-Authoritative Game State
 // ===========================================
-// Runs at 60 ticks/sec. Server owns all physics.
+// Runs at 60 ticks/sec. Server owns all physics via PongSim.
 // Clients only send input; server broadcasts state.
 
+const PongSim = require('../public/js/pong-sim');
 const Match = require('../models/Match');
 const User = require('../models/User');
 const { payoutWinner, STAKE_TIERS } = require('../solana/utils');
 
-const CANVAS_W = 800;
-const CANVAS_H = 600;
-const PADDLE_W = 26;
-const PADDLE_H = 110;
-const PADDLE_SPEED = 6;
-const BALL_SIZE = 16;
-const BALL_SPEED_INITIAL = 4;
-const BALL_SPEED_INCREMENT = 0.25;
-const BALL_MAX_SPEED = 14;
-const WIN_SCORE = 5;
 const TICK_RATE = 1000 / 60;
-const SCORE_PAUSE_TICKS = 120;  // 2 second pause after scoring
 const READY_TIMEOUT_MS = 30000; // 30 seconds to ready up
+const INPUT_RATE_LIMIT = 30;    // max direction changes/sec per player
 
 class PongEngine {
   constructor(gameId, player1, player2, tier, io, activeGames, customStake) {
@@ -30,11 +21,10 @@ class PongEngine {
     this.tier = tier;
     this.io = io;
     this.activeGames = activeGames;
-    this.pauseTicks = 0;
-    this.customStake = customStake || null; // for duel matches
+    this.customStake = customStake || null;
     this.tickCount = 0;
     this.broadcastInterval = 1; // broadcast every tick = 60Hz
-    this.pendingSounds = [];    // accumulate sounds between broadcasts
+    this.pendingSounds = [];
 
     // Ready system
     this.readyPhase = true;
@@ -46,24 +36,27 @@ class PongEngine {
     // In-game chat messages (last 20)
     this.chatMessages = [];
 
-    this.state = {
-      ball: { x: CANVAS_W / 2, y: CANVAS_H / 2, vx: 0, vy: 0 },
-      paddle1: { y: CANVAS_H / 2 - PADDLE_H / 2 },
-      paddle2: { y: CANVAS_H / 2 - PADDLE_H / 2 },
-      score: { p1: 0, p2: 0 },
-      status: 'playing',
-      winner: null,
-      paused: false,
-      sound: null,
-    };
+    // Simulation state via PongSim
+    this.simState = PongSim.createState();
 
     this.input = {
       [player1.wallet]: 'stop',
       [player2.wallet]: 'stop',
     };
 
+    // Anti-cheat: input rate limiting (sliding window)
+    this._inputTimestamps = {
+      [player1.wallet]: [],
+      [player2.wallet]: [],
+    };
+
     this.interval = null;
     this.disconnected = new Set();
+  }
+
+  // Getter so external code (matchmaking.js, server.js) can read game.state
+  get state() {
+    return PongSim.serializeState(this.simState);
   }
 
   setDisconnect(wallet) {
@@ -78,13 +71,14 @@ class PongEngine {
     return this.disconnected.has(wallet);
   }
 
-  /** Get the stake amount (custom for duels, tier-based otherwise) */
   getStakeAmount() {
     if (this.customStake) return this.customStake;
     return STAKE_TIERS[this.tier] || 0;
   }
 
-  /** Begin the ready phase — both players must press READY within 30s */
+  // =============================================
+  // READY PHASE
+  // =============================================
   startReadyPhase() {
     this.readyPhase = true;
     this.p1Ready = false;
@@ -97,7 +91,6 @@ class PongEngine {
       timeout: READY_TIMEOUT_MS / 1000,
     });
 
-    // 30s timeout — if both not ready, cancel game
     this.readyTimeout = setTimeout(() => {
       if (!this.p1Ready || !this.p2Ready) {
         this.cancelReadyTimeout();
@@ -105,7 +98,6 @@ class PongEngine {
     }, READY_TIMEOUT_MS);
   }
 
-  /** Handle a player marking themselves as ready */
   playerReady(wallet) {
     if (!this.readyPhase) return;
 
@@ -118,7 +110,6 @@ class PongEngine {
       p2Ready: this.p2Ready,
     });
 
-    // Both ready — start 3-second countdown then game
     if (this.p1Ready && this.p2Ready) {
       if (this.readyTimeout) { clearTimeout(this.readyTimeout); this.readyTimeout = null; }
       this.readyPhase = false;
@@ -128,7 +119,6 @@ class PongEngine {
     }
   }
 
-  /** Cancel game if ready timeout expires */
   cancelReadyTimeout() {
     this.readyPhase = false;
     if (this.readyTimeout) { clearTimeout(this.readyTimeout); this.readyTimeout = null; }
@@ -136,11 +126,13 @@ class PongEngine {
       gameId: this.gameId,
       reason: 'Not all players readied up in time. Game cancelled.',
     });
-    // Mark match as cancelled
     Match.findOneAndUpdate({ gameId: this.gameId }, { status: 'cancelled' }).catch(() => {});
     this.activeGames.delete(this.gameId);
   }
 
+  // =============================================
+  // GAME START
+  // =============================================
   start() {
     if (this.gameStarted) return;
     this.gameStarted = true;
@@ -154,7 +146,7 @@ class PongEngine {
       stake: stakeAmount,
     });
 
-    this.launchBall();
+    this._launchBall();
     this.interval = setInterval(() => this.tick(), TICK_RATE);
   }
 
@@ -162,13 +154,34 @@ class PongEngine {
     return this.player1.wallet === wallet || this.player2.wallet === wallet;
   }
 
+  // =============================================
+  // INPUT HANDLING + ANTI-CHEAT
+  // =============================================
   handleInput(wallet, direction) {
-    if (direction === 'up' || direction === 'down' || direction === 'stop') {
-      this.input[wallet] = direction;
+    // Validate player identity
+    if (wallet !== this.player1.wallet && wallet !== this.player2.wallet) return;
+
+    // Validate direction value
+    if (direction !== 'up' && direction !== 'down' && direction !== 'stop') return;
+
+    // Rate limit: max INPUT_RATE_LIMIT direction changes per second
+    const now = Date.now();
+    const timestamps = this._inputTimestamps[wallet];
+    if (timestamps) {
+      // Remove entries older than 1 second
+      while (timestamps.length > 0 && now - timestamps[0] > 1000) {
+        timestamps.shift();
+      }
+      if (timestamps.length >= INPUT_RATE_LIMIT) return; // drop input
+      timestamps.push(now);
     }
+
+    this.input[wallet] = direction;
   }
 
-  /** Handle in-game chat message */
+  // =============================================
+  // CHAT
+  // =============================================
   handleChat(wallet, text) {
     if (!text || text.length > 100) return;
     const username = wallet === this.player1.wallet
@@ -187,199 +200,95 @@ class PongEngine {
     });
   }
 
+  // =============================================
+  // TICK — main game loop (60Hz)
+  // =============================================
   tick() {
-    if (this.state.status !== 'playing') return;
-    this.state.sound = null;
+    if (this.simState.status !== 'playing') return;
+    this.simState.sound = null;
     this.tickCount++;
     const isBroadcastTick = (this.tickCount % this.broadcastInterval === 0);
 
     // --- Always allow paddle movement, even during pause ---
-    const p1Input = this.input[this.player1.wallet];
-    const p2Input = this.input[this.player2.wallet];
-
-    if (p1Input === 'up')   this.state.paddle1.y = Math.max(0, this.state.paddle1.y - PADDLE_SPEED);
-    if (p1Input === 'down') this.state.paddle1.y = Math.min(CANVAS_H - PADDLE_H, this.state.paddle1.y + PADDLE_SPEED);
-    if (p2Input === 'up')   this.state.paddle2.y = Math.max(0, this.state.paddle2.y - PADDLE_SPEED);
-    if (p2Input === 'down') this.state.paddle2.y = Math.min(CANVAS_H - PADDLE_H, this.state.paddle2.y + PADDLE_SPEED);
+    const p1Dir = this.input[this.player1.wallet];
+    const p2Dir = this.input[this.player2.wallet];
+    PongSim.applyInput(this.simState, 1, p1Dir);
+    PongSim.applyInput(this.simState, 2, p2Dir);
 
     // --- Score pause countdown ---
-    if (this.pauseTicks > 0) {
-      this.pauseTicks--;
-      this.state.paused = true;
-      if (this.pauseTicks === 0) {
-        this.state.paused = false;
-        this.launchBall();
+    if (this.simState.pauseTicks > 0) {
+      const pauseEnded = PongSim.tickPause(this.simState);
+      if (pauseEnded) {
+        this._launchBall();
       }
       if (isBroadcastTick) this.broadcastState();
       return;
     }
 
-    // --- Move ball (sub-step swept collision detection) ---
-    const ball = this.state.ball;
-    const paddle1 = this.state.paddle1;
-    const paddle2 = this.state.paddle2;
-    const P1_X = 10;
-    const p1Right = P1_X + PADDLE_W;
-    const p2Left = CANVAS_W - 10 - PADDLE_W;
-    const P2_RIGHT = CANVAS_W - 10;
-
-    // Break movement into sub-steps to prevent pass-through at any speed
-    const speed = Math.sqrt(ball.vx * ball.vx + ball.vy * ball.vy);
-    const steps = Math.max(1, Math.ceil(speed / (PADDLE_W / 2)));
-    const stepVx = ball.vx / steps;
-    const stepVy = ball.vy / steps;
-    let collided = false;
-
-    for (let s = 0; s < steps; s++) {
-      const oldX = ball.x;
-      const oldY = ball.y;
-
-      ball.x += stepVx;
-      ball.y += stepVy;
-
-      // Top/bottom wall bounce
-      if (ball.y <= 0) {
-        ball.vy = Math.abs(ball.vy);
-        ball.y = -ball.y;
-        this.state.sound = 'wall';
-      }
-      if (ball.y >= CANVAS_H - BALL_SIZE) {
-        ball.vy = -Math.abs(ball.vy);
-        ball.y = 2 * (CANVAS_H - BALL_SIZE) - ball.y;
-        this.state.sound = 'wall';
-      }
-
-      // --- Left paddle collision (player 1) ---
-      if (ball.vx < 0 && !collided) {
-        // Swept: ball left edge crossed paddle right edge this sub-step
-        if (oldX >= p1Right && ball.x < p1Right) {
-          const t = (oldX - p1Right) / (oldX - ball.x);
-          const hitY = oldY + (ball.y - oldY) * t;
-          if (hitY + BALL_SIZE >= paddle1.y && hitY <= paddle1.y + PADDLE_H) {
-            const spd = Math.min(Math.abs(ball.vx) + BALL_SPEED_INCREMENT, BALL_MAX_SPEED);
-            ball.vx = spd;
-            ball.x = p1Right;
-            ball.y = hitY;
-            const hitPos = (ball.y + BALL_SIZE / 2 - paddle1.y) / PADDLE_H;
-            ball.vy = (hitPos - 0.5) * spd * 1.5;
-            this.state.sound = 'paddle';
-            collided = true;
-            break;
-          }
-        }
-        // Overlap fallback: ball is inside paddle zone
-        if (ball.x < p1Right && ball.x + BALL_SIZE > P1_X &&
-            ball.y + BALL_SIZE > paddle1.y && ball.y < paddle1.y + PADDLE_H) {
-          const spd = Math.min(Math.abs(ball.vx) + BALL_SPEED_INCREMENT, BALL_MAX_SPEED);
-          ball.vx = spd;
-          ball.x = p1Right;
-          const hitPos = (ball.y + BALL_SIZE / 2 - paddle1.y) / PADDLE_H;
-          ball.vy = (hitPos - 0.5) * spd * 1.5;
-          this.state.sound = 'paddle';
-          collided = true;
-          break;
-        }
-      }
-
-      // --- Right paddle collision (player 2) ---
-      if (ball.vx > 0 && !collided) {
-        // Swept: ball right edge crossed paddle left edge this sub-step
-        const oldRight = oldX + BALL_SIZE;
-        const newRight = ball.x + BALL_SIZE;
-        if (oldRight <= p2Left && newRight > p2Left) {
-          const t = (p2Left - oldRight) / (newRight - oldRight);
-          const hitY = oldY + (ball.y - oldY) * t;
-          if (hitY + BALL_SIZE >= paddle2.y && hitY <= paddle2.y + PADDLE_H) {
-            const spd = Math.min(Math.abs(ball.vx) + BALL_SPEED_INCREMENT, BALL_MAX_SPEED);
-            ball.vx = -spd;
-            ball.x = p2Left - BALL_SIZE;
-            ball.y = hitY;
-            const hitPos = (ball.y + BALL_SIZE / 2 - paddle2.y) / PADDLE_H;
-            ball.vy = (hitPos - 0.5) * spd * 1.5;
-            this.state.sound = 'paddle';
-            collided = true;
-            break;
-          }
-        }
-        // Overlap fallback: ball is inside paddle zone
-        if (ball.x + BALL_SIZE > p2Left && ball.x < P2_RIGHT &&
-            ball.y + BALL_SIZE > paddle2.y && ball.y < paddle2.y + PADDLE_H) {
-          const spd = Math.min(Math.abs(ball.vx) + BALL_SPEED_INCREMENT, BALL_MAX_SPEED);
-          ball.vx = -spd;
-          ball.x = p2Left - BALL_SIZE;
-          const hitPos = (ball.y + BALL_SIZE / 2 - paddle2.y) / PADDLE_H;
-          ball.vy = (hitPos - 0.5) * spd * 1.5;
-          this.state.sound = 'paddle';
-          collided = true;
-          break;
-        }
-      }
+    // --- Step ball physics ---
+    const result = PongSim.stepBall(this.simState);
+    if (result.sound) {
+      this.simState.sound = result.sound;
     }
 
-    // --- Scoring ---
-    if (ball.x + BALL_SIZE < 0) {
-      this.state.score.p2++;
-      this.state.sound = 'score';
-      if (this.state.score.p2 >= WIN_SCORE) { this.endGame(this.player2.wallet); return; }
-      this.resetBall();
-      this.broadcastState(); // always broadcast score events immediately
-      return;
-    }
-    if (ball.x > CANVAS_W) {
-      this.state.score.p1++;
-      this.state.sound = 'score';
-      if (this.state.score.p1 >= WIN_SCORE) { this.endGame(this.player1.wallet); return; }
-      this.resetBall();
-      this.broadcastState(); // always broadcast score events immediately
+    // --- Handle scoring ---
+    if (result.scored) {
+      if (result.scored === 2) {
+        this.simState.score.p2++;
+        this.simState.sound = 'score';
+        if (this.simState.score.p2 >= PongSim.WIN_SCORE) { this.endGame(this.player2.wallet); return; }
+      } else {
+        this.simState.score.p1++;
+        this.simState.sound = 'score';
+        if (this.simState.score.p1 >= PongSim.WIN_SCORE) { this.endGame(this.player1.wallet); return; }
+      }
+      PongSim.resetBallAfterScore(this.simState);
+      this.broadcastState();
       return;
     }
 
     // Accumulate sounds for next broadcast
-    if (this.state.sound && !this.pendingSounds.includes(this.state.sound)) {
-      this.pendingSounds.push(this.state.sound);
+    if (this.simState.sound && !this.pendingSounds.includes(this.simState.sound)) {
+      this.pendingSounds.push(this.simState.sound);
     }
 
     if (isBroadcastTick) this.broadcastState();
   }
 
-  resetBall() {
-    this.state.ball = {
-      x: CANVAS_W / 2 - BALL_SIZE / 2,
-      y: CANVAS_H / 2 - BALL_SIZE / 2,
-      vx: 0,
-      vy: 0,
-    };
-    this.pauseTicks = SCORE_PAUSE_TICKS;
-    this.state.paused = true;
-  }
-
-  launchBall() {
+  // =============================================
+  // BALL LAUNCH — random angle/dir generated HERE
+  // =============================================
+  _launchBall() {
     const angle = (Math.random() - 0.5) * Math.PI / 3;
     const dir = Math.random() > 0.5 ? 1 : -1;
-    this.state.ball.vx = Math.cos(angle) * BALL_SPEED_INITIAL * dir;
-    this.state.ball.vy = Math.sin(angle) * BALL_SPEED_INITIAL;
+    PongSim.launchBall(this.simState, angle, dir);
   }
 
+  // =============================================
+  // BROADCAST
+  // =============================================
   broadcastState() {
-    // Include any sounds accumulated since last broadcast
     const sounds = this.pendingSounds.length > 0 ? this.pendingSounds.slice() : [];
-    if (this.state.sound && !sounds.includes(this.state.sound)) {
-      sounds.push(this.state.sound);
+    if (this.simState.sound && !sounds.includes(this.simState.sound)) {
+      sounds.push(this.simState.sound);
     }
     this.pendingSounds = [];
 
     this.emit('game-state', {
       gameId: this.gameId,
-      state: this.state,
+      state: PongSim.serializeState(this.simState),
       tick: this.tickCount,
       sounds,
     });
   }
 
+  // =============================================
+  // END GAME
+  // =============================================
   async endGame(winnerWallet) {
     clearInterval(this.interval);
-    this.state.status = 'finished';
-    this.state.winner = winnerWallet;
+    this.simState.status = 'finished';
+    this.simState.winner = winnerWallet;
 
     const loserWallet = winnerWallet === this.player1.wallet
       ? this.player2.wallet
@@ -389,7 +298,7 @@ class PongEngine {
       gameId: this.gameId,
       winner: winnerWallet,
       loser: loserWallet,
-      score: this.state.score,
+      score: this.simState.score,
       player1: { wallet: this.player1.wallet, username: this.player1.username },
       player2: { wallet: this.player2.wallet, username: this.player2.username },
     });
@@ -401,7 +310,7 @@ class PongEngine {
 
       await Match.findOneAndUpdate({ gameId: this.gameId }, {
         winner: winnerWallet,
-        score: { player1: this.state.score.p1, player2: this.state.score.p2 },
+        score: { player1: this.simState.score.p1, player2: this.simState.score.p2 },
         payoutTx: result.payoutTx,
         status: 'completed',
         completedAt: new Date(),
@@ -426,13 +335,15 @@ class PongEngine {
       this.emit('payout-error', { gameId: this.gameId, error: err.message });
     }
 
-    // Don't delete from activeGames immediately — keep for post-game chat
-    // Clean up after 5 minutes
+    // Keep for post-game chat, clean up after 5 minutes
     setTimeout(() => {
       this.activeGames.delete(this.gameId);
     }, 300000);
   }
 
+  // =============================================
+  // FORFEIT
+  // =============================================
   forfeit(disconnectedWallet) {
     const winnerWallet = disconnectedWallet === this.player1.wallet
       ? this.player2.wallet
@@ -443,10 +354,13 @@ class PongEngine {
     this.endGame(winnerWallet);
   }
 
+  // =============================================
+  // EMIT TO BOTH PLAYERS
+  // =============================================
   emit(event, data) {
     this.io.to(this.player1.socketId).emit(event, data);
     this.io.to(this.player2.socketId).emit(event, data);
   }
 }
 
-module.exports = { PongEngine, STAKE_TIERS, WIN_SCORE, CANVAS_W, CANVAS_H, READY_TIMEOUT_MS };
+module.exports = { PongEngine, STAKE_TIERS, WIN_SCORE: PongSim.WIN_SCORE, CANVAS_W: PongSim.CANVAS_W, CANVAS_H: PongSim.CANVAS_H, READY_TIMEOUT_MS };

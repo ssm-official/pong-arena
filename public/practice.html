@@ -106,25 +106,26 @@
 
   </div>
 
+  <!-- ============ SHARED PHYSICS ============ -->
+  <script src="/js/pong-sim.js?v=34"></script>
+
   <!-- ============ INLINE GAME SCRIPT ============ -->
   <script>
   (function() {
     'use strict';
 
     // =============================================
-    // CONSTANTS — must match server PongEngine.js
+    // CONSTANTS — from PongSim (shared module)
     // =============================================
-    const CANVAS_W = 800;
-    const CANVAS_H = 600;
-    const PADDLE_W = 26;
-    const PADDLE_H = 110;
-    const PADDLE_SPEED = 6;
-    const BALL_SIZE = 16;
-    const BALL_SPEED_INITIAL = 6;
-    const BALL_SPEED_INCREMENT = 0.25;
-    const BALL_MAX_SPEED = 14;
-    const WIN_SCORE = 5;
-    const SCORE_PAUSE_TICKS = 90; // 1.5s at 60 ticks/sec
+    const CANVAS_W = PongSim.CANVAS_W;
+    const CANVAS_H = PongSim.CANVAS_H;
+    const PADDLE_W = PongSim.PADDLE_W;
+    const PADDLE_H = PongSim.PADDLE_H;
+    const PADDLE_SPEED = PongSim.PADDLE_SPEED;
+    const BALL_SIZE = PongSim.BALL_SIZE;
+    const WIN_SCORE = PongSim.WIN_SCORE;
+    const P1_X = PongSim.P1_X;
+    const P2_X = PongSim.P2_LEFT; // left edge of paddle 2
 
     const PHYSICS_DT = 1000 / 60; // fixed timestep: 60 steps/sec
 
@@ -160,10 +161,6 @@
       } catch (e) {}
     }
 
-    // Paddle x positions
-    const P1_X = 10;
-    const P2_X = CANVAS_W - 10 - PADDLE_W;
-
     // =============================================
     // STATE
     // =============================================
@@ -174,12 +171,11 @@
     let lastTimestamp = 0;
     let accumulator = 0;
 
-    // Game state
-    let ball = { x: 0, y: 0, vx: 0, vy: 0 };
-    let playerPaddle = { y: 0 };
-    let botPaddle = { y: 0 };
+    // Simulation state (PongSim-managed)
+    let simState = null;
+
+    // Local score tracking (for display)
     let score = { player: 0, bot: 0 };
-    let pauseTicks = 0;
     let isPaused = false;
     let gameStatus = 'idle'; // 'idle', 'countdown', 'playing', 'finished'
     let countdownValue = 3;
@@ -192,8 +188,8 @@
     // Skin support
     const SKIN_DRAW_W = 60;
     const SKIN_DRAW_H = 200;
-    let playerSkin = null;      // { type, cssValue, imageUrl }
-    let playerSkinImage = null;  // preloaded Image for image-type skins
+    let playerSkin = null;
+    let playerSkinImage = null;
 
     // Bot AI state
     let botTargetY = CANVAS_H / 2;
@@ -214,13 +210,11 @@
         const data = await res.json();
         const equippedId = data.user && data.user.equippedSkin;
         if (!equippedId || equippedId === 'default') return;
-        // Fetch shop to find skin details
         const shopRes = await fetch('/api/shop', {
           headers: { 'Authorization': 'Bearer ' + session.token }
         });
         if (!shopRes.ok) return;
         const shopData = await shopRes.json();
-        // Search inventory for the equipped skin
         const skin = (shopData.inventory || []).find(s => s.skinId === equippedId);
         if (!skin) return;
         playerSkin = skin;
@@ -272,12 +266,11 @@
       canvas = document.getElementById('game-canvas');
       ctx = canvas.getContext('2d');
 
-      // Reset state
+      // Create fresh simulation state via PongSim
+      simState = PongSim.createState();
+
+      // Reset local tracking
       score = { player: 0, bot: 0 };
-      playerPaddle = { y: CANVAS_H / 2 - PADDLE_H / 2 };
-      botPaddle = { y: CANVAS_H / 2 - PADDLE_H / 2 };
-      ball = { x: CANVAS_W / 2 - BALL_SIZE / 2, y: CANVAS_H / 2 - BALL_SIZE / 2, vx: 0, vy: 0 };
-      pauseTicks = 0;
       isPaused = false;
       gameStatus = 'countdown';
       countdownValue = 3;
@@ -325,6 +318,12 @@
           renderCountdown(countdownValue);
         }
       }, 1000);
+    }
+
+    function launchBall() {
+      const angle = (Math.random() - 0.5) * Math.PI / 3;
+      const dir = Math.random() > 0.5 ? 1 : -1;
+      PongSim.launchBall(simState, angle, dir);
     }
 
     function gameOver(playerWon) {
@@ -384,7 +383,7 @@
     }
 
     // =============================================
-    // PHYSICS (fixed timestep)
+    // PHYSICS (fixed timestep via PongSim)
     // =============================================
     function gameLoop(timestamp) {
       if (!gameRunning) return;
@@ -415,164 +414,50 @@
     function physicsTick() {
       if (gameStatus !== 'playing') return;
 
-      // --- Move player paddle ---
-      if (playerInput === 'up') {
-        playerPaddle.y = Math.max(0, playerPaddle.y - PADDLE_SPEED);
-      } else if (playerInput === 'down') {
-        playerPaddle.y = Math.min(CANVAS_H - PADDLE_H, playerPaddle.y + PADDLE_SPEED);
-      }
+      // --- Move player paddle via PongSim ---
+      PongSim.applyInput(simState, 1, playerInput);
 
-      // --- Move bot paddle ---
+      // --- Move bot paddle (variable speed, directly sets y) ---
       updateBot();
 
       // --- Score pause countdown ---
-      if (pauseTicks > 0) {
-        pauseTicks--;
-        isPaused = true;
-        if (pauseTicks === 0) {
-          isPaused = false;
+      if (simState.pauseTicks > 0) {
+        const pauseEnded = PongSim.tickPause(simState);
+        isPaused = simState.paused;
+        if (pauseEnded) {
           launchBall();
         }
         return;
       }
 
-      // --- Move ball (with swept collision) ---
-      moveBallWithSweptCollision();
-    }
+      // --- Step ball via PongSim ---
+      const result = PongSim.stepBall(simState);
 
-    // =============================================
-    // BALL PHYSICS — SUB-STEP SWEPT COLLISION
-    // =============================================
-    function moveBallWithSweptCollision() {
-      const p1Right = P1_X + PADDLE_W;
-      const p2Left = P2_X;
-      const p2Right = P2_X + PADDLE_W;
+      // Play sound
+      if (result.sound) {
+        playPracticeSound(result.sound);
+      }
 
-      // Break movement into sub-steps to prevent pass-through at any speed
-      const speed = Math.sqrt(ball.vx * ball.vx + ball.vy * ball.vy);
-      const steps = Math.max(1, Math.ceil(speed / (PADDLE_W / 2)));
-      const stepVx = ball.vx / steps;
-      const stepVy = ball.vy / steps;
-
-      for (let s = 0; s < steps; s++) {
-        const oldX = ball.x;
-        const oldY = ball.y;
-
-        ball.x += stepVx;
-        ball.y += stepVy;
-
-        // --- Top/bottom wall bounce ---
-        if (ball.y <= 0) {
-          ball.vy = Math.abs(ball.vy);
-          ball.y = -ball.y;
-          playPracticeSound('wall');
-        }
-        if (ball.y >= CANVAS_H - BALL_SIZE) {
-          ball.vy = -Math.abs(ball.vy);
-          ball.y = 2 * (CANVAS_H - BALL_SIZE) - ball.y;
-          playPracticeSound('wall');
-        }
-
-        // --- Left paddle (player) collision ---
-        if (ball.vx < 0) {
-          // Swept: ball left edge crossed paddle right edge
-          if (oldX >= p1Right && ball.x < p1Right) {
-            const t = (oldX - p1Right) / (oldX - ball.x);
-            const hitY = oldY + (ball.y - oldY) * t;
-            if (hitY + BALL_SIZE >= playerPaddle.y && hitY <= playerPaddle.y + PADDLE_H) {
-              const spd = Math.min(Math.abs(ball.vx) + BALL_SPEED_INCREMENT, BALL_MAX_SPEED);
-              ball.vx = spd;
-              ball.x = p1Right;
-              ball.y = hitY;
-              const hitPos = (ball.y + BALL_SIZE / 2 - playerPaddle.y) / PADDLE_H;
-              ball.vy = (hitPos - 0.5) * spd * 1.5;
-              playPracticeSound('paddle');
-              return;
-            }
-          }
-          // Overlap fallback
-          if (ball.x < p1Right && ball.x + BALL_SIZE > P1_X &&
-              ball.y + BALL_SIZE > playerPaddle.y && ball.y < playerPaddle.y + PADDLE_H) {
-            const spd = Math.min(Math.abs(ball.vx) + BALL_SPEED_INCREMENT, BALL_MAX_SPEED);
-            ball.vx = spd;
-            ball.x = p1Right;
-            const hitPos = (ball.y + BALL_SIZE / 2 - playerPaddle.y) / PADDLE_H;
-            ball.vy = (hitPos - 0.5) * spd * 1.5;
-            playPracticeSound('paddle');
-            return;
-          }
-        }
-
-        // --- Right paddle (bot) collision ---
-        if (ball.vx > 0) {
-          const oldRight = oldX + BALL_SIZE;
-          const newRight = ball.x + BALL_SIZE;
-          // Swept: ball right edge crossed paddle left edge
-          if (oldRight <= p2Left && newRight > p2Left) {
-            const t = (p2Left - oldRight) / (newRight - oldRight);
-            const hitY = oldY + (ball.y - oldY) * t;
-            if (hitY + BALL_SIZE >= botPaddle.y && hitY <= botPaddle.y + PADDLE_H) {
-              const spd = Math.min(Math.abs(ball.vx) + BALL_SPEED_INCREMENT, BALL_MAX_SPEED);
-              ball.vx = -spd;
-              ball.x = p2Left - BALL_SIZE;
-              ball.y = hitY;
-              const hitPos = (ball.y + BALL_SIZE / 2 - botPaddle.y) / PADDLE_H;
-              ball.vy = (hitPos - 0.5) * spd * 1.5;
-              playPracticeSound('paddle');
-              return;
-            }
-          }
-          // Overlap fallback
-          if (ball.x + BALL_SIZE > p2Left && ball.x < p2Right &&
-              ball.y + BALL_SIZE > botPaddle.y && ball.y < botPaddle.y + PADDLE_H) {
-            const spd = Math.min(Math.abs(ball.vx) + BALL_SPEED_INCREMENT, BALL_MAX_SPEED);
-            ball.vx = -spd;
-            ball.x = p2Left - BALL_SIZE;
-            const hitPos = (ball.y + BALL_SIZE / 2 - botPaddle.y) / PADDLE_H;
-            ball.vy = (hitPos - 0.5) * spd * 1.5;
-            playPracticeSound('paddle');
-            return;
-          }
-        }
-
-        // --- Scoring ---
-        if (ball.x + BALL_SIZE < 0) {
+      // --- Handle scoring ---
+      if (result.scored) {
+        if (result.scored === 2) {
+          // Player 2 (bot) scored — ball went past player
           score.bot++;
           updateScoreDisplay();
-          playPracticeSound('score');
           if (score.bot >= WIN_SCORE) { gameOver(false); return; }
-          resetBall();
-          return;
-        }
-        if (ball.x > CANVAS_W) {
+        } else {
+          // Player 1 scored — ball went past bot
           score.player++;
           updateScoreDisplay();
-          playPracticeSound('score');
           if (score.player >= WIN_SCORE) { gameOver(true); return; }
-          resetBall();
-          return;
         }
+        PongSim.resetBallAfterScore(simState);
+        isPaused = simState.paused;
       }
     }
 
-    function resetBall() {
-      ball.x = CANVAS_W / 2 - BALL_SIZE / 2;
-      ball.y = CANVAS_H / 2 - BALL_SIZE / 2;
-      ball.vx = 0;
-      ball.vy = 0;
-      pauseTicks = SCORE_PAUSE_TICKS;
-      isPaused = true;
-    }
-
-    function launchBall() {
-      const angle = (Math.random() - 0.5) * Math.PI / 3; // -30 to +30 degrees
-      const dir = Math.random() > 0.5 ? 1 : -1;
-      ball.vx = Math.cos(angle) * BALL_SPEED_INITIAL * dir;
-      ball.vy = Math.sin(angle) * BALL_SPEED_INITIAL;
-    }
-
     // =============================================
-    // BOT AI
+    // BOT AI (not in PongSim — needs variable speed)
     // =============================================
     function updateBot() {
       const now = performance.now();
@@ -580,7 +465,6 @@
 
       // Reaction delay: only update target every N ms
       if (now - botLastUpdateTime < config.reactionDelay) {
-        // Move toward last known target
         moveBotToward(config);
         return;
       }
@@ -595,36 +479,30 @@
 
       // Compute target y based on difficulty
       if (botIntentionalMiss) {
-        // Move to a random wrong position
         botTargetY = Math.random() * (CANVAS_H - PADDLE_H);
       } else if (currentDifficulty === 'easy') {
-        // Track ball center with jitter
         const jitter = (Math.random() - 0.5) * 80;
-        botTargetY = ball.y + BALL_SIZE / 2 - PADDLE_H / 2 + jitter;
+        botTargetY = simState.ball.y + BALL_SIZE / 2 - PADDLE_H / 2 + jitter;
       } else if (currentDifficulty === 'medium') {
-        // Predict where ball arrives at bot paddle x
         botTargetY = predictBallY(false) - PADDLE_H / 2;
       } else {
-        // Hard: full trajectory prediction with bounces
         botTargetY = predictBallY(true) - PADDLE_H / 2;
       }
 
-      // Clamp target
       botTargetY = Math.max(0, Math.min(CANVAS_H - PADDLE_H, botTargetY));
-
       moveBotToward(config);
     }
 
     function moveBotToward(config) {
-      const diff = botTargetY - botPaddle.y;
+      const diff = botTargetY - simState.paddle2.y;
       const maxMove = PADDLE_SPEED * config.speedFactor;
 
-      if (Math.abs(diff) < 2) return; // close enough
+      if (Math.abs(diff) < 2) return;
 
       if (diff < 0) {
-        botPaddle.y = Math.max(0, botPaddle.y - Math.min(maxMove, Math.abs(diff)));
+        simState.paddle2.y = Math.max(0, simState.paddle2.y - Math.min(maxMove, Math.abs(diff)));
       } else {
-        botPaddle.y = Math.min(CANVAS_H - PADDLE_H, botPaddle.y + Math.min(maxMove, diff));
+        simState.paddle2.y = Math.min(CANVAS_H - PADDLE_H, simState.paddle2.y + Math.min(maxMove, diff));
       }
     }
 
@@ -642,18 +520,18 @@
     }
 
     function predictBallY(simulateBounces) {
+      const ball = simState.ball;
+
       // If ball not moving toward bot, just track ball center
       if (ball.vx <= 0) {
         return ball.y + BALL_SIZE / 2;
       }
 
       if (!simulateBounces) {
-        // Simple linear prediction: where does ball intersect bot paddle x?
         const targetX = P2_X;
         const timeToReach = (targetX - (ball.x + BALL_SIZE)) / ball.vx;
         if (timeToReach < 0) return ball.y + BALL_SIZE / 2;
         let predictedY = ball.y + ball.vy * timeToReach + BALL_SIZE / 2;
-        // Clamp loosely
         predictedY = Math.max(BALL_SIZE, Math.min(CANVAS_H - BALL_SIZE, predictedY));
         return predictedY;
       }
@@ -663,13 +541,12 @@
       let simY = ball.y;
       let simVx = ball.vx;
       let simVy = ball.vy;
-      const maxSteps = 600; // prevent infinite loops
+      const maxSteps = 600;
 
       for (let i = 0; i < maxSteps; i++) {
         simX += simVx;
         simY += simVy;
 
-        // Wall bounces
         if (simY <= 0) {
           simVy = Math.abs(simVy);
           simY = 0;
@@ -679,12 +556,10 @@
           simY = CANVAS_H - BALL_SIZE;
         }
 
-        // Reached bot paddle x?
         if (simX + BALL_SIZE >= P2_X) {
           return simY + BALL_SIZE / 2;
         }
 
-        // If ball started going left, it won't reach bot
         if (simVx <= 0) {
           return ball.y + BALL_SIZE / 2;
         }
@@ -697,7 +572,7 @@
     // RENDERING
     // =============================================
     function render() {
-      if (!ctx) return;
+      if (!ctx || !simState) return;
 
       // Background
       ctx.fillStyle = '#0f0f2a';
@@ -721,14 +596,14 @@
       ctx.fillText(score.bot, (CANVAS_W * 3) / 4, CANVAS_H / 2 + 50);
 
       // Left paddle (player) - purple with glow
-      drawPaddle(P1_X, playerPaddle.y, true);
+      drawPaddle(P1_X, simState.paddle1.y, true);
 
       // Right paddle (bot) - gray
-      drawPaddle(P2_X, botPaddle.y, false);
+      drawPaddle(P2_X, simState.paddle2.y, false);
 
-      // Ball — larger, softer glow
-      const bcx = ball.x + BALL_SIZE / 2;
-      const bcy = ball.y + BALL_SIZE / 2;
+      // Ball
+      const bcx = simState.ball.x + BALL_SIZE / 2;
+      const bcy = simState.ball.y + BALL_SIZE / 2;
       ctx.fillStyle = 'rgba(168, 85, 247, 0.15)';
       ctx.beginPath();
       ctx.arc(bcx, bcy, BALL_SIZE, 0, Math.PI * 2);
@@ -755,9 +630,8 @@
     function drawPaddle(x, y, isPlayer) {
       const skin = isPlayer ? playerSkin : null;
       const skinImage = isPlayer ? playerSkinImage : null;
-      const isRightSide = !isPlayer; // bot is on the right
+      const isRightSide = !isPlayer;
 
-      // Determine paddle color
       let paddleColor;
       if (skin && skin.type === 'color' && skin.cssValue) {
         paddleColor = skin.cssValue;
@@ -767,7 +641,6 @@
         paddleColor = '#6b7280';
       }
 
-      // If image skin with loaded image, draw centered on paddle hitbox
       if (skin && skin.type === 'image' && skinImage) {
         const centerX = x + PADDLE_W / 2;
         const centerY = y + PADDLE_H / 2;
@@ -786,7 +659,6 @@
         return;
       }
 
-      // Color skin or default — rounded rect with glow
       ctx.fillStyle = paddleColor;
       ctx.shadowColor = isPlayer ? paddleColor : 'transparent';
       ctx.shadowBlur = isPlayer ? 18 : 0;
