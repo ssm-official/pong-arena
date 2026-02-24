@@ -1651,19 +1651,19 @@ socket.on('ready-countdown', (data) => {
     clearInterval(intermissionCountdownInterval);
     intermissionCountdownInterval = null;
   }
-  // Hide side picker / ready UI during countdown
+  // Hide side picker and ready button during countdown
   const sidePicker = document.getElementById('side-picker');
   if (sidePicker) sidePicker.classList.add('hidden');
+  const readySection = document.getElementById('ready-section');
+  if (readySection) readySection.classList.add('hidden');
 
   const countdownEl = document.getElementById('intermission-countdown');
   let sec = data.seconds;
-  let countdownTimer = null;
   function tick() {
     if (countdownEl) countdownEl.textContent = sec;
-    GameClient.renderCountdown(sec);
     sec--;
     if (sec >= 0) {
-      countdownTimer = setTimeout(tick, 1000);
+      setTimeout(tick, 1000);
     }
   }
   tick();
