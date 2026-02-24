@@ -1,101 +1,157 @@
 // ===========================================
-// Shop Routes — Buy and manage cosmetic skins
+// Shop Routes — Crate-based skin shop
 // ===========================================
 
 const express = require('express');
 const router = express.Router();
 const User = require('../models/User');
 const Skin = require('../models/Skin');
+const Crate = require('../models/Crate');
 const { buildSkinPurchaseTransaction, verifyEscrowTx, burnSkinRevenue, PONG_DECIMALS } = require('../solana/utils');
 
 /**
  * GET /api/shop
- * List all available skins.
+ * Returns active crates grouped as { limited: [...], standard: [...] } + user inventory.
  */
 router.get('/', async (req, res) => {
   try {
+    const crates = await Crate.find({ active: true });
     const skins = await Skin.find({});
     const user = await User.findOne({ wallet: req.wallet }).select('skins equippedSkin');
     const ownedIds = user ? user.skins.map(s => s.skinId) : [];
 
-    const skinsWithOwnership = skins.map(s => ({
-      ...s.toObject(),
-      owned: ownedIds.includes(s.skinId),
-      equipped: user?.equippedSkin === s.skinId
-    }));
+    const cratesWithSkins = crates.map(c => {
+      const crateSkins = skins.filter(s => s.crateId === c.crateId);
+      const unownedCount = crateSkins.filter(s => !ownedIds.includes(s.skinId)).length;
+      const rarityBreakdown = { common: 0, rare: 0, legendary: 0 };
+      crateSkins.forEach(s => { rarityBreakdown[s.rarity]++; });
 
-    res.json({ skins: skinsWithOwnership });
+      return {
+        ...c.toObject(),
+        totalSkins: crateSkins.length,
+        unownedCount,
+        rarityBreakdown,
+        allOwned: unownedCount === 0,
+      };
+    });
+
+    const limited = cratesWithSkins.filter(c => c.limited);
+    const standard = cratesWithSkins.filter(c => !c.limited);
+
+    // Build inventory — owned skins with full data
+    const inventory = skins
+      .filter(s => ownedIds.includes(s.skinId))
+      .map(s => ({
+        ...s.toObject(),
+        equipped: user?.equippedSkin === s.skinId,
+      }));
+
+    res.json({ limited, standard, inventory, equippedSkin: user?.equippedSkin || 'default' });
   } catch (err) {
+    console.error('Shop fetch error:', err);
     res.status(500).json({ error: 'Failed to fetch shop' });
   }
 });
 
 /**
- * POST /api/shop/buy
- * Step 1: Get a transaction to sign. Body: { skinId }
- * Returns serialized transaction for client to sign.
+ * POST /api/shop/buy-crate
+ * Step 1: Build Solana tx for crate price. Body: { crateId }
  */
-router.post('/buy', async (req, res) => {
+router.post('/buy-crate', async (req, res) => {
   try {
-    const { skinId } = req.body;
-    if (!skinId) return res.status(400).json({ error: 'Missing skinId' });
+    const { crateId } = req.body;
+    if (!crateId) return res.status(400).json({ error: 'Missing crateId' });
 
-    const skin = await Skin.findOne({ skinId });
-    if (!skin) return res.status(404).json({ error: 'Skin not found' });
+    const crate = await Crate.findOne({ crateId, active: true });
+    if (!crate) return res.status(404).json({ error: 'Crate not found or inactive' });
 
+    // Check if user already owns all skins in this crate
+    const crateSkins = await Skin.find({ crateId });
     const user = await User.findOne({ wallet: req.wallet });
-    if (user.skins.some(s => s.skinId === skinId)) {
-      return res.status(400).json({ error: 'Already owned' });
+    const ownedIds = user ? user.skins.map(s => s.skinId) : [];
+    const unowned = crateSkins.filter(s => !ownedIds.includes(s.skinId));
+
+    if (unowned.length === 0) {
+      return res.status(400).json({ error: 'You already own all skins in this crate' });
     }
 
-    // Build purchase transaction (player -> treasury)
-    const priceBaseUnits = skin.price * (10 ** PONG_DECIMALS);
+    const priceBaseUnits = crate.price * (10 ** PONG_DECIMALS);
     const { transaction } = await buildSkinPurchaseTransaction(req.wallet, priceBaseUnits);
 
-    res.json({ transaction, skinId, price: priceBaseUnits });
+    res.json({ transaction, crateId, price: priceBaseUnits });
   } catch (err) {
-    console.error('Shop buy error:', err);
+    console.error('Buy crate error:', err);
     res.status(500).json({ error: 'Failed to create purchase transaction' });
   }
 });
 
 /**
- * POST /api/shop/confirm
- * Step 2: Confirm purchase after client signs & submits tx.
- * Body: { skinId, txSignature }
+ * POST /api/shop/confirm-crate
+ * Step 2: Verify tx, roll random skin from crate, grant to user.
+ * Body: { crateId, txSignature }
  */
-router.post('/confirm', async (req, res) => {
+router.post('/confirm-crate', async (req, res) => {
   try {
-    const { skinId, txSignature } = req.body;
-    if (!skinId || !txSignature) {
-      return res.status(400).json({ error: 'Missing skinId or txSignature' });
+    const { crateId, txSignature } = req.body;
+    if (!crateId || !txSignature) {
+      return res.status(400).json({ error: 'Missing crateId or txSignature' });
     }
 
-    const skin = await Skin.findOne({ skinId });
-    if (!skin) return res.status(404).json({ error: 'Skin not found' });
+    const crate = await Crate.findOne({ crateId });
+    if (!crate) return res.status(404).json({ error: 'Crate not found' });
 
     // Verify on-chain
-    const priceBaseUnits = skin.price * (10 ** PONG_DECIMALS);
+    const priceBaseUnits = crate.price * (10 ** PONG_DECIMALS);
     const verified = await verifyEscrowTx(txSignature, priceBaseUnits, req.wallet);
     if (!verified) {
       return res.status(400).json({ error: 'Transaction not confirmed on-chain' });
     }
 
+    // Get unowned skins from this crate
+    const crateSkins = await Skin.find({ crateId });
+    const user = await User.findOne({ wallet: req.wallet });
+    const ownedIds = user ? user.skins.map(s => s.skinId) : [];
+    const unowned = crateSkins.filter(s => !ownedIds.includes(s.skinId));
+
+    if (unowned.length === 0) {
+      return res.status(400).json({ error: 'You already own all skins in this crate' });
+    }
+
+    // Weighted random by rarity
+    const weights = { common: 70, rare: 25, legendary: 5 };
+    const weighted = [];
+    for (const skin of unowned) {
+      const w = weights[skin.rarity] || 70;
+      for (let i = 0; i < w; i++) weighted.push(skin);
+    }
+    const droppedSkin = weighted[Math.floor(Math.random() * weighted.length)];
+
     // Grant skin to user
     await User.findOneAndUpdate(
       { wallet: req.wallet },
-      { $push: { skins: { skinId } } }
+      { $push: { skins: { skinId: droppedSkin.skinId } } }
     );
 
-    // Burn 90% of revenue in background (don't block response)
+    // Burn 90% of revenue in background
     burnSkinRevenue(priceBaseUnits).catch(err => {
-      console.error('Skin burn failed:', err.message);
+      console.error('Crate burn failed:', err.message);
     });
 
-    res.json({ status: 'purchased', skinId });
+    res.json({
+      status: 'opened',
+      skin: {
+        skinId: droppedSkin.skinId,
+        name: droppedSkin.name,
+        description: droppedSkin.description,
+        rarity: droppedSkin.rarity,
+        type: droppedSkin.type,
+        cssValue: droppedSkin.cssValue,
+        imageUrl: droppedSkin.imageUrl,
+      }
+    });
   } catch (err) {
-    console.error('Shop confirm error:', err);
-    res.status(500).json({ error: 'Purchase confirmation failed' });
+    console.error('Confirm crate error:', err);
+    res.status(500).json({ error: 'Crate opening failed' });
   }
 });
 

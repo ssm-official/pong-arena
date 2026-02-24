@@ -5,7 +5,25 @@
 const { PongEngine } = require('./PongEngine');
 const { STAKE_TIERS, buildEscrowTransaction, verifyEscrowTx, refundPlayer } = require('../solana/utils');
 const Match = require('../models/Match');
+const User = require('../models/User');
+const Skin = require('../models/Skin');
 const crypto = require('crypto');
+
+/**
+ * Look up a player's equipped skin data from DB.
+ * Returns { type, cssValue, imageUrl } or null for default.
+ */
+async function getPlayerSkin(wallet) {
+  try {
+    const user = await User.findOne({ wallet }).select('equippedSkin');
+    if (!user || !user.equippedSkin || user.equippedSkin === 'default') return null;
+    const skin = await Skin.findOne({ skinId: user.equippedSkin });
+    if (!skin) return null;
+    return { skinId: skin.skinId, name: skin.name, type: skin.type, cssValue: skin.cssValue, imageUrl: skin.imageUrl };
+  } catch {
+    return null;
+  }
+}
 
 // Skip on-chain escrow for testing (set SKIP_ESCROW=true in env)
 const SKIP_ESCROW = process.env.SKIP_ESCROW === 'true';
@@ -99,6 +117,15 @@ function setupMatchmaking(io, socket, onlineUsers, activeGames) {
     // If both players escrowed, start the game
     if (pending.p1Escrowed && pending.p2Escrowed) {
       pendingEscrow.delete(gameId);
+
+      // Look up equipped skins for both players
+      const [p1Skin, p2Skin] = await Promise.all([
+        getPlayerSkin(pending.player1.wallet),
+        getPlayerSkin(pending.player2.wallet),
+      ]);
+      pending.player1.skin = p1Skin;
+      pending.player2.skin = p2Skin;
+
       const game = new PongEngine(
         gameId,
         pending.player1,
@@ -112,8 +139,8 @@ function setupMatchmaking(io, socket, onlineUsers, activeGames) {
 
       const countdownData = {
         gameId, seconds: 10, tier: pending.tier,
-        player1: { wallet: pending.player1.wallet, username: pending.player1.username },
-        player2: { wallet: pending.player2.wallet, username: pending.player2.username },
+        player1: { wallet: pending.player1.wallet, username: pending.player1.username, skin: p1Skin },
+        player2: { wallet: pending.player2.wallet, username: pending.player2.username, skin: p2Skin },
       };
       io.to(pending.player1.socketId).emit('game-countdown', countdownData);
       io.to(pending.player2.socketId).emit('game-countdown', countdownData);
@@ -174,13 +201,21 @@ async function createMatch(io, player1, player2, tier, activeGames) {
 
   // --- DEV MODE: skip escrow, start game immediately ---
   if (SKIP_ESCROW) {
+    // Look up equipped skins for both players
+    const [p1Skin, p2Skin] = await Promise.all([
+      getPlayerSkin(player1.wallet),
+      getPlayerSkin(player2.wallet),
+    ]);
+    player1.skin = p1Skin;
+    player2.skin = p2Skin;
+
     const game = new PongEngine(gameId, player1, player2, tier, io, activeGames);
     activeGames.set(gameId, game);
 
     const countdownData = {
       gameId, seconds: 10, tier,
-      player1: { wallet: player1.wallet, username: player1.username },
-      player2: { wallet: player2.wallet, username: player2.username },
+      player1: { wallet: player1.wallet, username: player1.username, skin: p1Skin },
+      player2: { wallet: player2.wallet, username: player2.username, skin: p2Skin },
     };
     io.to(player1.socketId).emit('game-countdown', countdownData);
     io.to(player2.socketId).emit('game-countdown', countdownData);

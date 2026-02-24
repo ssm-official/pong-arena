@@ -1,0 +1,216 @@
+// ===========================================
+// Admin Routes — Password-protected CRUD for crates & skins
+// ===========================================
+
+const express = require('express');
+const router = express.Router();
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
+const crypto = require('crypto');
+const Crate = require('../models/Crate');
+const Skin = require('../models/Skin');
+
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'P0ngAr3naAdm1n!2024';
+
+// Multer setup — save PNGs to public/skins/
+const skinsDir = path.join(__dirname, '..', 'public', 'skins');
+if (!fs.existsSync(skinsDir)) {
+  fs.mkdirSync(skinsDir, { recursive: true });
+}
+
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, skinsDir),
+  filename: (req, file, cb) => {
+    // Use provided name or generate one
+    const safeName = (req.body.fileName || file.originalname)
+      .toLowerCase()
+      .replace(/[^a-z0-9\-\.]/g, '-')
+      .replace(/--+/g, '-');
+    cb(null, safeName);
+  }
+});
+
+const upload = multer({
+  storage,
+  limits: { fileSize: 2 * 1024 * 1024 }, // 2MB max
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype === 'image/png') {
+      cb(null, true);
+    } else {
+      cb(new Error('Only PNG files are allowed'));
+    }
+  }
+});
+
+// --- Middleware: check admin password ---
+function adminAuth(req, res, next) {
+  const password = req.headers['x-admin-password'];
+  if (password !== ADMIN_PASSWORD) {
+    return res.status(401).json({ error: 'Invalid admin password' });
+  }
+  next();
+}
+
+// POST /api/admin/login — validate password
+router.post('/login', (req, res) => {
+  const { password } = req.body;
+  if (password === ADMIN_PASSWORD) {
+    res.json({ status: 'ok' });
+  } else {
+    res.status(401).json({ error: 'Invalid password' });
+  }
+});
+
+// GET /api/admin/crates — list all crates with their skins
+router.get('/crates', adminAuth, async (req, res) => {
+  try {
+    const crates = await Crate.find({}).sort({ createdAt: -1 });
+    const skins = await Skin.find({});
+
+    const cratesWithSkins = crates.map(c => ({
+      ...c.toObject(),
+      skins: skins.filter(s => s.crateId === c.crateId),
+    }));
+
+    res.json({ crates: cratesWithSkins });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch crates' });
+  }
+});
+
+// POST /api/admin/crate — create new crate
+router.post('/crate', adminAuth, async (req, res) => {
+  try {
+    const { name, description, price, imageColor, limited } = req.body;
+    if (!name || !price) {
+      return res.status(400).json({ error: 'Name and price are required' });
+    }
+
+    const crateId = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
+      + '-' + crypto.randomBytes(3).toString('hex');
+
+    const crate = await Crate.create({
+      crateId,
+      name,
+      description: description || '',
+      price: Number(price),
+      imageColor: imageColor || '#7c3aed',
+      limited: !!limited,
+      active: true,
+    });
+
+    res.json({ crate });
+  } catch (err) {
+    console.error('Create crate error:', err);
+    res.status(500).json({ error: 'Failed to create crate' });
+  }
+});
+
+// PUT /api/admin/crate/:crateId — update crate
+router.put('/crate/:crateId', adminAuth, async (req, res) => {
+  try {
+    const { name, description, price, imageColor, limited, active } = req.body;
+    const update = {};
+    if (name !== undefined) update.name = name;
+    if (description !== undefined) update.description = description;
+    if (price !== undefined) update.price = Number(price);
+    if (imageColor !== undefined) update.imageColor = imageColor;
+    if (limited !== undefined) update.limited = !!limited;
+    if (active !== undefined) update.active = !!active;
+
+    const crate = await Crate.findOneAndUpdate(
+      { crateId: req.params.crateId },
+      update,
+      { new: true }
+    );
+
+    if (!crate) return res.status(404).json({ error: 'Crate not found' });
+    res.json({ crate });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to update crate' });
+  }
+});
+
+// DELETE /api/admin/crate/:crateId — delete crate + its skins
+router.delete('/crate/:crateId', adminAuth, async (req, res) => {
+  try {
+    const { crateId } = req.params;
+
+    // Delete skin image files
+    const skins = await Skin.find({ crateId });
+    for (const skin of skins) {
+      if (skin.imageUrl) {
+        const filePath = path.join(__dirname, '..', 'public', skin.imageUrl);
+        if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+      }
+    }
+
+    await Skin.deleteMany({ crateId });
+    await Crate.findOneAndDelete({ crateId });
+    res.json({ status: 'deleted' });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to delete crate' });
+  }
+});
+
+// POST /api/admin/skin — create skin with PNG upload
+router.post('/skin', adminAuth, upload.single('image'), async (req, res) => {
+  try {
+    const { name, description, rarity, crateId, type } = req.body;
+    if (!name || !crateId) {
+      return res.status(400).json({ error: 'Name and crateId are required' });
+    }
+
+    // Verify crate exists
+    const crate = await Crate.findOne({ crateId });
+    if (!crate) return res.status(404).json({ error: 'Crate not found' });
+
+    const skinId = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
+      + '-' + crypto.randomBytes(3).toString('hex');
+
+    const skinData = {
+      skinId,
+      name,
+      description: description || '',
+      rarity: rarity || 'common',
+      crateId,
+      type: type || (req.file ? 'image' : 'color'),
+    };
+
+    if (req.file) {
+      skinData.imageUrl = '/skins/' + req.file.filename;
+      skinData.type = 'image';
+    }
+
+    if (req.body.cssValue) {
+      skinData.cssValue = req.body.cssValue;
+    }
+
+    const skin = await Skin.create(skinData);
+    res.json({ skin });
+  } catch (err) {
+    console.error('Create skin error:', err);
+    res.status(500).json({ error: 'Failed to create skin' });
+  }
+});
+
+// DELETE /api/admin/skin/:skinId — delete skin + its image
+router.delete('/skin/:skinId', adminAuth, async (req, res) => {
+  try {
+    const skin = await Skin.findOne({ skinId: req.params.skinId });
+    if (!skin) return res.status(404).json({ error: 'Skin not found' });
+
+    if (skin.imageUrl) {
+      const filePath = path.join(__dirname, '..', 'public', skin.imageUrl);
+      if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+    }
+
+    await Skin.findOneAndDelete({ skinId: req.params.skinId });
+    res.json({ status: 'deleted' });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to delete skin' });
+  }
+});
+
+module.exports = router;

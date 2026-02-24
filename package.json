@@ -17,6 +17,7 @@
     "express-rate-limit": "^7.1.4",
     "helmet": "^7.1.0",
     "mongoose": "^7.6.3",
+    "multer": "^2.0.2",
     "socket.io": "^4.7.2",
     "tweetnacl": "^1.0.3"
   },

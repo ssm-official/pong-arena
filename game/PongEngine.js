@@ -65,8 +65,8 @@ class PongEngine {
   start() {
     this.emit('game-start', {
       gameId: this.gameId,
-      player1: { wallet: this.player1.wallet, username: this.player1.username },
-      player2: { wallet: this.player2.wallet, username: this.player2.username },
+      player1: { wallet: this.player1.wallet, username: this.player1.username, skin: this.player1.skin || null },
+      player2: { wallet: this.player2.wallet, username: this.player2.username, skin: this.player2.skin || null },
       tier: this.tier,
       stake: STAKE_TIERS[this.tier],
     });

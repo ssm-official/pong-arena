@@ -327,9 +327,40 @@
 
       <!-- ===== SHOP TAB ===== -->
       <div id="tab-shop" class="tab-content hidden">
-        <h2 class="text-xl font-bold mb-4">Skins Shop</h2>
-        <p class="text-gray-500 text-sm mb-4">Cosmetic only — no gameplay advantage. 90% of purchases are burned!</p>
-        <div id="shop-grid" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4"></div>
+        <p class="text-gray-500 text-sm mb-4">Open crates to get random paddle skins. 90% of purchases are burned!</p>
+
+        <!-- Limited Releases -->
+        <div id="shop-limited-section" class="hidden mb-6">
+          <h3 class="text-lg font-bold mb-3 text-yellow-400 flex items-center gap-2">
+            <span class="w-2 h-2 rounded-full bg-yellow-400 animate-pulse"></span> Limited Releases
+          </h3>
+          <div id="shop-limited-grid" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
+        </div>
+
+        <!-- Standard Crates -->
+        <div class="mb-6">
+          <h3 class="text-lg font-bold mb-3">Standard Crates</h3>
+          <div id="shop-standard-grid" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
+        </div>
+
+        <!-- Inventory -->
+        <div class="border-t border-gray-800 pt-6">
+          <h3 class="text-lg font-bold mb-3">Your Inventory</h3>
+          <div id="shop-inventory" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3"></div>
+        </div>
+
+        <!-- Skin Reveal Modal -->
+        <div id="skin-reveal-modal" class="hidden fixed inset-0 bg-black/80 z-50 flex items-center justify-center">
+          <div class="bg-arena-card rounded-xl p-8 max-w-sm text-center glow-border">
+            <p class="text-gray-400 text-sm mb-2">You received...</p>
+            <div id="reveal-skin-preview" class="w-24 h-24 rounded-lg mx-auto mb-3 flex items-center justify-center"></div>
+            <h3 id="reveal-skin-name" class="text-xl font-bold mb-1"></h3>
+            <p id="reveal-skin-rarity" class="text-sm mb-3"></p>
+            <button onclick="closeReveal()" class="bg-purple-600 hover:bg-purple-700 px-6 py-2 rounded-lg font-medium transition">
+              Nice!
+            </button>
+          </div>
+        </div>
       </div>
 
       <!-- ===== HISTORY TAB ===== -->
@@ -346,8 +377,8 @@
   <!-- ============ SCRIPTS ============ -->
   <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@solana/web3.js@1.87.6/lib/index.iife.min.js"></script>
-  <script src="/js/wallet.js?v=20"></script>
-  <script src="/js/game-client.js?v=20"></script>
-  <script src="/js/app.js?v=20"></script>
+  <script src="/js/wallet.js?v=21"></script>
+  <script src="/js/game-client.js?v=21"></script>
+  <script src="/js/app.js?v=21"></script>
 </body>
 </html>

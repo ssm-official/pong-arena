@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Pong Arena — Admin Console</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: { extend: { colors: { arena: { bg: '#0a0a1a', card: '#111128', accent: '#7c3aed' } } } }
+    };
+  </script>
+  <style>
+    body { background: #0a0a1a; font-family: 'Segoe UI', system-ui, sans-serif; }
+    .glow-border { box-shadow: 0 0 15px rgba(168, 85, 247, 0.3); }
+  </style>
+</head>
+<body class="text-gray-100 min-h-screen">
+  <nav class="bg-arena-card border-b border-purple-900/30 px-6 py-3 flex items-center justify-between">
+    <span class="text-xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
+      PONG ARENA — ADMIN
+    </span>
+    <a href="/" class="text-sm text-gray-400 hover:text-purple-400">&larr; Back to Game</a>
+  </nav>
+
+  <div class="max-w-4xl mx-auto px-4 py-6">
+
+    <!-- LOGIN -->
+    <div id="login-view" class="max-w-sm mx-auto py-20">
+      <h2 class="text-2xl font-bold mb-4 text-center">Admin Login</h2>
+      <div class="bg-arena-card rounded-xl p-6 glow-border">
+        <input id="admin-pw" type="password" placeholder="Admin password"
+          class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white mb-3 focus:border-purple-500 focus:outline-none" />
+        <button onclick="adminLogin()" class="w-full bg-purple-600 hover:bg-purple-700 py-2 rounded-lg font-medium transition">
+          Login
+        </button>
+        <p id="login-error" class="text-red-400 text-sm mt-2 hidden"></p>
+      </div>
+    </div>
+
+    <!-- ADMIN PANEL -->
+    <div id="admin-view" class="hidden">
+
+      <!-- CREATE CRATE -->
+      <div class="bg-arena-card rounded-xl p-6 glow-border mb-6">
+        <h3 class="text-lg font-bold mb-3 text-purple-400">Create Crate</h3>
+        <div class="grid grid-cols-2 gap-3">
+          <input id="crate-name" type="text" placeholder="Crate name" class="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:border-purple-500 focus:outline-none" />
+          <input id="crate-price" type="number" placeholder="Price (PONG)" value="10000" class="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:border-purple-500 focus:outline-none" />
+          <input id="crate-desc" type="text" placeholder="Description" class="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:border-purple-500 focus:outline-none" />
+          <input id="crate-color" type="text" placeholder="Glow color (#hex)" value="#7c3aed" class="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:border-purple-500 focus:outline-none" />
+        </div>
+        <label class="flex items-center gap-2 mt-3 text-sm text-gray-300 cursor-pointer">
+          <input id="crate-limited" type="checkbox" class="rounded" /> Limited edition
+        </label>
+        <button onclick="createCrate()" class="mt-3 bg-purple-600 hover:bg-purple-700 px-4 py-2 rounded-lg text-sm font-medium transition">
+          Create Crate
+        </button>
+      </div>
+
+      <!-- UPLOAD SKIN -->
+      <div class="bg-arena-card rounded-xl p-6 glow-border mb-6">
+        <h3 class="text-lg font-bold mb-3 text-purple-400">Upload Skin</h3>
+        <div class="grid grid-cols-2 gap-3">
+          <select id="skin-crate" class="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:border-purple-500 focus:outline-none">
+            <option value="">Select crate...</option>
+          </select>
+          <input id="skin-name" type="text" placeholder="Skin name" class="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:border-purple-500 focus:outline-none" />
+          <input id="skin-desc" type="text" placeholder="Description" class="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:border-purple-500 focus:outline-none" />
+          <select id="skin-rarity" class="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:border-purple-500 focus:outline-none">
+            <option value="common">Common</option>
+            <option value="rare">Rare</option>
+            <option value="legendary">Legendary</option>
+          </select>
+        </div>
+        <div class="mt-3 grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-sm text-gray-400 mb-1">Type</label>
+            <select id="skin-type" onchange="toggleSkinInputs()" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:border-purple-500 focus:outline-none">
+              <option value="image">Image (PNG)</option>
+              <option value="color">Color</option>
+            </select>
+          </div>
+          <div id="skin-color-input">
+            <label class="block text-sm text-gray-400 mb-1">CSS Color (for color type)</label>
+            <input id="skin-css" type="text" placeholder="#ff0000" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:border-purple-500 focus:outline-none" />
+          </div>
+        </div>
+        <div id="skin-file-input" class="mt-3">
+          <label class="block text-sm text-gray-400 mb-1">PNG File (120x400, transparent bg)</label>
+          <input id="skin-file" type="file" accept=".png" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white" />
+        </div>
+        <button onclick="uploadSkin()" class="mt-3 bg-purple-600 hover:bg-purple-700 px-4 py-2 rounded-lg text-sm font-medium transition">
+          Upload Skin
+        </button>
+      </div>
+
+      <!-- CRATE LIST -->
+      <div id="crate-list" class="space-y-4"></div>
+    </div>
+  </div>
+
+  <script>
+    let adminPw = sessionStorage.getItem('adminPw') || '';
+
+    // Auto-login if password cached
+    if (adminPw) {
+      verifyLogin(adminPw);
+    }
+
+    function headers() {
+      return { 'Content-Type': 'application/json', 'x-admin-password': adminPw };
+    }
+
+    async function adminLogin() {
+      const pw = document.getElementById('admin-pw').value;
+      await verifyLogin(pw);
+    }
+
+    async function verifyLogin(pw) {
+      try {
+        const res = await fetch('/api/admin/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password: pw })
+        }).then(r => r.json());
+
+        if (res.error) {
+          const errEl = document.getElementById('login-error');
+          if (errEl) { errEl.textContent = res.error; errEl.classList.remove('hidden'); }
+          return;
+        }
+
+        adminPw = pw;
+        sessionStorage.setItem('adminPw', pw);
+        document.getElementById('login-view').classList.add('hidden');
+        document.getElementById('admin-view').classList.remove('hidden');
+        loadCrates();
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
+    function toggleSkinInputs() {
+      const type = document.getElementById('skin-type').value;
+      document.getElementById('skin-file-input').style.display = type === 'image' ? '' : 'none';
+      document.getElementById('skin-color-input').style.display = type === 'color' ? '' : 'none';
+    }
+
+    async function loadCrates() {
+      const res = await fetch('/api/admin/crates', { headers: { 'x-admin-password': adminPw } }).then(r => r.json());
+      const crates = res.crates || [];
+
+      // Populate crate dropdown for skin upload
+      const sel = document.getElementById('skin-crate');
+      sel.innerHTML = '<option value="">Select crate...</option>' +
+        crates.map(c => `<option value="${c.crateId}">${esc(c.name)}</option>`).join('');
+
+      // Render crate list
+      const container = document.getElementById('crate-list');
+      if (crates.length === 0) {
+        container.innerHTML = '<p class="text-gray-500">No crates yet. Create one above.</p>';
+        return;
+      }
+
+      container.innerHTML = crates.map(c => `
+        <div class="bg-arena-card rounded-xl p-4 border-l-4" style="border-color: ${esc(c.imageColor)}">
+          <div class="flex items-center justify-between mb-2">
+            <div>
+              <h4 class="font-bold">${esc(c.name)}</h4>
+              <p class="text-gray-500 text-xs">${esc(c.description || '')} — ${c.price.toLocaleString()} $PONG — ${c.limited ? 'LIMITED' : 'Standard'} — ${c.active ? 'Active' : 'Inactive'}</p>
+            </div>
+            <div class="flex gap-2">
+              <button onclick="toggleCrate('${c.crateId}', ${!c.active})" class="text-xs px-3 py-1 rounded ${c.active ? 'bg-red-900 text-red-300 hover:bg-red-800' : 'bg-green-900 text-green-300 hover:bg-green-800'}">
+                ${c.active ? 'Deactivate' : 'Activate'}
+              </button>
+              <button onclick="deleteCrate('${c.crateId}')" class="text-xs px-3 py-1 rounded bg-red-900 text-red-300 hover:bg-red-800">
+                Delete
+              </button>
+            </div>
+          </div>
+          ${c.skins.length > 0 ? `
+            <div class="grid grid-cols-2 md:grid-cols-3 gap-2 mt-2">
+              ${c.skins.map(s => `
+                <div class="bg-gray-800 rounded-lg p-2 flex items-center justify-between">
+                  <div class="flex items-center gap-2">
+                    ${s.type === 'color'
+                      ? `<div class="w-6 h-6 rounded" style="background:${esc(s.cssValue)}"></div>`
+                      : `<img src="${esc(s.imageUrl)}" class="w-6 h-10 object-contain" />`
+                    }
+                    <div>
+                      <span class="text-sm font-medium">${esc(s.name)}</span>
+                      <span class="text-xs ml-1 ${s.rarity === 'legendary' ? 'text-yellow-400' : s.rarity === 'rare' ? 'text-purple-400' : 'text-gray-500'}">${s.rarity}</span>
+                    </div>
+                  </div>
+                  <button onclick="deleteSkin('${s.skinId}')" class="text-red-400 hover:text-red-300 text-xs">X</button>
+                </div>
+              `).join('')}
+            </div>
+          ` : '<p class="text-gray-600 text-xs mt-1">No skins in this crate.</p>'}
+        </div>
+      `).join('');
+    }
+
+    async function createCrate() {
+      const body = {
+        name: document.getElementById('crate-name').value,
+        description: document.getElementById('crate-desc').value,
+        price: Number(document.getElementById('crate-price').value),
+        imageColor: document.getElementById('crate-color').value,
+        limited: document.getElementById('crate-limited').checked,
+      };
+
+      if (!body.name) return alert('Crate name is required');
+
+      const res = await fetch('/api/admin/crate', {
+        method: 'POST', headers: headers(), body: JSON.stringify(body)
+      }).then(r => r.json());
+
+      if (res.error) return alert(res.error);
+      document.getElementById('crate-name').value = '';
+      document.getElementById('crate-desc').value = '';
+      loadCrates();
+    }
+
+    async function uploadSkin() {
+      const crateId = document.getElementById('skin-crate').value;
+      const name = document.getElementById('skin-name').value;
+      const type = document.getElementById('skin-type').value;
+
+      if (!crateId || !name) return alert('Select a crate and enter a name');
+
+      const formData = new FormData();
+      formData.append('crateId', crateId);
+      formData.append('name', name);
+      formData.append('description', document.getElementById('skin-desc').value);
+      formData.append('rarity', document.getElementById('skin-rarity').value);
+      formData.append('type', type);
+
+      if (type === 'image') {
+        const file = document.getElementById('skin-file').files[0];
+        if (!file) return alert('Select a PNG file');
+        formData.append('image', file);
+        formData.append('fileName', name.toLowerCase().replace(/[^a-z0-9]+/g, '-') + '.png');
+      } else {
+        const css = document.getElementById('skin-css').value;
+        if (!css) return alert('Enter a CSS color value');
+        formData.append('cssValue', css);
+      }
+
+      const res = await fetch('/api/admin/skin', {
+        method: 'POST',
+        headers: { 'x-admin-password': adminPw },
+        body: formData
+      }).then(r => r.json());
+
+      if (res.error) return alert(res.error);
+      document.getElementById('skin-name').value = '';
+      document.getElementById('skin-desc').value = '';
+      document.getElementById('skin-file').value = '';
+      document.getElementById('skin-css').value = '';
+      loadCrates();
+    }
+
+    async function toggleCrate(crateId, active) {
+      await fetch(`/api/admin/crate/${crateId}`, {
+        method: 'PUT', headers: headers(), body: JSON.stringify({ active })
+      });
+      loadCrates();
+    }
+
+    async function deleteCrate(crateId) {
+      if (!confirm('Delete this crate and ALL its skins?')) return;
+      await fetch(`/api/admin/crate/${crateId}`, {
+        method: 'DELETE', headers: { 'x-admin-password': adminPw }
+      });
+      loadCrates();
+    }
+
+    async function deleteSkin(skinId) {
+      if (!confirm('Delete this skin?')) return;
+      await fetch(`/api/admin/skin/${skinId}`, {
+        method: 'DELETE', headers: { 'x-admin-password': adminPw }
+      });
+      loadCrates();
+    }
+
+    function esc(str) {
+      const div = document.createElement('div');
+      div.textContent = str || '';
+      return div.innerHTML;
+    }
+  </script>
+</body>
+</html>

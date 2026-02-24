@@ -18,6 +18,7 @@ const authRoutes = require('./routes/auth');
 const profileRoutes = require('./routes/profile');
 const friendRoutes = require('./routes/friends');
 const shopRoutes = require('./routes/shop');
+const adminRoutes = require('./routes/admin');
 const { authMiddleware } = require('./middleware/auth');
 const { setupMatchmaking } = require('./game/matchmaking');
 const { PongEngine } = require('./game/PongEngine');
@@ -55,6 +56,12 @@ app.use('/api/auth', authRoutes);
 app.use('/api/profile', authMiddleware, profileRoutes);
 app.use('/api/friends', authMiddleware, friendRoutes);
 app.use('/api/shop', authMiddleware, shopRoutes);
+app.use('/api/admin', adminRoutes);
+
+// Admin console
+app.get('/admin.html', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'admin.html'));
+});
 
 // Practice mode
 app.get('/practice', (req, res) => {
@@ -104,8 +111,8 @@ io.on('connection', (socket) => {
       // Always send rejoin data so the client can restore game UI
       socket.emit('rejoin-game', {
         gameId,
-        player1: { wallet: game.player1.wallet, username: game.player1.username },
-        player2: { wallet: game.player2.wallet, username: game.player2.username },
+        player1: { wallet: game.player1.wallet, username: game.player1.username, skin: game.player1.skin || null },
+        player2: { wallet: game.player2.wallet, username: game.player2.username, skin: game.player2.skin || null },
         tier: game.tier,
         state: game.state,
       });

@@ -15,6 +15,10 @@ const GameClient = (() => {
   const BALL_SIZE = 12;
   const SERVER_TICK_MS = 1000 / 60;
 
+  // Skin image render dimensions (centered on paddle hitbox)
+  const SKIN_DRAW_W = 60;
+  const SKIN_DRAW_H = 200;
+
   let canvas = null;
   let ctx = null;
   let myWallet = null;
@@ -26,16 +30,21 @@ const GameClient = (() => {
   let skinConfig = { paddle: '#a855f7', ball: '#ffffff', background: '#0f0f2a' };
   let mirrored = false;
 
+  // Skin data for both players: { type, cssValue, imageUrl } or null
+  let mySkin = null;
+  let opponentSkin = null;
+  // Preloaded Image objects for image-type skins
+  let mySkinImage = null;
+  let opponentSkinImage = null;
+
   // --- Your paddle: offset reconciliation ---
   let serverMyY = CANVAS_H / 2 - PADDLE_H / 2;
   let myOffset = 0;
 
   // --- Interpolation buffer for opponent + ball ---
-  // We store the two most recent server snapshots and interpolate between them.
-  // This gives perfectly smooth constant-speed motion at exactly 1 tick of latency.
-  let prevSnap = null;  // previous server state
-  let currSnap = null;  // most recent server state
-  let snapElapsed = 0;  // ms since currSnap arrived
+  let prevSnap = null;
+  let currSnap = null;
+  let snapElapsed = 0;
 
   let displayScore = { p1: 0, p2: 0 };
   let isPaused = false;
@@ -68,6 +77,42 @@ const GameClient = (() => {
     if (config.background) skinConfig.background = config.background;
   }
 
+  /**
+   * Set skin data for both players from game-start / game-countdown events.
+   * p1Skin/p2Skin: { type, cssValue, imageUrl } or null
+   */
+  function setPlayerSkins(p1Skin, p2Skin) {
+    if (amPlayer1) {
+      mySkin = p1Skin;
+      opponentSkin = p2Skin;
+    } else {
+      mySkin = p2Skin;
+      opponentSkin = p1Skin;
+    }
+
+    // Preload images
+    mySkinImage = null;
+    opponentSkinImage = null;
+
+    if (mySkin && mySkin.type === 'image' && mySkin.imageUrl) {
+      const img = new Image();
+      img.src = mySkin.imageUrl;
+      img.onload = () => { mySkinImage = img; };
+    }
+    if (opponentSkin && opponentSkin.type === 'image' && opponentSkin.imageUrl) {
+      const img = new Image();
+      img.src = opponentSkin.imageUrl;
+      img.onload = () => { opponentSkinImage = img; };
+    }
+
+    // Set paddle color from own skin for backward-compat glow
+    if (mySkin && mySkin.type === 'color' && mySkin.cssValue) {
+      skinConfig.paddle = mySkin.cssValue;
+    } else if (!mySkin) {
+      skinConfig.paddle = '#a855f7'; // default purple
+    }
+  }
+
   function setMirrored(val) {
     mirrored = !!val;
   }
@@ -76,7 +121,6 @@ const GameClient = (() => {
     displayScore = state.score;
     isPaused = state.paused;
 
-    // --- Your paddle: reconcile prediction ---
     const newServerY = amPlayer1 ? state.paddle1.y : state.paddle2.y;
     myOffset -= (newServerY - serverMyY);
     serverMyY = newServerY;
@@ -84,7 +128,6 @@ const GameClient = (() => {
     if (myOffset > 30) myOffset = 30;
     if (myOffset < -30) myOffset = -30;
 
-    // --- Push new snapshot into interpolation buffer ---
     prevSnap = currSnap;
     currSnap = {
       remoteY: amPlayer1 ? state.paddle2.y : state.paddle1.y,
@@ -118,7 +161,6 @@ const GameClient = (() => {
     lastFrameTime = timestamp;
     const ticks = Math.min(delta / SERVER_TICK_MS, 4);
 
-    // --- Your paddle prediction ---
     if (currentInput === 'up') {
       myOffset -= PADDLE_SPEED * ticks;
     } else if (currentInput === 'down') {
@@ -128,12 +170,10 @@ const GameClient = (() => {
       Math.max(0, Math.min(CANVAS_H - PADDLE_H, serverMyY + myOffset))
     );
 
-    // --- Interpolate opponent + ball between two server snapshots ---
     snapElapsed += delta;
     let oppY, bx, by;
 
     if (prevSnap && currSnap) {
-      // Interpolation factor: 0 = prevSnap, 1 = currSnap
       const t = Math.min(snapElapsed / SERVER_TICK_MS, 1);
       oppY = prevSnap.remoteY + (currSnap.remoteY - prevSnap.remoteY) * t;
       bx = prevSnap.ballX + (currSnap.ballX - prevSnap.ballX) * t;
@@ -182,11 +222,11 @@ const GameClient = (() => {
     const p2Y = amPlayer1 ? oppY : myDisplayY;
 
     if (!mirrored) {
-      drawPaddle(10, p1Y, amPlayer1);
-      drawPaddle(CANVAS_W - PADDLE_W - 10, p2Y, !amPlayer1);
+      drawPaddle(10, p1Y, amPlayer1, amPlayer1 ? mySkin : opponentSkin, amPlayer1 ? mySkinImage : opponentSkinImage, false);
+      drawPaddle(CANVAS_W - PADDLE_W - 10, p2Y, !amPlayer1, !amPlayer1 ? mySkin : opponentSkin, !amPlayer1 ? mySkinImage : opponentSkinImage, true);
     } else {
-      drawPaddle(10, p2Y, !amPlayer1);
-      drawPaddle(CANVAS_W - PADDLE_W - 10, p1Y, amPlayer1);
+      drawPaddle(10, p2Y, !amPlayer1, !amPlayer1 ? mySkin : opponentSkin, !amPlayer1 ? mySkinImage : opponentSkinImage, false);
+      drawPaddle(CANVAS_W - PADDLE_W - 10, p1Y, amPlayer1, amPlayer1 ? mySkin : opponentSkin, amPlayer1 ? mySkinImage : opponentSkinImage, true);
     }
 
     // Ball
@@ -210,9 +250,49 @@ const GameClient = (() => {
     }
   }
 
-  function drawPaddle(x, y, isMe) {
-    ctx.fillStyle = isMe ? skinConfig.paddle : '#6b7280';
-    ctx.shadowColor = isMe ? skinConfig.paddle : 'transparent';
+  /**
+   * Draw a paddle with skin support.
+   * @param {number} x - paddle x position
+   * @param {number} y - paddle y position
+   * @param {boolean} isMe - is this the local player's paddle
+   * @param {object|null} skin - { type, cssValue, imageUrl } or null
+   * @param {Image|null} skinImage - preloaded Image for image-type skins
+   * @param {boolean} isRightSide - true if paddle is on right side (mirror image skins)
+   */
+  function drawPaddle(x, y, isMe, skin, skinImage, isRightSide) {
+    // Determine paddle color
+    let paddleColor;
+    if (skin && skin.type === 'color' && skin.cssValue) {
+      paddleColor = skin.cssValue;
+    } else if (isMe) {
+      paddleColor = skinConfig.paddle;
+    } else {
+      paddleColor = '#6b7280';
+    }
+
+    // If image skin with loaded image, draw the image centered on paddle hitbox
+    if (skin && skin.type === 'image' && skinImage) {
+      const centerX = x + PADDLE_W / 2;
+      const centerY = y + PADDLE_H / 2;
+      const drawX = centerX - SKIN_DRAW_W / 2;
+      const drawY = centerY - SKIN_DRAW_H / 2;
+
+      ctx.save();
+      if (isRightSide) {
+        // Mirror the image for right-side paddle
+        ctx.translate(centerX * 2, 0);
+        ctx.scale(-1, 1);
+        ctx.drawImage(skinImage, drawX, drawY, SKIN_DRAW_W, SKIN_DRAW_H);
+      } else {
+        ctx.drawImage(skinImage, drawX, drawY, SKIN_DRAW_W, SKIN_DRAW_H);
+      }
+      ctx.restore();
+      return;
+    }
+
+    // Color skin or default — draw rounded rect with glow
+    ctx.fillStyle = paddleColor;
+    ctx.shadowColor = isMe ? paddleColor : 'transparent';
     ctx.shadowBlur = isMe ? 10 : 0;
 
     const r = 6;
@@ -281,11 +361,16 @@ const GameClient = (() => {
     myOffset = 0;
     prevSnap = null;
     currSnap = null;
+    mySkin = null;
+    opponentSkin = null;
+    mySkinImage = null;
+    opponentSkinImage = null;
+    skinConfig.paddle = '#a855f7';
     Object.keys(keys).forEach(k => keys[k] = false);
   }
 
   return {
-    init, setGameInfo, setSkins, setMirrored, updateState,
+    init, setGameInfo, setSkins, setPlayerSkins, setMirrored, updateState,
     startRendering, stopRendering, renderCountdown,
     cleanup,
   };

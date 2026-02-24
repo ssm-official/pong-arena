@@ -352,7 +352,7 @@ async function removeFriend(friendWallet) {
 }
 
 // ===========================================
-// SHOP
+// SHOP (Crate-based)
 // ===========================================
 
 async function loadShop() {
@@ -360,54 +360,130 @@ async function loadShop() {
     const auth = getAuthHeader();
     const res = await fetch('/api/shop', { headers: { Authorization: auth } }).then(r => r.json());
 
-    const grid = document.getElementById('shop-grid');
-    grid.innerHTML = (res.skins || []).map(s => `
-      <div class="skin-card bg-arena-card rounded-xl p-4 border ${s.owned ? 'border-purple-600' : 'border-gray-800'}">
-        <div class="w-full h-20 rounded-lg mb-3 flex items-center justify-center"
-          style="background: ${esc(s.cssValue)}33">
-          <div class="w-10 h-10 rounded-full" style="background: ${esc(s.cssValue)}; box-shadow: 0 0 15px ${esc(s.cssValue)}"></div>
+    // --- Limited crates ---
+    const limitedSection = document.getElementById('shop-limited-section');
+    const limitedGrid = document.getElementById('shop-limited-grid');
+    if (res.limited && res.limited.length > 0) {
+      limitedSection.classList.remove('hidden');
+      limitedGrid.innerHTML = res.limited.map(c => renderCrateCard(c, true)).join('');
+    } else {
+      limitedSection.classList.add('hidden');
+    }
+
+    // --- Standard crates ---
+    const standardGrid = document.getElementById('shop-standard-grid');
+    standardGrid.innerHTML = (res.standard || []).map(c => renderCrateCard(c, false)).join('');
+
+    // --- Inventory ---
+    const inventory = document.getElementById('shop-inventory');
+    if (res.inventory && res.inventory.length > 0) {
+      inventory.innerHTML = res.inventory.map(s => `
+        <div class="skin-card bg-arena-card rounded-xl p-3 border ${s.equipped ? 'border-purple-500' : 'border-gray-800'}">
+          <div class="w-full h-16 rounded-lg mb-2 flex items-center justify-center"
+            style="background: ${s.type === 'color' ? esc(s.cssValue) + '33' : '#1a1a3a'}">
+            ${s.type === 'color'
+              ? `<div class="w-8 h-8 rounded-full" style="background:${esc(s.cssValue)};box-shadow:0 0 12px ${esc(s.cssValue)}"></div>`
+              : `<img src="${esc(s.imageUrl)}" class="h-14 object-contain" />`
+            }
+          </div>
+          <h4 class="font-bold text-xs">${esc(s.name)}</h4>
+          <div class="flex items-center justify-between mt-1">
+            <span class="text-xs px-1.5 py-0.5 rounded ${
+              s.rarity === 'legendary' ? 'bg-yellow-900 text-yellow-300' :
+              s.rarity === 'rare' ? 'bg-purple-900 text-purple-300' :
+              'bg-gray-800 text-gray-400'
+            }">${s.rarity}</span>
+            <button onclick="equipSkin('${s.skinId}')" class="text-xs ${s.equipped ? 'text-green-400' : 'text-purple-400 hover:text-purple-300'}">
+              ${s.equipped ? 'Equipped' : 'Equip'}
+            </button>
+          </div>
         </div>
-        <h4 class="font-bold text-sm">${esc(s.name)}</h4>
-        <p class="text-gray-500 text-xs mb-2">${esc(s.description || '')}</p>
-        <div class="flex items-center justify-between">
-          <span class="text-xs px-2 py-0.5 rounded ${
-            s.rarity === 'legendary' ? 'bg-yellow-900 text-yellow-300' :
-            s.rarity === 'rare' ? 'bg-purple-900 text-purple-300' :
-            'bg-gray-800 text-gray-400'
-          }">${s.rarity}</span>
-          ${s.owned
-            ? `<button onclick="equipSkin('${s.skinId}')" class="text-xs ${s.equipped ? 'text-green-400' : 'text-purple-400 hover:text-purple-300'}">${s.equipped ? 'Equipped' : 'Equip'}</button>`
-            : `<button onclick="buySkin('${s.skinId}')" class="bg-purple-600 hover:bg-purple-700 px-3 py-1 rounded text-xs transition">${s.price} $PONG</button>`
-          }
-        </div>
-      </div>
-    `).join('');
+      `).join('');
+    } else {
+      inventory.innerHTML = '<p class="text-gray-500 text-sm col-span-full">No skins yet. Open a crate!</p>';
+    }
   } catch (err) {
     console.error('Failed to load shop:', err);
   }
 }
 
-async function buySkin(skinId) {
+function renderCrateCard(c, isLimited) {
+  const borderColor = isLimited ? 'border-yellow-600' : 'border-gray-700';
+  const usdPrice = pongPriceUsd > 0 ? formatUsd(c.price * pongPriceUsd) + ' / ' : '';
+  return `
+    <div class="skin-card bg-arena-card rounded-xl p-4 border ${borderColor}">
+      <div class="flex items-start justify-between mb-2">
+        <div>
+          <h4 class="font-bold">${esc(c.name)}</h4>
+          <p class="text-gray-500 text-xs">${esc(c.description || '')}</p>
+        </div>
+        <div class="w-10 h-10 rounded-lg flex-shrink-0" style="background:${esc(c.imageColor)};box-shadow:0 0 15px ${esc(c.imageColor)}55"></div>
+      </div>
+      <div class="flex items-center gap-3 text-xs text-gray-400 mb-3">
+        <span>${c.rarityBreakdown.common} common</span>
+        <span class="text-purple-400">${c.rarityBreakdown.rare} rare</span>
+        <span class="text-yellow-400">${c.rarityBreakdown.legendary} legendary</span>
+      </div>
+      <div class="flex items-center justify-between">
+        <span class="text-sm font-bold text-white">${usdPrice}${c.price.toLocaleString()} $PONG</span>
+        ${c.allOwned
+          ? '<span class="text-green-400 text-xs font-medium">All Owned</span>'
+          : `<button onclick="buyCrate('${c.crateId}')" class="bg-purple-600 hover:bg-purple-700 px-4 py-1.5 rounded-lg text-xs font-medium transition">
+              Open (${c.unownedCount} left)
+            </button>`
+        }
+      </div>
+    </div>
+  `;
+}
+
+async function buyCrate(crateId) {
   try {
     const auth = getAuthHeader();
 
     // Step 1: Get transaction to sign
-    const buyRes = await apiPostAuth('/api/shop/buy', { skinId }, auth);
+    const buyRes = await apiPostAuth('/api/shop/buy-crate', { crateId }, auth);
     if (buyRes.error) return alert(buyRes.error);
 
     // Step 2: Sign and send transaction via Phantom
-    alert('Please approve the $PONG transfer in your wallet.');
     const txSignature = await WalletManager.signAndSendTransaction(buyRes.transaction);
 
-    // Step 3: Confirm purchase with server
-    const confirmRes = await apiPostAuth('/api/shop/confirm', { skinId, txSignature }, auth);
+    // Step 3: Confirm and get random skin
+    const confirmRes = await apiPostAuth('/api/shop/confirm-crate', { crateId, txSignature }, auth);
     if (confirmRes.error) return alert(confirmRes.error);
 
-    alert('Skin purchased! 90% of the cost was burned.');
+    // Show skin reveal
+    showSkinReveal(confirmRes.skin);
     loadShop();
   } catch (err) {
     alert('Purchase failed: ' + err.message);
   }
+}
+
+function showSkinReveal(skin) {
+  const modal = document.getElementById('skin-reveal-modal');
+  const preview = document.getElementById('reveal-skin-preview');
+  const nameEl = document.getElementById('reveal-skin-name');
+  const rarityEl = document.getElementById('reveal-skin-rarity');
+
+  if (skin.type === 'color') {
+    preview.innerHTML = `<div class="w-16 h-16 rounded-full" style="background:${esc(skin.cssValue)};box-shadow:0 0 20px ${esc(skin.cssValue)}"></div>`;
+    preview.style.background = skin.cssValue + '22';
+  } else {
+    preview.innerHTML = `<img src="${esc(skin.imageUrl)}" class="h-20 object-contain" />`;
+    preview.style.background = '#1a1a3a';
+  }
+
+  nameEl.textContent = skin.name;
+  const rarityColors = { common: 'text-gray-400', rare: 'text-purple-400', legendary: 'text-yellow-400' };
+  rarityEl.textContent = skin.rarity.toUpperCase();
+  rarityEl.className = `text-sm mb-3 font-bold ${rarityColors[skin.rarity] || 'text-gray-400'}`;
+
+  modal.classList.remove('hidden');
+}
+
+function closeReveal() {
+  document.getElementById('skin-reveal-modal').classList.add('hidden');
 }
 
 async function equipSkin(skinId) {
@@ -604,9 +680,17 @@ function pickSide(side) {
 }
 
 // Socket: Game countdown (10s intermission)
+// Store skin data from countdown for use in game-start
+let pendingP1Skin = null;
+let pendingP2Skin = null;
+
 socket.on('game-countdown', (data) => {
   showMatchmakingState('game');
   GameClient.setGameInfo(data.gameId, null); // will be set on game-start
+
+  // Store skin data for game-start
+  pendingP1Skin = data.player1?.skin || null;
+  pendingP2Skin = data.player2?.skin || null;
 
   // Reset side picker to left (default)
   chosenSide = 'left';
@@ -650,6 +734,11 @@ socket.on('game-start', (data) => {
   const intermission = document.getElementById('intermission-info');
   if (intermission) intermission.classList.add('hidden');
   GameClient.setGameInfo(data.gameId, data.player1.wallet);
+
+  // Set skin data from game-start (or fallback to countdown data)
+  const p1Skin = data.player1.skin || pendingP1Skin || null;
+  const p2Skin = data.player2.skin || pendingP2Skin || null;
+  GameClient.setPlayerSkins(p1Skin, p2Skin);
 
   // Compute mirroring: p1 is naturally on the LEFT, p2 on the RIGHT.
   // Mirror when your chosen side doesn't match your natural side.
@@ -733,6 +822,9 @@ socket.on('rejoin-game', (data) => {
 
   // Set up game client
   GameClient.setGameInfo(data.gameId, data.player1.wallet);
+
+  // Set skin data for both players
+  GameClient.setPlayerSkins(data.player1.skin || null, data.player2.skin || null);
 
   // Restore mirroring based on chosen side
   const amP1 = (currentUser.wallet === data.player1.wallet);
