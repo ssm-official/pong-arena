@@ -36,6 +36,125 @@ const pendingEscrow = new Map();
 // Pending duel invites: duelId -> { challenger, target, stakeAmount, createdAt }
 const pendingDuels = new Map();
 
+// Open custom-stake lobbies: lobbyId -> { wallet, username, socketId, stakeAmount, createdAt }
+const openLobbies = new Map();
+
+/**
+ * Broadcast current lobby list to all connected sockets.
+ */
+function broadcastLobbies(io) {
+  const list = [];
+  for (const [lobbyId, lobby] of openLobbies) {
+    list.push({
+      lobbyId,
+      wallet: lobby.wallet,
+      username: lobby.username,
+      stakeAmount: lobby.stakeAmount,
+      createdAt: lobby.createdAt,
+    });
+  }
+  io.emit('lobby-update', { lobbies: list });
+}
+
+/**
+ * Shared helper to start a custom-stake match between two players.
+ * Used by duel-accept, lobby-join, and escrow-submit flows.
+ */
+async function startCustomStakeMatch(io, p1, p2, stakeAmount, activeGames) {
+  const gameId = crypto.randomUUID();
+
+  await Match.create({
+    gameId,
+    player1: p1.wallet,
+    player2: p2.wallet,
+    player1Username: p1.username,
+    player2Username: p2.username,
+    tier: 'duel',
+    stakeAmount,
+    status: SKIP_ESCROW ? 'in-progress' : 'pending-escrow',
+  });
+
+  if (SKIP_ESCROW) {
+    const [p1Skin, p2Skin] = await Promise.all([
+      getPlayerSkin(p1.wallet),
+      getPlayerSkin(p2.wallet),
+    ]);
+    p1.skin = p1Skin;
+    p2.skin = p2Skin;
+
+    const game = new PongEngine(gameId, p1, p2, 'duel', io, activeGames, stakeAmount);
+    activeGames.set(gameId, game);
+
+    const countdownData = {
+      gameId, seconds: 30, tier: 'duel',
+      player1: { wallet: p1.wallet, username: p1.username, skin: p1Skin },
+      player2: { wallet: p2.wallet, username: p2.username, skin: p2Skin },
+      stakeAmount,
+      useReadySystem: true,
+    };
+    io.to(p1.socketId).emit('game-countdown', countdownData);
+    io.to(p2.socketId).emit('game-countdown', countdownData);
+
+    game.startReadyPhase();
+    return;
+  }
+
+  // Production: build escrow transactions
+  let p1Tx, p2Tx;
+  try {
+    p1Tx = await buildCustomEscrowTransaction(p1.wallet, stakeAmount);
+  } catch (err) {
+    io.to(p1.socketId).emit('match-error', { error: err.message });
+    io.to(p2.socketId).emit('match-error', { error: 'Opponent cannot stake. Match cancelled.' });
+    await Match.findOneAndUpdate({ gameId }, { status: 'cancelled' });
+    return;
+  }
+  try {
+    p2Tx = await buildCustomEscrowTransaction(p2.wallet, stakeAmount);
+  } catch (err) {
+    io.to(p2.socketId).emit('match-error', { error: err.message });
+    io.to(p1.socketId).emit('match-error', { error: 'Opponent cannot stake. Match cancelled.' });
+    await Match.findOneAndUpdate({ gameId }, { status: 'cancelled' });
+    return;
+  }
+
+  pendingEscrow.set(gameId, {
+    player1: p1,
+    player2: p2,
+    tier: 'duel',
+    stakeAmount,
+    p1Escrowed: false,
+    p2Escrowed: false,
+  });
+
+  io.to(p1.socketId).emit('match-found', {
+    gameId,
+    opponent: { wallet: p2.wallet, username: p2.username },
+    tier: 'duel',
+    stake: stakeAmount,
+    escrowTransaction: p1Tx.transaction,
+    yourSlot: 'p1',
+  });
+
+  io.to(p2.socketId).emit('match-found', {
+    gameId,
+    opponent: { wallet: p1.wallet, username: p1.username },
+    tier: 'duel',
+    stake: stakeAmount,
+    escrowTransaction: p2Tx.transaction,
+    yourSlot: 'p2',
+  });
+
+  setTimeout(() => {
+    if (pendingEscrow.has(gameId)) {
+      pendingEscrow.delete(gameId);
+      Match.findOneAndUpdate({ gameId }, { status: 'cancelled' }).catch(() => {});
+      io.to(p1.socketId).emit('match-cancelled', { gameId, reason: 'Escrow timeout' });
+      io.to(p2.socketId).emit('match-cancelled', { gameId, reason: 'Escrow timeout' });
+    }
+  }, 60000);
+}
+
 function setupMatchmaking(io, socket, onlineUsers, activeGames) {
 
   // Player joins a matchmaking queue
@@ -50,6 +169,16 @@ function setupMatchmaking(io, socket, onlineUsers, activeGames) {
     // Prevent double-queueing
     for (const t of Object.keys(queues)) {
       queues[t] = queues[t].filter(p => p.wallet !== socket.wallet);
+    }
+
+    // Auto-cancel any open lobby when joining queue
+    for (const [lobbyId, lobby] of openLobbies) {
+      if (lobby.wallet === socket.wallet) {
+        openLobbies.delete(lobbyId);
+        socket.emit('lobby-cancelled');
+        broadcastLobbies(io);
+        break;
+      }
     }
 
     const player = {
@@ -270,100 +399,7 @@ function setupMatchmaking(io, socket, onlineUsers, activeGames) {
     const challengerInfo = onlineUsers.get(duel.challenger.wallet);
     if (challengerInfo) duel.challenger.socketId = challengerInfo.socketId;
 
-    // Create duel match
-    const gameId = crypto.randomUUID();
-    const stakeAmount = duel.stakeAmount;
-
-    await Match.create({
-      gameId,
-      player1: duel.challenger.wallet,
-      player2: duel.target.wallet,
-      player1Username: duel.challenger.username,
-      player2Username: duel.target.username,
-      tier: 'duel',
-      stakeAmount,
-      status: SKIP_ESCROW ? 'in-progress' : 'pending-escrow',
-    });
-
-    if (SKIP_ESCROW) {
-      const [p1Skin, p2Skin] = await Promise.all([
-        getPlayerSkin(duel.challenger.wallet),
-        getPlayerSkin(duel.target.wallet),
-      ]);
-      duel.challenger.skin = p1Skin;
-      duel.target.skin = p2Skin;
-
-      const game = new PongEngine(gameId, duel.challenger, duel.target, 'duel', io, activeGames, stakeAmount);
-      activeGames.set(gameId, game);
-
-      const countdownData = {
-        gameId, seconds: 30, tier: 'duel',
-        player1: { wallet: duel.challenger.wallet, username: duel.challenger.username, skin: p1Skin },
-        player2: { wallet: duel.target.wallet, username: duel.target.username, skin: p2Skin },
-        stakeAmount,
-        useReadySystem: true,
-      };
-      io.to(duel.challenger.socketId).emit('game-countdown', countdownData);
-      io.to(duel.target.socketId).emit('game-countdown', countdownData);
-
-      game.startReadyPhase();
-      return;
-    }
-
-    // Build escrow transactions
-    let p1Tx, p2Tx;
-    try {
-      p1Tx = await buildCustomEscrowTransaction(duel.challenger.wallet, stakeAmount);
-    } catch (err) {
-      io.to(duel.challenger.socketId).emit('match-error', { error: err.message });
-      io.to(duel.target.socketId).emit('match-error', { error: 'Opponent cannot stake. Duel cancelled.' });
-      await Match.findOneAndUpdate({ gameId }, { status: 'cancelled' });
-      return;
-    }
-    try {
-      p2Tx = await buildCustomEscrowTransaction(duel.target.wallet, stakeAmount);
-    } catch (err) {
-      io.to(duel.target.socketId).emit('match-error', { error: err.message });
-      io.to(duel.challenger.socketId).emit('match-error', { error: 'Opponent cannot stake. Duel cancelled.' });
-      await Match.findOneAndUpdate({ gameId }, { status: 'cancelled' });
-      return;
-    }
-
-    pendingEscrow.set(gameId, {
-      player1: duel.challenger,
-      player2: duel.target,
-      tier: 'duel',
-      stakeAmount,
-      p1Escrowed: false,
-      p2Escrowed: false,
-    });
-
-    io.to(duel.challenger.socketId).emit('match-found', {
-      gameId,
-      opponent: { wallet: duel.target.wallet, username: duel.target.username },
-      tier: 'duel',
-      stake: stakeAmount,
-      escrowTransaction: p1Tx.transaction,
-      yourSlot: 'p1',
-    });
-
-    io.to(duel.target.socketId).emit('match-found', {
-      gameId,
-      opponent: { wallet: duel.challenger.wallet, username: duel.challenger.username },
-      tier: 'duel',
-      stake: stakeAmount,
-      escrowTransaction: p2Tx.transaction,
-      yourSlot: 'p2',
-    });
-
-    setTimeout(() => {
-      if (pendingEscrow.has(gameId)) {
-        pendingEscrow.delete(gameId);
-        Match.findOneAndUpdate({ gameId }, { status: 'cancelled' }).catch(() => {});
-        io.to(duel.challenger.socketId).emit('match-cancelled', { gameId, reason: 'Escrow timeout' });
-        io.to(duel.target.socketId).emit('match-cancelled', { gameId, reason: 'Escrow timeout' });
-      }
-    }, 60000);
+    await startCustomStakeMatch(io, duel.challenger, duel.target, duel.stakeAmount, activeGames);
   });
 
   socket.on('duel-decline', ({ duelId }) => {
@@ -378,11 +414,123 @@ function setupMatchmaking(io, socket, onlineUsers, activeGames) {
     });
   });
 
+  // === CUSTOM STAKE LOBBIES ===
+
+  socket.on('lobby-create', async ({ stakeAmount }) => {
+    if (!socket.wallet) return socket.emit('lobby-error', { error: 'Not authenticated' });
+    if (!stakeAmount || stakeAmount <= 0) return socket.emit('lobby-error', { error: 'Invalid stake amount' });
+
+    // Check not already in a lobby
+    for (const [, lobby] of openLobbies) {
+      if (lobby.wallet === socket.wallet) {
+        return socket.emit('lobby-error', { error: 'You already have an open lobby' });
+      }
+    }
+
+    // Check not in queue
+    for (const t of Object.keys(queues)) {
+      if (queues[t].some(p => p.wallet === socket.wallet)) {
+        return socket.emit('lobby-error', { error: 'Leave the queue before creating a lobby' });
+      }
+    }
+
+    // Check not in active game
+    for (const [, game] of activeGames) {
+      if (game.hasPlayer(socket.wallet) && game.state.status === 'playing') {
+        return socket.emit('lobby-error', { error: 'You are already in a game' });
+      }
+    }
+
+    const lobbyId = crypto.randomUUID();
+    openLobbies.set(lobbyId, {
+      wallet: socket.wallet,
+      username: socket.username || 'Anon',
+      socketId: socket.id,
+      stakeAmount,
+      createdAt: Date.now(),
+    });
+
+    socket.emit('lobby-created', { lobbyId });
+    broadcastLobbies(io);
+    console.log(`${socket.username} created lobby ${lobbyId} for ${stakeAmount} base units`);
+  });
+
+  socket.on('lobby-cancel', ({ lobbyId }) => {
+    const lobby = openLobbies.get(lobbyId);
+    if (!lobby || lobby.wallet !== socket.wallet) return;
+    openLobbies.delete(lobbyId);
+    socket.emit('lobby-cancelled');
+    broadcastLobbies(io);
+    console.log(`${socket.username} cancelled lobby ${lobbyId}`);
+  });
+
+  socket.on('lobby-join', async ({ lobbyId }) => {
+    if (!socket.wallet) return socket.emit('lobby-error', { error: 'Not authenticated' });
+
+    const lobby = openLobbies.get(lobbyId);
+    if (!lobby) return socket.emit('lobby-error', { error: 'Lobby no longer exists' });
+    if (lobby.wallet === socket.wallet) return socket.emit('lobby-error', { error: 'Cannot join your own lobby' });
+
+    // Check not in active game
+    for (const [, game] of activeGames) {
+      if (game.hasPlayer(socket.wallet) && game.state.status === 'playing') {
+        return socket.emit('lobby-error', { error: 'You are already in a game' });
+      }
+    }
+
+    // Remove lobby
+    openLobbies.delete(lobbyId);
+
+    // Also cancel any lobby the joiner has open
+    for (const [id, l] of openLobbies) {
+      if (l.wallet === socket.wallet) {
+        openLobbies.delete(id);
+        socket.emit('lobby-cancelled');
+        break;
+      }
+    }
+
+    broadcastLobbies(io);
+
+    // Notify lobby creator their lobby was cancelled (they're entering a match)
+    const creatorInfo = onlineUsers.get(lobby.wallet);
+    if (creatorInfo) lobby.socketId = creatorInfo.socketId;
+    io.to(lobby.socketId).emit('lobby-cancelled');
+
+    const p1 = { wallet: lobby.wallet, username: lobby.username, socketId: lobby.socketId };
+    const p2 = { wallet: socket.wallet, username: socket.username || 'Anon', socketId: socket.id };
+
+    await startCustomStakeMatch(io, p1, p2, lobby.stakeAmount, activeGames);
+  });
+
+  socket.on('lobby-list-request', () => {
+    const list = [];
+    for (const [lobbyId, lobby] of openLobbies) {
+      list.push({
+        lobbyId,
+        wallet: lobby.wallet,
+        username: lobby.username,
+        stakeAmount: lobby.stakeAmount,
+        createdAt: lobby.createdAt,
+      });
+    }
+    socket.emit('lobby-list', { lobbies: list });
+  });
+
   // Clean up on disconnect
   socket.on('disconnect', () => {
     for (const tier of Object.keys(queues)) {
       queues[tier] = queues[tier].filter(p => p.wallet !== socket.wallet);
     }
+    // Remove any open lobbies from disconnecting player
+    let lobbyCleaned = false;
+    for (const [lobbyId, lobby] of openLobbies) {
+      if (lobby.wallet === socket.wallet) {
+        openLobbies.delete(lobbyId);
+        lobbyCleaned = true;
+      }
+    }
+    if (lobbyCleaned) broadcastLobbies(io);
   });
 }
 

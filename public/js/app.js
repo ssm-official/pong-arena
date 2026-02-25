@@ -29,6 +29,12 @@ let unreadCounts = {};
 let duelTargetWallet = null;
 let pendingDuelId = null;
 
+// --- Lobby state ---
+let myLobbyId = null;
+let lobbyList = [];
+let lobbyFilterMin = 0;
+let lobbyFilterMax = Infinity;
+
 // --- Game opponent for post-game add ---
 let lastGameOpponent = null;
 
@@ -163,6 +169,7 @@ window.socket = socket;
 socket.on('connect', () => {
   if (currentUser) {
     socket.emit('register', { wallet: currentUser.wallet, username: currentUser.username });
+    socket.emit('lobby-list-request');
   }
 });
 
@@ -265,6 +272,7 @@ function showApp() {
   // Replace current history entry so back works correctly
   history.replaceState({ tab: initialTab }, '', ROUTE_PATHS[initialTab] || '/play');
   socket.emit('register', { wallet: currentUser.wallet, username: currentUser.username });
+  socket.emit('lobby-list-request');
   const canvas = document.getElementById('game-canvas');
   GameClient.init(canvas, currentUser.wallet);
   startPriceRefresh();
@@ -1171,6 +1179,150 @@ socket.on('duel-expired', (data) => {
 });
 
 // ===========================================
+// CUSTOM LOBBIES
+// ===========================================
+
+function formatPongAmount(amount) {
+  const pong = amount / 1e6;
+  if (pong >= 1e6) return (pong / 1e6).toFixed(2) + 'M';
+  if (pong >= 1e3) return (pong / 1e3).toFixed(1) + 'K';
+  return pong.toLocaleString('en-US', { maximumFractionDigits: 0 });
+}
+
+function updateLobbyPongDisplay() {
+  const usdInput = document.getElementById('lobby-usd-input').value;
+  const display = document.getElementById('lobby-pong-display');
+  if (!usdInput || pongPriceUsd <= 0) {
+    display.textContent = pongPriceUsd <= 0 ? 'Price unavailable' : '';
+    return;
+  }
+  const pongAmount = Math.round(parseFloat(usdInput) / pongPriceUsd);
+  display.textContent = `≈ ${pongAmount.toLocaleString()} $PONG`;
+}
+
+function createLobby() {
+  const usdInput = parseFloat(document.getElementById('lobby-usd-input').value);
+  if (!usdInput || usdInput <= 0) return alert('Enter a valid USD amount');
+  if (pongPriceUsd <= 0) return alert('Price unavailable. Try again later.');
+
+  const pongAmount = Math.round(usdInput / pongPriceUsd);
+  const baseUnits = pongAmount * 1e6;
+
+  socket.emit('lobby-create', { stakeAmount: baseUnits });
+}
+
+function cancelLobby() {
+  if (!myLobbyId) return;
+  socket.emit('lobby-cancel', { lobbyId: myLobbyId });
+}
+
+function joinLobby(lobbyId) {
+  socket.emit('lobby-join', { lobbyId });
+}
+
+function applyLobbyFilters() {
+  const minInput = document.getElementById('lobby-filter-min');
+  const maxInput = document.getElementById('lobby-filter-max');
+  lobbyFilterMin = parseFloat(minInput.value) || 0;
+  lobbyFilterMax = parseFloat(maxInput.value) || Infinity;
+  renderLobbies();
+}
+
+function renderLobbies() {
+  const container = document.getElementById('lobby-list');
+  if (!container) return;
+
+  const filtered = lobbyList.filter(l => {
+    if (pongPriceUsd <= 0) return true;
+    const usd = (l.stakeAmount / 1e6) * pongPriceUsd;
+    return usd >= lobbyFilterMin && usd <= lobbyFilterMax;
+  });
+
+  if (filtered.length === 0) {
+    container.innerHTML = '<p class="text-gray-500 text-sm text-center py-4">No open lobbies. Create one!</p>';
+    return;
+  }
+
+  container.innerHTML = filtered.map(l => {
+    const pongAmt = l.stakeAmount / 1e6;
+    const usdAmt = pongPriceUsd > 0 ? formatUsd(pongAmt * pongPriceUsd) : '--';
+    const shortWallet = l.wallet.slice(0, 4) + '...' + l.wallet.slice(-4);
+    const isOwn = currentUser && l.wallet === currentUser.wallet;
+    return `
+      <div class="flex items-center justify-between bg-gray-800/60 rounded-lg px-3 py-2">
+        <div class="flex items-center gap-2 min-w-0">
+          <span class="text-sm font-bold text-white truncate">${esc(l.username)}</span>
+          <span class="text-xs text-gray-500">${shortWallet}</span>
+        </div>
+        <div class="text-right flex-shrink-0 ml-2">
+          <div class="text-sm font-bold text-yellow-400">${usdAmt}</div>
+          <div class="text-xs text-gray-500">${formatPongAmount(l.stakeAmount)} $PONG</div>
+        </div>
+        ${isOwn
+          ? '<span class="text-xs text-gray-500 ml-3">Your lobby</span>'
+          : `<button onclick="joinLobby('${l.lobbyId}')" class="bg-purple-600 hover:bg-purple-700 px-3 py-1 rounded text-xs font-medium ml-3 transition">Join</button>`
+        }
+      </div>
+    `;
+  }).join('');
+}
+
+function updateLobbyUI() {
+  const createSection = document.getElementById('lobby-create-section');
+  const cancelSection = document.getElementById('lobby-cancel-section');
+  if (!createSection || !cancelSection) return;
+
+  if (myLobbyId) {
+    createSection.classList.add('hidden');
+    cancelSection.classList.remove('hidden');
+    // Find my lobby in list to show stake
+    const myLobby = lobbyList.find(l => l.lobbyId === myLobbyId);
+    const stakeEl = document.getElementById('lobby-my-stake');
+    if (myLobby && stakeEl) {
+      const pong = myLobby.stakeAmount / 1e6;
+      const usd = pongPriceUsd > 0 ? formatUsd(pong * pongPriceUsd) + ' — ' : '';
+      stakeEl.textContent = `${usd}${formatPongAmount(myLobby.stakeAmount)} $PONG`;
+    }
+  } else {
+    createSection.classList.remove('hidden');
+    cancelSection.classList.add('hidden');
+  }
+}
+
+// Socket: Lobby created
+socket.on('lobby-created', (data) => {
+  myLobbyId = data.lobbyId;
+  document.getElementById('lobby-usd-input').value = '';
+  document.getElementById('lobby-pong-display').textContent = '';
+  updateLobbyUI();
+});
+
+// Socket: Lobby cancelled
+socket.on('lobby-cancelled', () => {
+  myLobbyId = null;
+  updateLobbyUI();
+});
+
+// Socket: Lobby list update (broadcast)
+socket.on('lobby-update', (data) => {
+  lobbyList = data.lobbies || [];
+  renderLobbies();
+  updateLobbyUI();
+});
+
+// Socket: Initial lobby list
+socket.on('lobby-list', (data) => {
+  lobbyList = data.lobbies || [];
+  renderLobbies();
+  updateLobbyUI();
+});
+
+// Socket: Lobby error
+socket.on('lobby-error', (data) => {
+  alert(data.error);
+});
+
+// ===========================================
 // IN-GAME CHAT
 // ===========================================
 
@@ -1505,6 +1657,12 @@ async function loadHistory() {
 // ===========================================
 
 function joinQueue(tier) {
+  // Auto-cancel any open lobby when joining queue
+  if (myLobbyId) {
+    socket.emit('lobby-cancel', { lobbyId: myLobbyId });
+    myLobbyId = null;
+    updateLobbyUI();
+  }
   socket.emit('queue-join', { tier });
   currentGameTier = tier;
   showMatchmakingState('queue');
@@ -2094,19 +2252,21 @@ async function fetchDashboardBalance() {
     const res = await fetch(`/api/balance/${currentUser.wallet}`).then(r => r.json());
     const baseUnits = res.balance || 0;
     const pong = baseUnits / 1e6;
+    // PONG display (secondary / small)
     if (pong >= 1e6) pongEl.textContent = (pong / 1e6).toFixed(2) + 'M';
     else if (pong >= 1e3) pongEl.textContent = (pong / 1e3).toFixed(1) + 'K';
     else pongEl.textContent = pong.toLocaleString('en-US', { maximumFractionDigits: 2 });
+    // USD display (primary / large)
     if (usdEl) {
       if (pongPriceUsd > 0) {
         usdEl.textContent = formatUsd(pong * pongPriceUsd);
       } else {
-        usdEl.textContent = '';
+        usdEl.textContent = '--';
       }
     }
   } catch (e) {
     pongEl.textContent = '--';
-    if (usdEl) usdEl.textContent = '';
+    if (usdEl) usdEl.textContent = '--';
   }
 }
 
