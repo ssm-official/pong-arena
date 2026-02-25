@@ -225,11 +225,8 @@ class PongEngine {
     this.tickCount++;
     const isBroadcastTick = (this.tickCount % this.broadcastInterval === 0);
 
-    // --- Always allow paddle movement, even during pause ---
-    const p1Dir = this.input[this.player1.wallet];
-    const p2Dir = this.input[this.player2.wallet];
-    PongSim.applyInput(this.simState, 1, p1Dir);
-    PongSim.applyInput(this.simState, 2, p2Dir);
+    // --- Paddle positions are synced directly from clients via _syncPaddle() ---
+    // No server-side paddle integration (prevents tick-rate oscillation)
 
     // --- Score pause countdown ---
     if (this.simState.pauseTicks > 0) {

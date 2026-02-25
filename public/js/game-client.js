@@ -16,7 +16,7 @@ const GameClient = (() => {
   const PHYSICS_DT = 1000 / 60;
 
   const OPP_PADDLE_LERP = 0.25;
-  const SYNC_INTERVAL_MS = 33; // ~30Hz position sync
+  const SYNC_INTERVAL_MS = 16; // ~60Hz position sync (match server tick rate)
 
   // Skin image render dimensions (centered on paddle hitbox)
   const SKIN_DRAW_W = 60;
@@ -225,12 +225,6 @@ const GameClient = (() => {
         myY = Math.min(CANVAS_H - PADDLE_H, myY + PADDLE_SPEED);
       }
 
-      // Sync own paddle position to server at ~30Hz to prevent tick-rate drift
-      if (currentInput !== 'stop' && window.socket && gameId && timestamp - lastSyncTime >= SYNC_INTERVAL_MS) {
-        lastSyncTime = timestamp;
-        window.socket.emit('paddle-sync', { gameId, y: myY });
-      }
-
       // Ball: predict between server snapshots (full physics incl. paddle collisions)
       if (!isPaused) {
         // Build a temporary state with local paddle positions for PongSim
@@ -249,6 +243,13 @@ const GameClient = (() => {
 
         if (result.sound) playGameSound(result.sound);
       }
+    }
+
+    // Sync own paddle position to server every frame (~60Hz)
+    // Server no longer moves paddles independently — this is the sole source of truth
+    if (window.socket && gameId && timestamp - lastSyncTime >= SYNC_INTERVAL_MS) {
+      lastSyncTime = timestamp;
+      window.socket.emit('paddle-sync', { gameId, y: myY });
     }
 
     // Opponent paddle: smooth lerp toward target
