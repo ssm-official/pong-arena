@@ -16,6 +16,7 @@ const GameClient = (() => {
   const PHYSICS_DT = 1000 / 60;
 
   const OPP_PADDLE_LERP = 0.25;
+  const SYNC_INTERVAL_MS = 33; // ~30Hz position sync
 
   // Skin image render dimensions (centered on paddle hitbox)
   const SKIN_DRAW_W = 60;
@@ -91,6 +92,7 @@ const GameClient = (() => {
 
   let displayScore = { p1: 0, p2: 0 };
   let isPaused = false;
+  let lastSyncTime = 0;
 
   const keys = {};
   let currentInput = 'stop';
@@ -114,6 +116,7 @@ const GameClient = (() => {
     ballVy = 0;
     accumulator = 0;
     lastFrameTime = 0;
+    lastSyncTime = 0;
   }
 
   function setSkins(config) {
@@ -220,6 +223,12 @@ const GameClient = (() => {
         myY = Math.max(0, myY - PADDLE_SPEED);
       } else if (currentInput === 'down') {
         myY = Math.min(CANVAS_H - PADDLE_H, myY + PADDLE_SPEED);
+      }
+
+      // Sync own paddle position to server at ~30Hz to prevent tick-rate drift
+      if (currentInput !== 'stop' && window.socket && gameId && timestamp - lastSyncTime >= SYNC_INTERVAL_MS) {
+        lastSyncTime = timestamp;
+        window.socket.emit('paddle-sync', { gameId, y: myY });
       }
 
       // Ball: predict between server snapshots (full physics incl. paddle collisions)
@@ -416,7 +425,7 @@ const GameClient = (() => {
     if (dir !== currentInput) {
       currentInput = dir;
       if (window.socket && gameId) {
-        window.socket.emit('paddle-move', { gameId, direction: dir });
+        window.socket.emit('paddle-move', { gameId, direction: dir, y: myY });
       }
     }
   }
@@ -434,6 +443,7 @@ const GameClient = (() => {
     ballY = CANVAS_H / 2;
     ballVx = 0;
     ballVy = 0;
+    lastSyncTime = 0;
     mySkin = null;
     opponentSkin = null;
     mySkinImage = null;

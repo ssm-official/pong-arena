@@ -157,7 +157,7 @@ class PongEngine {
   // =============================================
   // INPUT HANDLING + ANTI-CHEAT
   // =============================================
-  handleInput(wallet, direction) {
+  handleInput(wallet, direction, y) {
     // Validate player identity
     if (wallet !== this.player1.wallet && wallet !== this.player2.wallet) return;
 
@@ -177,6 +177,22 @@ class PongEngine {
     }
 
     this.input[wallet] = direction;
+
+    // Sync paddle position from client to prevent tick-rate drift
+    if (typeof y === 'number') {
+      this._syncPaddle(wallet, y);
+    }
+  }
+
+  // Directly set paddle Y from client-reported position (clamped to valid range)
+  _syncPaddle(wallet, y) {
+    const maxY = PongSim.CANVAS_H - PongSim.PADDLE_H;
+    const clamped = Math.max(0, Math.min(maxY, y));
+    if (wallet === this.player1.wallet) {
+      this.simState.paddle1.y = clamped;
+    } else if (wallet === this.player2.wallet) {
+      this.simState.paddle2.y = clamped;
+    }
   }
 
   // =============================================

@@ -140,10 +140,18 @@ io.on('connection', (socket) => {
   setupMatchmaking(io, socket, onlineUsers, activeGames);
 
   // --- In-Game Paddle Input ---
-  socket.on('paddle-move', ({ gameId, direction }) => {
+  socket.on('paddle-move', ({ gameId, direction, y }) => {
     const game = activeGames.get(gameId);
     if (!game) return;
-    game.handleInput(socket.wallet, direction);
+    game.handleInput(socket.wallet, direction, y);
+  });
+
+  // --- Paddle position sync (prevents tick-rate drift) ---
+  socket.on('paddle-sync', ({ gameId, y }) => {
+    if (typeof y !== 'number') return;
+    const game = activeGames.get(gameId);
+    if (!game) return;
+    game._syncPaddle(socket.wallet, y);
   });
 
   // --- Direct Messages ---
