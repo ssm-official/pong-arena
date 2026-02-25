@@ -173,12 +173,8 @@ const GameClient = (() => {
       playGameSound(state.sound);
     }
 
-    // --- Own paddle: DO NOT TOUCH. Local input is authoritative for rendering. ---
-    // Safety snap: if server paddle drifts too far, correct
-    const serverMyY = amPlayer1 ? state.paddle1.y : state.paddle2.y;
-    if (Math.abs(myY - serverMyY) > PADDLE_SPEED * 2) {
-      myY = serverMyY;
-    }
+    // --- Own paddle: 100% local. Server is authoritative for collisions,
+    // but client-side rendering trusts local input (identical physics). ---
 
     // --- Opponent paddle: set target, display lerps toward it each frame ---
     oppTargetY = amPlayer1 ? state.paddle2.y : state.paddle1.y;

@@ -23,7 +23,7 @@ class PongEngine {
     this.activeGames = activeGames;
     this.customStake = customStake || null;
     this.tickCount = 0;
-    this.broadcastInterval = 1; // broadcast every tick = 60Hz
+    this.broadcastInterval = 2; // broadcast every 2 ticks = 30Hz
     this.pendingSounds = [];
 
     // Ready system
