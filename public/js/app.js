@@ -29,6 +29,9 @@ let unreadCounts = {};
 let duelTargetWallet = null;
 let pendingDuelId = null;
 
+// --- Inventory state ---
+let dashInventory = [];
+
 // --- Lobby state ---
 let myLobbyId = null;
 let lobbyList = [];
@@ -2414,30 +2417,98 @@ async function loadDashboardFriends() {
 // ===========================================
 
 async function loadDashboardSkins() {
-  const container = document.getElementById('dash-skins-list');
-  if (!container) return;
+  const paddle = document.getElementById('dash-paddle-preview');
+  if (!paddle) return;
   try {
     const res = await fetch('/api/shop', { headers: { Authorization: getAuthHeader() } }).then(r => r.json());
-    const inv = res.inventory || [];
-    if (inv.length === 0) {
-      container.innerHTML = '<p class="text-gray-500 text-xs col-span-4">No skins yet. Open a crate!</p>';
-      return;
-    }
-    container.innerHTML = inv.slice(0, 8).map(s => {
-      const borderCls = s.equipped ? 'border-purple-500' : 'border-gray-700';
-      const bg = s.type === 'color' ? esc(s.cssValue) + '33' : '#1a1a3a';
-      const inner = s.type === 'color'
-        ? `<div class="w-6 h-6 rounded-full" style="background:${esc(s.cssValue)};box-shadow:0 0 6px ${esc(s.cssValue)}"></div>`
-        : `<img src="${esc(s.imageUrl)}" class="h-7 object-contain" />`;
-      return `
-        <div class="rounded-lg border ${borderCls} p-2 flex flex-col items-center justify-center cursor-pointer hover:border-purple-400 transition" style="background:${bg}" title="${esc(s.name)}"
-          onclick="switchTab('shop')">
-          ${inner}
-          <span class="text-[10px] text-gray-400 mt-1 truncate w-full text-center">${esc(s.name)}</span>
-        </div>
-      `;
-    }).join('');
+    dashInventory = res.inventory || [];
+    updatePaddlePreview();
   } catch (err) {
-    container.innerHTML = '<p class="text-gray-500 text-xs col-span-4">Could not load skins.</p>';
+    console.error('Failed to load dashboard skins:', err);
+  }
+}
+
+function updatePaddlePreview() {
+  const paddle = document.getElementById('dash-paddle-preview');
+  const nameEl = document.getElementById('dash-skin-name');
+  const rarityEl = document.getElementById('dash-skin-rarity');
+  if (!paddle) return;
+  const equipped = dashInventory.find(s => s.equipped);
+  if (equipped) {
+    if (equipped.type === 'color') {
+      paddle.style.background = esc(equipped.cssValue);
+      paddle.style.boxShadow = '0 0 15px ' + esc(equipped.cssValue);
+      paddle.style.backgroundImage = '';
+    } else {
+      paddle.style.background = '#1a1a3a';
+      paddle.style.backgroundImage = 'url(' + esc(equipped.imageUrl) + ')';
+      paddle.style.backgroundSize = 'contain';
+      paddle.style.backgroundPosition = 'center';
+      paddle.style.backgroundRepeat = 'no-repeat';
+      paddle.style.boxShadow = '0 0 15px #a855f7';
+    }
+    nameEl.textContent = equipped.name;
+    const rarityClass = equipped.rarity === 'legendary' ? 'bg-yellow-900 text-yellow-300'
+      : equipped.rarity === 'rare' ? 'bg-purple-900 text-purple-300'
+      : 'bg-gray-800 text-gray-400';
+    rarityEl.className = 'text-xs px-1.5 py-0.5 rounded ' + rarityClass;
+    rarityEl.textContent = equipped.rarity;
+    rarityEl.classList.remove('hidden');
+  } else {
+    paddle.style.background = '#a855f7';
+    paddle.style.boxShadow = '0 0 15px #a855f7';
+    paddle.style.backgroundImage = '';
+    nameEl.textContent = 'Default';
+    rarityEl.classList.add('hidden');
+  }
+}
+
+function openInventoryModal() {
+  document.getElementById('inventory-modal').classList.remove('hidden');
+  renderInventoryGrid();
+}
+
+function closeInventoryModal() {
+  document.getElementById('inventory-modal').classList.add('hidden');
+}
+
+function renderInventoryGrid() {
+  const grid = document.getElementById('inventory-grid');
+  if (dashInventory.length === 0) {
+    grid.innerHTML = '<p class="text-gray-500 text-sm col-span-3">No skins yet. Open a crate!</p>';
+    return;
+  }
+  grid.innerHTML = dashInventory.map(s => {
+    const rarityClass = s.rarity === 'legendary' ? 'bg-yellow-900 text-yellow-300'
+      : s.rarity === 'rare' ? 'bg-purple-900 text-purple-300'
+      : 'bg-gray-800 text-gray-400';
+    const preview = s.type === 'color'
+      ? `<div class="w-8 h-8 rounded-full" style="background:${esc(s.cssValue)};box-shadow:0 0 12px ${esc(s.cssValue)}"></div>`
+      : `<img src="${esc(s.imageUrl)}" class="h-14 object-contain" />`;
+    const btnClass = s.equipped ? 'text-green-400' : 'text-purple-400 hover:text-purple-300';
+    return `
+      <div class="bg-gray-800/50 rounded-lg p-3 flex flex-col items-center gap-1.5 border border-gray-700">
+        <div class="w-full h-16 rounded-lg flex items-center justify-center"
+          style="background:${s.type === 'color' ? esc(s.cssValue) + '33' : '#1a1a3a'}">
+          ${preview}
+        </div>
+        <h4 class="font-bold text-xs text-center truncate w-full">${esc(s.name)}</h4>
+        <span class="text-xs px-1.5 py-0.5 rounded ${rarityClass}">${s.rarity}</span>
+        <button onclick="equipSkinFromModal('${s.skinId}')" class="text-xs font-medium ${btnClass}">
+          ${s.equipped ? 'Equipped' : 'Equip'}
+        </button>
+      </div>
+    `;
+  }).join('');
+}
+
+async function equipSkinFromModal(skinId) {
+  try {
+    await apiPostAuth('/api/shop/equip', { skinId }, getAuthHeader());
+    dashInventory.forEach(s => { s.equipped = s.skinId === skinId; });
+    renderInventoryGrid();
+    updatePaddlePreview();
+  } catch (err) {
+    alert('Failed to equip: ' + err.message);
   }
 }
