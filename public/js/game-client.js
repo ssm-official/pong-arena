@@ -222,20 +222,23 @@ const GameClient = (() => {
         myY = Math.min(CANVAS_H - PADDLE_H, myY + PADDLE_SPEED);
       }
 
-      // Ball: predict between server snapshots (wall bounces only)
+      // Ball: predict between server snapshots (full physics incl. paddle collisions)
       if (!isPaused) {
-        ballX += ballVx;
-        ballY += ballVy;
+        // Build a temporary state with local paddle positions for PongSim
+        const p1Y = amPlayer1 ? myY : oppDisplayY;
+        const p2Y = amPlayer1 ? oppDisplayY : myY;
+        const tmpState = {
+          ball: { x: ballX, y: ballY, vx: ballVx, vy: ballVy },
+          paddle1: { y: p1Y },
+          paddle2: { y: p2Y }
+        };
+        const result = PongSim.stepBall(tmpState);
+        ballX = tmpState.ball.x;
+        ballY = tmpState.ball.y;
+        ballVx = tmpState.ball.vx;
+        ballVy = tmpState.ball.vy;
 
-        // Wall bounces (top/bottom)
-        if (ballY <= 0) {
-          ballY = -ballY;
-          ballVy = Math.abs(ballVy);
-        }
-        if (ballY >= CANVAS_H - BALL_SIZE) {
-          ballY = 2 * (CANVAS_H - BALL_SIZE) - ballY;
-          ballVy = -Math.abs(ballVy);
-        }
+        if (result.sound) playGameSound(result.sound);
       }
     }
 
