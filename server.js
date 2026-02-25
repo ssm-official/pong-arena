@@ -78,6 +78,17 @@ app.get('/api/stats/burned', async (req, res) => {
   }
 });
 
+// Player $PONG balance
+const { getPlayerBalance } = require('./solana/utils');
+app.get('/api/balance/:wallet', async (req, res) => {
+  try {
+    const balance = await getPlayerBalance(req.params.wallet);
+    res.json({ balance });
+  } catch (err) {
+    res.json({ balance: 0 });
+  }
+});
+
 // Admin console
 app.get('/admin.html', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'admin.html'));

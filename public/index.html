@@ -243,21 +243,17 @@
               </div>
             </div>
 
-            <!-- Arena Status Panel -->
+            <!-- Your Balance Panel -->
             <div class="bg-arena-card rounded-xl p-6 border border-gray-800">
-              <h3 class="text-lg font-bold mb-3">Arena Status</h3>
-              <div class="grid grid-cols-2 gap-3">
-                <div class="bg-gray-800 rounded-lg p-3 text-center">
-                  <div class="flex items-center justify-center gap-2 mb-1">
-                    <span class="w-2 h-2 rounded-full bg-green-400 animate-pulse"></span>
-                    <span class="text-xs text-gray-400">Online Now</span>
-                  </div>
-                  <div id="dash-online-count" class="text-2xl font-bold text-green-400">0</div>
-                </div>
-                <div class="bg-gray-800 rounded-lg p-3 text-center">
-                  <div class="text-xs text-gray-400 mb-1">Your Record</div>
-                  <div id="dash-your-record" class="text-2xl font-bold text-white">0-0</div>
-                </div>
+              <h3 class="text-lg font-bold mb-3">Your Balance</h3>
+              <div class="bg-gray-800 rounded-lg p-4 text-center mb-3">
+                <div id="dash-balance-pong" class="text-2xl font-bold text-white">--</div>
+                <div class="text-xs text-gray-500 mt-1">$PONG</div>
+                <div id="dash-balance-usd" class="text-sm text-gray-400 mt-1">--</div>
+              </div>
+              <div class="flex items-center justify-between text-xs text-gray-400 px-1">
+                <span>Record</span>
+                <span id="dash-your-record" class="font-bold text-white">0-0</span>
               </div>
             </div>
 
@@ -717,6 +713,6 @@
   <script src="/js/wallet.js?v=33"></script>
   <script src="/js/pong-sim.js?v=34"></script>
   <script src="/js/game-client.js?v=38"></script>
-  <script src="/js/app.js?v=36"></script>
+  <script src="/js/app.js?v=37"></script>
 </body>
 </html>

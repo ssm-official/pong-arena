@@ -2026,6 +2026,7 @@ function loadDashboard() {
   loadDashboardSkins();
   updateDashboardStats();
   fetchBurnedTotal();
+  fetchDashboardBalance();
 }
 
 async function loadDashboardLeaderboard(sort) {
@@ -2076,14 +2077,36 @@ async function loadDashboardLeaderboard(sort) {
 }
 
 function updateDashboardStats() {
-  const onlineEl = document.getElementById('dash-online-count');
-  if (onlineEl) onlineEl.textContent = onlineUsers.length;
-
   const recordEl = document.getElementById('dash-your-record');
   if (recordEl && currentUser) {
     const wins = currentUser.stats?.wins || 0;
     const losses = currentUser.stats?.losses || 0;
-    recordEl.textContent = `${wins}-${losses}`;
+    recordEl.textContent = `${wins}W - ${losses}L`;
+  }
+}
+
+async function fetchDashboardBalance() {
+  if (!currentUser) return;
+  const pongEl = document.getElementById('dash-balance-pong');
+  const usdEl = document.getElementById('dash-balance-usd');
+  if (!pongEl) return;
+  try {
+    const res = await fetch(`/api/balance/${currentUser.wallet}`).then(r => r.json());
+    const baseUnits = res.balance || 0;
+    const pong = baseUnits / 1e6;
+    if (pong >= 1e6) pongEl.textContent = (pong / 1e6).toFixed(2) + 'M';
+    else if (pong >= 1e3) pongEl.textContent = (pong / 1e3).toFixed(1) + 'K';
+    else pongEl.textContent = pong.toLocaleString('en-US', { maximumFractionDigits: 2 });
+    if (usdEl) {
+      if (pongPriceUsd > 0) {
+        usdEl.textContent = formatUsd(pong * pongPriceUsd);
+      } else {
+        usdEl.textContent = '';
+      }
+    }
+  } catch (e) {
+    pongEl.textContent = '--';
+    if (usdEl) usdEl.textContent = '';
   }
 }
 
