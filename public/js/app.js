@@ -64,16 +64,20 @@ async function fetchPongPrice() {
     }
   } catch (e) { console.warn('DexScreener price fetch failed:', e.message); }
 
-  // Source 2: GeckoTerminal
+  // Source 2: GeckoTerminal (pool endpoint — has price, fdv, 24h change)
   try {
-    const res = await fetch(`https://api.geckoterminal.com/api/v2/simple/networks/solana/token_price/${PONG_TOKEN_MINT}`);
+    const res = await fetch(`https://api.geckoterminal.com/api/v2/networks/solana/tokens/${PONG_TOKEN_MINT}/pools?page=1`);
     if (res.ok) {
       const data = await res.json();
-      const priceStr = data?.data?.attributes?.token_prices?.[PONG_TOKEN_MINT];
-      if (priceStr) {
-        const price = parseFloat(priceStr);
+      if (data.data && data.data.length > 0) {
+        const pool = data.data[0].attributes;
+        const price = parseFloat(pool.base_token_price_usd);
         if (price && price > 0) {
           pongPriceUsd = price;
+          if (pool.fdv_usd) pongMarketCap = parseFloat(pool.fdv_usd);
+          if (pool.price_change_percentage && pool.price_change_percentage.h24 != null) {
+            pongPriceChange24h = parseFloat(pool.price_change_percentage.h24);
+          }
           priceLastFetched = Date.now();
           priceFetchFailed = false;
           updateAllUsdDisplays();
