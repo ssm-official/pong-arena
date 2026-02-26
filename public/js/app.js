@@ -2440,12 +2440,8 @@ function updatePaddlePreview() {
       paddle.style.boxShadow = '0 0 15px ' + esc(equipped.cssValue);
       paddle.style.backgroundImage = '';
     } else {
-      paddle.style.background = '#1a1a3a';
-      paddle.style.backgroundImage = 'url(' + esc(equipped.imageUrl) + ')';
-      paddle.style.backgroundSize = 'contain';
-      paddle.style.backgroundPosition = 'center';
-      paddle.style.backgroundRepeat = 'no-repeat';
-      paddle.style.boxShadow = '0 0 15px #a855f7';
+      paddle.style.background = 'url(' + esc(equipped.imageUrl) + ') center/cover no-repeat';
+      paddle.style.boxShadow = 'none';
     }
     nameEl.textContent = equipped.name;
     const rarityClass = equipped.rarity === 'legendary' ? 'bg-yellow-900 text-yellow-300'
