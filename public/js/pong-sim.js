@@ -75,15 +75,18 @@
   // BALL STEP — Sub-step swept collision
   // =============================================
   // Returns { scored: null | 1 | 2, sound: null | 'wall' | 'paddle' | 'score' }
-  function stepBall(state) {
+  // paddleBuffer: extra pixels added top/bottom of paddle hitbox to compensate
+  //               for network latency (server passes ~12, client passes 0)
+  function stepBall(state, paddleBuffer) {
     var ball = state.ball;
     var paddle1 = state.paddle1;
     var paddle2 = state.paddle2;
     var result = { scored: null, sound: null };
+    var buf = paddleBuffer || 0;
 
-    // Number of sub-steps based on speed vs paddle width
+    // Number of sub-steps: use BALL_SIZE/2 as divisor for finer granularity
     var speed = Math.sqrt(ball.vx * ball.vx + ball.vy * ball.vy);
-    var steps = Math.max(1, Math.ceil(speed / (PADDLE_W / 2)));
+    var steps = Math.max(1, Math.ceil(speed / (BALL_SIZE / 2)));
     var stepVx = ball.vx / steps;
     var stepVy = ball.vy / steps;
 
@@ -107,18 +110,25 @@
         result.sound = 'wall';
       }
 
+      // Effective paddle Y ranges (with latency buffer)
+      var p1Top = paddle1.y - buf;
+      var p1Bot = paddle1.y + PADDLE_H + buf;
+      var p2Top = paddle2.y - buf;
+      var p2Bot = paddle2.y + PADDLE_H + buf;
+
       // --- Left paddle collision (player 1) ---
       if (ball.vx < 0) {
         // Swept test: ball left edge crossed paddle right edge this sub-step
         if (oldX >= P1_RIGHT && ball.x < P1_RIGHT) {
           var t = (oldX - P1_RIGHT) / (oldX - ball.x);
           var hitY = oldY + (ball.y - oldY) * t;
-          if (hitY + BALL_SIZE >= paddle1.y && hitY <= paddle1.y + PADDLE_H) {
+          if (hitY + BALL_SIZE >= p1Top && hitY <= p1Bot) {
             var spd = Math.min(Math.abs(ball.vx) + BALL_SPEED_INCREMENT, BALL_MAX_SPEED);
             ball.vx = spd;
             ball.x = P1_RIGHT;
             ball.y = hitY;
             var hitPos = (ball.y + BALL_SIZE / 2 - paddle1.y) / PADDLE_H;
+            hitPos = Math.max(0, Math.min(1, hitPos));
             ball.vy = (hitPos - 0.5) * spd * 1.5;
             result.sound = 'paddle';
             break;
@@ -126,11 +136,12 @@
         }
         // Overlap fallback
         if (ball.x < P1_RIGHT && ball.x + BALL_SIZE > P1_X &&
-            ball.y + BALL_SIZE > paddle1.y && ball.y < paddle1.y + PADDLE_H) {
+            ball.y + BALL_SIZE > p1Top && ball.y < p1Bot) {
           var spd2 = Math.min(Math.abs(ball.vx) + BALL_SPEED_INCREMENT, BALL_MAX_SPEED);
           ball.vx = spd2;
           ball.x = P1_RIGHT;
           var hitPos2 = (ball.y + BALL_SIZE / 2 - paddle1.y) / PADDLE_H;
+          hitPos2 = Math.max(0, Math.min(1, hitPos2));
           ball.vy = (hitPos2 - 0.5) * spd2 * 1.5;
           result.sound = 'paddle';
           break;
@@ -145,12 +156,13 @@
         if (oldRight <= P2_LEFT && newRight > P2_LEFT) {
           var t2 = (P2_LEFT - oldRight) / (newRight - oldRight);
           var hitY2 = oldY + (ball.y - oldY) * t2;
-          if (hitY2 + BALL_SIZE >= paddle2.y && hitY2 <= paddle2.y + PADDLE_H) {
+          if (hitY2 + BALL_SIZE >= p2Top && hitY2 <= p2Bot) {
             var spd3 = Math.min(Math.abs(ball.vx) + BALL_SPEED_INCREMENT, BALL_MAX_SPEED);
             ball.vx = -spd3;
             ball.x = P2_LEFT - BALL_SIZE;
             ball.y = hitY2;
             var hitPos3 = (ball.y + BALL_SIZE / 2 - paddle2.y) / PADDLE_H;
+            hitPos3 = Math.max(0, Math.min(1, hitPos3));
             ball.vy = (hitPos3 - 0.5) * spd3 * 1.5;
             result.sound = 'paddle';
             break;
@@ -158,11 +170,12 @@
         }
         // Overlap fallback
         if (ball.x + BALL_SIZE > P2_LEFT && ball.x < P2_RIGHT &&
-            ball.y + BALL_SIZE > paddle2.y && ball.y < paddle2.y + PADDLE_H) {
+            ball.y + BALL_SIZE > p2Top && ball.y < p2Bot) {
           var spd4 = Math.min(Math.abs(ball.vx) + BALL_SPEED_INCREMENT, BALL_MAX_SPEED);
           ball.vx = -spd4;
           ball.x = P2_LEFT - BALL_SIZE;
           var hitPos4 = (ball.y + BALL_SIZE / 2 - paddle2.y) / PADDLE_H;
+          hitPos4 = Math.max(0, Math.min(1, hitPos4));
           ball.vy = (hitPos4 - 0.5) * spd4 * 1.5;
           result.sound = 'paddle';
           break;

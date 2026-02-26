@@ -15,7 +15,7 @@ const GameClient = (() => {
   const BALL_SIZE = PongSim.BALL_SIZE;
   const PHYSICS_DT = 1000 / 60;
 
-  const OPP_PADDLE_LERP = 0.25;
+  const OPP_PADDLE_LERP = 0.4;
   const SYNC_INTERVAL_MS = 16; // ~60Hz position sync (match server tick rate)
 
   // Skin image render dimensions (centered on paddle hitbox)
@@ -227,9 +227,9 @@ const GameClient = (() => {
 
       // Ball: predict between server snapshots (full physics incl. paddle collisions)
       if (!isPaused) {
-        // Build a temporary state with local paddle positions for PongSim
-        const p1Y = amPlayer1 ? myY : oppDisplayY;
-        const p2Y = amPlayer1 ? oppDisplayY : myY;
+        // Use oppTargetY (latest server position) for prediction accuracy, not lerped display
+        const p1Y = amPlayer1 ? myY : oppTargetY;
+        const p2Y = amPlayer1 ? oppTargetY : myY;
         const tmpState = {
           ball: { x: ballX, y: ballY, vx: ballVx, vy: ballVy },
           paddle1: { y: p1Y },

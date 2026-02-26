@@ -23,7 +23,7 @@ class PongEngine {
     this.activeGames = activeGames;
     this.customStake = customStake || null;
     this.tickCount = 0;
-    this.broadcastInterval = 2; // broadcast every 2 ticks = 30Hz
+    this.broadcastInterval = 1; // broadcast every tick = 60Hz
     this.pendingSounds = [];
 
     // Ready system
@@ -238,8 +238,8 @@ class PongEngine {
       return;
     }
 
-    // --- Step ball physics ---
-    const result = PongSim.stepBall(this.simState);
+    // --- Step ball physics (with latency buffer on paddle hitbox) ---
+    const result = PongSim.stepBall(this.simState, 12);
     if (result.sound) {
       this.simState.sound = result.sound;
     }
