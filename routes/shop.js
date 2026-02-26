@@ -55,6 +55,30 @@ router.get('/', async (req, res) => {
 });
 
 /**
+ * GET /api/shop/crate/:crateId/skins
+ * Returns all possible skins in a crate with drop chances.
+ */
+router.get('/crate/:crateId/skins', async (req, res) => {
+  try {
+    const crate = await Crate.findOne({ crateId: req.params.crateId, active: true });
+    if (!crate) return res.status(404).json({ error: 'Crate not found' });
+    const skins = await Skin.find({ crateId: crate.crateId });
+    const weights = { common: 70, rare: 25, legendary: 5 };
+    const rarityCounts = { common: 0, rare: 0, legendary: 0 };
+    skins.forEach(s => { rarityCounts[s.rarity]++; });
+    const skinsWithChance = skins.map(s => {
+      const count = rarityCounts[s.rarity] || 1;
+      const chance = weights[s.rarity] / count;
+      return { ...s.toObject(), chance: Math.round(chance * 100) / 100 };
+    });
+    res.json({ crate: { crateId: crate.crateId, name: crate.name }, skins: skinsWithChance });
+  } catch (err) {
+    console.error('Crate skins fetch error:', err);
+    res.status(500).json({ error: 'Failed to fetch crate skins' });
+  }
+});
+
+/**
  * POST /api/shop/buy-crate
  * Step 1: Build Solana tx for crate price. Body: { crateId }
  */

@@ -1421,7 +1421,7 @@ function renderCrateCard(c, isLimited) {
   const borderColor = isLimited ? 'border-yellow-600' : 'border-gray-700';
   const usdPrice = pongPriceUsd > 0 ? formatUsd(c.price * pongPriceUsd) + ' / ' : '';
   return `
-    <div class="skin-card bg-arena-card rounded-xl p-4 border ${borderColor}">
+    <div class="skin-card bg-arena-card rounded-xl p-4 border ${borderColor} cursor-pointer hover:border-purple-500 transition" onclick="openCratePreview('${c.crateId}')">
       <div class="flex items-start justify-between mb-2">
         <div>
           <h4 class="font-bold">${esc(c.name)}</h4>
@@ -1436,12 +1436,58 @@ function renderCrateCard(c, isLimited) {
       </div>
       <div class="flex items-center justify-between">
         <span class="text-sm font-bold text-white">${usdPrice}${c.price.toLocaleString()} $PONG</span>
-        <button onclick="buyCrate('${c.crateId}')" class="bg-purple-600 hover:bg-purple-700 px-4 py-1.5 rounded-lg text-xs font-medium transition">
+        <button onclick="event.stopPropagation();buyCrate('${c.crateId}')" class="bg-purple-600 hover:bg-purple-700 px-4 py-1.5 rounded-lg text-xs font-medium transition">
           Open${c.unownedCount > 0 ? ` (${c.unownedCount} new)` : ''}
         </button>
       </div>
     </div>
   `;
+}
+
+async function openCratePreview(crateId) {
+  const modal = document.getElementById('crate-preview-modal');
+  const title = document.getElementById('crate-preview-title');
+  const grid = document.getElementById('crate-preview-grid');
+  const openBtn = document.getElementById('crate-preview-open-btn');
+  grid.innerHTML = '<p class="text-gray-500 text-sm col-span-3 text-center py-6">Loading...</p>';
+  modal.classList.remove('hidden');
+  openBtn.onclick = function() { closeCratePreview(); buyCrate(crateId); };
+  try {
+    const res = await fetch('/api/shop/crate/' + crateId + '/skins', { headers: { Authorization: getAuthHeader() } }).then(r => r.json());
+    if (res.error) { grid.innerHTML = '<p class="text-red-400 text-sm col-span-3 text-center">Failed to load</p>'; return; }
+    title.textContent = res.crate.name + ' — Contents';
+    if (res.skins.length === 0) {
+      grid.innerHTML = '<p class="text-gray-500 text-sm col-span-3 text-center py-6">No skins in this crate.</p>';
+      return;
+    }
+    grid.innerHTML = res.skins.map(s => {
+      const rarityClass = s.rarity === 'legendary' ? 'bg-yellow-900 text-yellow-300'
+        : s.rarity === 'rare' ? 'bg-purple-900 text-purple-300'
+        : 'bg-gray-800 text-gray-400';
+      const chancePct = s.chance >= 1 ? s.chance.toFixed(0) + '%' : s.chance.toFixed(1) + '%';
+      const chanceColor = s.rarity === 'legendary' ? 'text-yellow-400' : s.rarity === 'rare' ? 'text-purple-400' : 'text-gray-400';
+      const preview = s.type === 'color'
+        ? `<div class="w-8 h-8 rounded-full" style="background:${esc(s.cssValue)};box-shadow:0 0 12px ${esc(s.cssValue)}"></div>`
+        : `<img src="${esc(s.imageUrl)}" class="h-14 object-contain" />`;
+      return `
+        <div class="bg-gray-800/50 rounded-lg p-3 flex flex-col items-center gap-1.5 border border-gray-700">
+          <div class="w-full h-16 rounded-lg flex items-center justify-center"
+            style="background:${s.type === 'color' ? esc(s.cssValue) + '33' : '#1a1a3a'}">
+            ${preview}
+          </div>
+          <h4 class="font-bold text-xs text-center truncate w-full">${esc(s.name)}</h4>
+          <span class="text-xs px-1.5 py-0.5 rounded ${rarityClass}">${s.rarity}</span>
+          <span class="text-xs font-mono ${chanceColor}">${chancePct}</span>
+        </div>
+      `;
+    }).join('');
+  } catch (err) {
+    grid.innerHTML = '<p class="text-red-400 text-sm col-span-3 text-center">Failed to load skins</p>';
+  }
+}
+
+function closeCratePreview() {
+  document.getElementById('crate-preview-modal').classList.add('hidden');
 }
 
 async function buyCrate(crateId) {
