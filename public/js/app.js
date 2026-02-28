@@ -1375,16 +1375,17 @@ async function loadShop() {
       document.getElementById('shop-standard-grid').innerHTML = '<p class="text-red-400 text-sm col-span-full">Failed to load shop.</p>';
       return;
     }
+    const ownedCrates = res.ownedCrates || {};
     const limitedSection = document.getElementById('shop-limited-section');
     const limitedGrid = document.getElementById('shop-limited-grid');
     if (res.limited && res.limited.length > 0) {
       limitedSection.classList.remove('hidden');
-      limitedGrid.innerHTML = res.limited.map(c => renderCrateCard(c, true)).join('');
+      limitedGrid.innerHTML = res.limited.map(c => renderCrateCard(c, true, ownedCrates[c.crateId] || 0)).join('');
     } else {
       limitedSection.classList.add('hidden');
     }
     const standardGrid = document.getElementById('shop-standard-grid');
-    standardGrid.innerHTML = (res.standard || []).map(c => renderCrateCard(c, false)).join('');
+    standardGrid.innerHTML = (res.standard || []).map(c => renderCrateCard(c, false, ownedCrates[c.crateId] || 0)).join('');
     const inventory = document.getElementById('shop-inventory');
     if (res.inventory && res.inventory.length > 0) {
       inventory.innerHTML = res.inventory.map(s => `
@@ -1417,9 +1418,10 @@ async function loadShop() {
   }
 }
 
-function renderCrateCard(c, isLimited) {
+function renderCrateCard(c, isLimited, ownedCount) {
   const borderColor = isLimited ? 'border-yellow-600' : 'border-gray-700';
   const usdPrice = pongPriceUsd > 0 ? formatUsd(c.price * pongPriceUsd) + ' / ' : '';
+  const owned = ownedCount || 0;
   return `
     <div class="skin-card bg-arena-card rounded-xl p-4 border ${borderColor} cursor-pointer hover:border-purple-500 transition" onclick="openCratePreview('${c.crateId}')">
       <div class="flex items-start justify-between mb-2">
@@ -1436,9 +1438,10 @@ function renderCrateCard(c, isLimited) {
       </div>
       <div class="flex items-center justify-between">
         <span class="text-sm font-bold text-white">${usdPrice}${c.price.toLocaleString()} $PONG</span>
-        <button onclick="event.stopPropagation();buyCrate('${c.crateId}')" class="bg-purple-600 hover:bg-purple-700 px-4 py-1.5 rounded-lg text-xs font-medium transition">
-          Open${c.unownedCount > 0 ? ` (${c.unownedCount} new)` : ''}
-        </button>
+        <div class="flex gap-2">
+          ${owned > 0 ? `<button onclick="event.stopPropagation();openOwnedCrate('${c.crateId}')" class="bg-green-600 hover:bg-green-700 px-3 py-1.5 rounded-lg text-xs font-medium transition">Open (${owned})</button>` : ''}
+          <button onclick="event.stopPropagation();buyCrate('${c.crateId}')" class="bg-purple-600 hover:bg-purple-700 px-3 py-1.5 rounded-lg text-xs font-medium transition">Buy</button>
+        </div>
       </div>
     </div>
   `;
@@ -1449,9 +1452,11 @@ async function openCratePreview(crateId) {
   const title = document.getElementById('crate-preview-title');
   const grid = document.getElementById('crate-preview-grid');
   const openBtn = document.getElementById('crate-preview-open-btn');
+  const buyBtn = document.getElementById('crate-preview-buy-btn');
   grid.innerHTML = '<p class="text-gray-500 text-sm col-span-3 text-center py-6">Loading...</p>';
   modal.classList.remove('hidden');
-  openBtn.onclick = function() { closeCratePreview(); buyCrate(crateId); };
+  openBtn.onclick = function() { closeCratePreview(); buyAndOpenCrate(crateId); };
+  buyBtn.onclick = function() { closeCratePreview(); buyCrate(crateId); };
   try {
     const res = await fetch('/api/shop/crate/' + crateId + '/skins', { headers: { Authorization: getAuthHeader() } }).then(r => r.json());
     if (res.error) { grid.innerHTML = '<p class="text-red-400 text-sm col-span-3 text-center">Failed to load</p>'; return; }
@@ -1498,9 +1503,37 @@ async function buyCrate(crateId) {
     const txSignature = await WalletManager.signAndSendTransaction(buyRes.transaction);
     const confirmRes = await apiPostAuth('/api/shop/confirm-crate', { crateId, txSignature }, auth);
     if (confirmRes.error) return alert(confirmRes.error);
-    showCrateRoller(confirmRes.skin, confirmRes.crateSkins || [], confirmRes.duplicate);
+    loadShop();
   } catch (err) {
     alert('Purchase failed: ' + err.message);
+  }
+}
+
+async function buyAndOpenCrate(crateId) {
+  try {
+    const auth = getAuthHeader();
+    const buyRes = await apiPostAuth('/api/shop/buy-crate', { crateId }, auth);
+    if (buyRes.error) return alert(buyRes.error);
+    const txSignature = await WalletManager.signAndSendTransaction(buyRes.transaction);
+    const confirmRes = await apiPostAuth('/api/shop/confirm-crate', { crateId, txSignature }, auth);
+    if (confirmRes.error) return alert(confirmRes.error);
+    // Now immediately open it from inventory
+    const openRes = await apiPostAuth('/api/shop/open-crate', { crateId }, auth);
+    if (openRes.error) return alert(openRes.error);
+    showCrateRoller(openRes.skin, openRes.crateSkins || [], openRes.duplicate);
+  } catch (err) {
+    alert('Purchase failed: ' + err.message);
+  }
+}
+
+async function openOwnedCrate(crateId) {
+  try {
+    const auth = getAuthHeader();
+    const openRes = await apiPostAuth('/api/shop/open-crate', { crateId }, auth);
+    if (openRes.error) return alert(openRes.error);
+    showCrateRoller(openRes.skin, openRes.crateSkins || [], openRes.duplicate);
+  } catch (err) {
+    alert('Failed to open crate: ' + err.message);
   }
 }
 

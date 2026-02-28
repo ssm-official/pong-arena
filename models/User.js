@@ -16,6 +16,10 @@ const userSchema = new mongoose.Schema({
     skinId: String,
     purchasedAt: { type: Date, default: Date.now }
   }],
+  ownedCrates: [{                                 // purchased but unopened crates
+    crateId: String,
+    purchasedAt: { type: Date, default: Date.now }
+  }],
   equippedSkin: { type: String, default: 'default' },
   stats: {
     wins: { type: Number, default: 0 },
