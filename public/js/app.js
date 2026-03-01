@@ -1710,16 +1710,6 @@ async function loadShop() {
       limitedSection.classList.add('hidden');
     }
 
-    // Aura section
-    const auraSection = document.getElementById('shop-aura-section');
-    const auraGrid = document.getElementById('shop-aura-grid');
-    if (res.aura && res.aura.length > 0) {
-      auraSection.classList.remove('hidden');
-      auraGrid.innerHTML = res.aura.map(c => renderCrateCard(c, 'aura', ownedCrates[c.crateId] || 0)).join('');
-    } else {
-      auraSection.classList.add('hidden');
-    }
-
     // Standard section
     const standardGrid = document.getElementById('shop-standard-grid');
     standardGrid.innerHTML = (res.standard || []).map(c => renderCrateCard(c, 'standard', ownedCrates[c.crateId] || 0)).join('');
@@ -1730,19 +1720,6 @@ async function loadShop() {
 
 function getCrateIllustration(color, crateType) {
   const c = esc(color || '#7c3aed');
-  if (crateType === 'aura') {
-    return `<svg viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg" class="w-full h-full">
-      <defs>
-        <radialGradient id="ag${c.replace('#','')}" cx="50%" cy="40%" r="60%"><stop offset="0%" stop-color="${c}" stop-opacity="0.4"/><stop offset="100%" stop-color="${c}" stop-opacity="0"/></radialGradient>
-      </defs>
-      <rect x="14" y="30" width="52" height="36" rx="4" fill="#1a1a3a" stroke="${c}" stroke-width="2"/>
-      <rect x="14" y="30" width="52" height="12" rx="4" fill="${c}" opacity="0.3"/>
-      <line x1="40" y1="30" x2="40" y2="66" stroke="${c}" stroke-width="2" opacity="0.5"/>
-      <rect x="32" y="42" width="16" height="8" rx="2" fill="${c}" opacity="0.6"/>
-      <circle cx="40" cy="22" r="12" fill="url(#ag${c.replace('#','')})"/>
-      <text x="40" y="26" text-anchor="middle" font-size="14" fill="${c}">&#10024;</text>
-    </svg>`;
-  }
   return `<svg viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg" class="w-full h-full">
     <rect x="14" y="28" width="52" height="38" rx="4" fill="#1a1a3a" stroke="${c}" stroke-width="2"/>
     <rect x="14" y="28" width="52" height="13" rx="4" fill="${c}" opacity="0.25"/>
@@ -1754,13 +1731,12 @@ function getCrateIllustration(color, crateType) {
 }
 
 function renderCrateCard(c, section, ownedCount) {
-  const borderColor = section === 'limited' ? 'border-yellow-600/60' : section === 'aura' ? 'border-purple-600/60' : 'border-gray-700/60';
-  const glowBg = section === 'limited' ? 'rgba(234,179,8,0.06)' : section === 'aura' ? 'rgba(168,85,247,0.06)' : 'rgba(30,30,60,0.5)';
+  const borderColor = section === 'limited' ? 'border-yellow-600/60' : 'border-gray-700/60';
+  const glowBg = section === 'limited' ? 'rgba(234,179,8,0.06)' : 'rgba(30,30,60,0.5)';
   const usdPrice = pongPriceUsd > 0 ? formatUsd(c.price * pongPriceUsd) + ' / ' : '';
   const owned = ownedCount || 0;
   const crateType = c.crateType || 'skin';
-  const typeBadge = crateType === 'aura' ? '<span class="text-[10px] px-1.5 py-0.5 rounded bg-purple-900/50 text-purple-400">AURA</span>'
-    : crateType === 'mixed' ? '<span class="text-[10px] px-1.5 py-0.5 rounded bg-blue-900/50 text-blue-400">MIXED</span>' : '';
+  const typeBadge = '';
   return `
     <div class="group bg-gray-900/40 rounded-xl border ${borderColor} cursor-pointer hover:border-purple-500 transition-all hover:shadow-[0_0_20px_rgba(168,85,247,0.15)]" onclick="openCratePreview('${c.crateId}')" style="background:${glowBg}">
       <div class="flex gap-3 p-3">
@@ -1817,14 +1793,7 @@ async function openCratePreview(crateId) {
       const chancePct = s.chance >= 1 ? s.chance.toFixed(0) + '%' : s.chance.toFixed(1) + '%';
       const chanceColor = s.rarity === 'legendary' ? 'text-yellow-400' : s.rarity === 'rare' ? 'text-purple-400' : 'text-gray-400';
       let preview, bgColor;
-      if (s.type === 'aura') {
-        let aC = '#a855f7';
-        try { aC = JSON.parse(s.cssValue).color || '#a855f7'; } catch {}
-        preview = s.imageUrl
-          ? `<img src="${esc(s.imageUrl)}" class="h-10 w-10 object-contain" />`
-          : `<span style="font-size:28px;color:${esc(aC)}">&#10024;</span>`;
-        bgColor = esc(aC) + '15';
-      } else if (s.type === 'color') {
+      if (s.type === 'color') {
         preview = `<div class="w-8 h-8 rounded-full" style="background:${esc(s.cssValue)};box-shadow:0 0 12px ${esc(s.cssValue)}"></div>`;
         bgColor = esc(s.cssValue) + '33';
       } else {
@@ -1954,14 +1923,7 @@ function buildRollerStrip(wonSkin, crateSkins) {
     const card = document.createElement('div');
     card.className = `roller-card rarity-${skin.rarity}`;
     card.style.background = '#111128';
-    if (skin.type === 'aura') {
-      let aColor = '#a855f7';
-      try { aColor = JSON.parse(skin.cssValue).color || '#a855f7'; } catch {}
-      const auraVisual = skin.imageUrl
-        ? `<img src="${esc(skin.imageUrl)}" style="height:36px;width:36px;object-fit:contain;" />`
-        : `<div style="font-size:32px;color:${esc(aColor)}">&#10024;</div>`;
-      card.innerHTML = `${auraVisual}<div style="font-size:10px;color:#ccc;margin-top:4px;text-align:center;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;max-width:90px">${esc(skin.name)}</div>`;
-    } else if (skin.type === 'color') {
+    if (skin.type === 'color') {
       card.innerHTML = `<div style="width:36px;height:36px;border-radius:50%;background:${esc(skin.cssValue)};box-shadow:0 0 10px ${esc(skin.cssValue)}"></div><div style="font-size:10px;color:#ccc;margin-top:4px;text-align:center;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;max-width:90px">${esc(skin.name)}</div>`;
     } else {
       card.innerHTML = `<img src="${esc(skin.imageUrl)}" style="height:44px;object-fit:contain;" /><div style="font-size:10px;color:#ccc;margin-top:4px;text-align:center;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;max-width:90px">${esc(skin.name)}</div>`;
@@ -2009,14 +1971,7 @@ function showFinalReveal(skin, isDuplicate) {
   const nameEl = document.getElementById('roller-reveal-name');
   const rarityEl = document.getElementById('roller-reveal-rarity');
   const revealDiv = document.getElementById('roller-reveal');
-  if (skin.type === 'aura') {
-    let aColor = '#a855f7';
-    try { aColor = JSON.parse(skin.cssValue).color || '#a855f7'; } catch {}
-    preview.innerHTML = skin.imageUrl
-      ? `<img src="${esc(skin.imageUrl)}" style="height:56px;width:56px;object-fit:contain;" />`
-      : `<div style="font-size:48px;color:${esc(aColor)}">&#10024;</div>`;
-    preview.style.background = aColor + '15';
-  } else if (skin.type === 'color') {
+  if (skin.type === 'color') {
     preview.innerHTML = `<div class="w-16 h-16 rounded-full" style="background:${esc(skin.cssValue)};box-shadow:0 0 20px ${esc(skin.cssValue)}"></div>`;
     preview.style.background = skin.cssValue + '22';
   } else {
@@ -2356,8 +2311,6 @@ function pickSide(side) {
 // Socket: Game countdown (30s ready-up phase)
 let pendingP1Skin = null;
 let pendingP2Skin = null;
-let pendingP1Aura = null;
-let pendingP2Aura = null;
 let intermissionCountdownInterval = null;
 
 socket.on('game-countdown', (data) => {
@@ -2374,8 +2327,6 @@ socket.on('game-countdown', (data) => {
 
   pendingP1Skin = data.player1?.skin || null;
   pendingP2Skin = data.player2?.skin || null;
-  pendingP1Aura = data.player1?.aura || null;
-  pendingP2Aura = data.player2?.aura || null;
 
   chosenSide = 'left';
   pickSide('left');
@@ -2430,9 +2381,6 @@ socket.on('game-start', (data) => {
   const p1Skin = data.player1.skin || pendingP1Skin || null;
   const p2Skin = data.player2.skin || pendingP2Skin || null;
   GameClient.setPlayerSkins(p1Skin, p2Skin);
-  const p1Aura = data.player1.aura || pendingP1Aura || null;
-  const p2Aura = data.player2.aura || pendingP2Aura || null;
-  GameClient.setPlayerAuras(p1Aura, p2Aura);
 
   const amP1 = (currentUser.wallet === data.player1.wallet);
   const myNaturalSide = amP1 ? 'left' : 'right';
@@ -2531,7 +2479,6 @@ socket.on('rejoin-game', (data) => {
   if (intermission) intermission.classList.add('hidden');
   GameClient.setGameInfo(data.gameId, data.player1.wallet);
   GameClient.setPlayerSkins(data.player1.skin || null, data.player2.skin || null);
-  GameClient.setPlayerAuras(data.player1.aura || null, data.player2.aura || null);
   const amP1 = (currentUser.wallet === data.player1.wallet);
   const myNaturalSide = amP1 ? 'left' : 'right';
   isMirrored = (chosenSide !== myNaturalSide);
@@ -2926,37 +2873,23 @@ async function loadDashboardSkins() {
   try {
     const res = await fetch('/api/shop', { headers: { Authorization: getAuthHeader() } }).then(r => r.json());
     dashInventory = res.inventory || [];
-    // Find equipped aura using the top-level equippedAura skinId from the API
-    const equippedAuraId = res.equippedAura || 'none';
-    const equippedAuraSkin = equippedAuraId !== 'none'
-      ? dashInventory.find(s => s.type === 'aura' && s.skinId === equippedAuraId)
-      : null;
-    updatePaddlePreview(equippedAuraSkin || null);
+    updatePaddlePreview();
   } catch (err) {
     console.error('Failed to load dashboard skins:', err);
   }
 }
 
-function updatePaddlePreview(auraSkin) {
+function updatePaddlePreview() {
   const paddle = document.getElementById('dash-paddle-preview');
   const nameEl = document.getElementById('dash-skin-name');
   const rarityEl = document.getElementById('dash-skin-rarity');
   if (!paddle) return;
   const equipped = dashInventory.find(s => s.equipped);
-  // Resolve aura color once
-  let auraColor = null;
-  if (auraSkin) {
-    auraColor = '#a855f7';
-    try { auraColor = JSON.parse(auraSkin.cssValue).color || '#a855f7'; } catch {}
-  }
 
   if (equipped) {
     if (equipped.type === 'color') {
       paddle.style.background = esc(equipped.cssValue);
       paddle.style.backgroundImage = '';
-    } else if (auraColor) {
-      // Layer aura tint over the skin image
-      paddle.style.background = `linear-gradient(${auraColor}35, ${auraColor}35), url(${esc(equipped.imageUrl)}) center/cover no-repeat`;
     } else {
       paddle.style.background = 'url(' + esc(equipped.imageUrl) + ') center/cover no-repeat';
     }
@@ -2974,25 +2907,16 @@ function updatePaddlePreview(auraSkin) {
     rarityEl.classList.add('hidden');
   }
 
-  // Apply aura glow to player bar paddle
-  if (auraColor) {
-    paddle.style.boxShadow = `0 0 6px ${auraColor}, inset 0 0 8px ${auraColor}80`;
-  } else {
-    const glowColor = equipped && equipped.type === 'color' ? equipped.cssValue : '#a855f7';
-    paddle.style.boxShadow = '0 0 10px ' + glowColor;
-  }
+  const glowColor = equipped && equipped.type === 'color' ? equipped.cssValue : '#a855f7';
+  paddle.style.boxShadow = '0 0 10px ' + glowColor;
 
-  // Dashboard Customize card — sync skin + aura to the right paddle preview
+  // Dashboard Customize card — sync skin to the right paddle preview
   const dashPaddleRight = document.getElementById('dash-paddle-preview-right');
-  const dashAuraName = document.getElementById('dash-aura-name');
   if (dashPaddleRight) {
-    // Apply skin + aura overlay to the Customize card paddle
     if (equipped) {
       if (equipped.type === 'color') {
         dashPaddleRight.style.background = esc(equipped.cssValue);
         dashPaddleRight.style.backgroundImage = '';
-      } else if (auraColor) {
-        dashPaddleRight.style.background = `linear-gradient(${auraColor}35, ${auraColor}35), url(${esc(equipped.imageUrl)}) center/cover no-repeat`;
       } else {
         dashPaddleRight.style.background = 'url(' + esc(equipped.imageUrl) + ') center/cover no-repeat';
       }
@@ -3001,15 +2925,8 @@ function updatePaddlePreview(auraSkin) {
       dashPaddleRight.style.backgroundImage = '';
     }
 
-    // Apply aura glow — inset so it's on the skin, not floating around it
-    if (auraColor) {
-      dashPaddleRight.style.boxShadow = `0 0 8px ${auraColor}, inset 0 0 12px ${auraColor}80`;
-      if (dashAuraName) dashAuraName.textContent = 'Aura: ' + auraSkin.name;
-    } else {
-      const glowColor = equipped && equipped.type === 'color' ? equipped.cssValue : '#a855f7';
-      dashPaddleRight.style.boxShadow = '0 0 12px ' + glowColor;
-      if (dashAuraName) dashAuraName.textContent = 'Aura: None';
-    }
+    const glowColorRight = equipped && equipped.type === 'color' ? equipped.cssValue : '#a855f7';
+    dashPaddleRight.style.boxShadow = '0 0 12px ' + glowColorRight;
   }
 }
 
