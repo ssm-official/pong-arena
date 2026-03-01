@@ -2898,7 +2898,7 @@ function updatePaddlePreview(auraSkin) {
     if (auraSkin) {
       let auraColor = '#a855f7';
       try { auraColor = JSON.parse(auraSkin.cssValue).color || '#a855f7'; } catch {}
-      dashPaddleRight.style.boxShadow = `0 0 18px ${auraColor}, 0 0 6px ${auraColor}`;
+      dashPaddleRight.style.boxShadow = `0 0 20px ${auraColor}, 0 0 40px ${auraColor}40`;
       if (dashAuraName) dashAuraName.textContent = 'Aura: ' + auraSkin.name;
     } else {
       const glowColor = equipped && equipped.type === 'color' ? equipped.cssValue : '#a855f7';

@@ -229,8 +229,11 @@
             }
           }
         }
-        // Load equipped aura
-        const auraSkin = inventory.find(s => s.type === 'aura' && s.equippedAura);
+        // Load equipped aura (use top-level equippedAura skinId from API)
+        const equippedAuraId = shopData.equippedAura || 'none';
+        const auraSkin = equippedAuraId !== 'none'
+          ? inventory.find(s => s.type === 'aura' && s.skinId === equippedAuraId)
+          : null;
         if (auraSkin && auraSkin.cssValue) {
           try {
             playerAuraConfig = JSON.parse(auraSkin.cssValue);
