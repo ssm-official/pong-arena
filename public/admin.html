@@ -42,6 +42,14 @@
     <!-- ADMIN PANEL -->
     <div id="admin-view" class="hidden">
 
+      <!-- Admin Tabs -->
+      <div class="flex gap-2 mb-6">
+        <button id="admin-tab-btn-crates" class="px-4 py-2 rounded-lg text-sm font-bold bg-purple-600 text-white" onclick="switchAdminTab('crates')">Crates & Skins</button>
+        <button id="admin-tab-btn-layout" class="px-4 py-2 rounded-lg text-sm font-bold bg-gray-700 text-gray-300 hover:bg-gray-600" onclick="switchAdminTab('layout')">Shop Layout</button>
+      </div>
+
+      <div id="admin-tab-crates">
+
       <!-- SVG TEMPLATE DOWNLOAD -->
       <div class="bg-arena-card rounded-xl p-6 glow-border mb-6">
         <div class="flex items-center justify-between">
@@ -83,7 +91,6 @@
             <label class="block text-sm text-gray-400 mb-1">Crate Type</label>
             <select id="crate-type" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:border-purple-500 focus:outline-none">
               <option value="skin">Skin Crate</option>
-              <option value="aura">Aura Crate</option>
               <option value="mixed">Mixed</option>
             </select>
           </div>
@@ -117,7 +124,6 @@
             <select id="skin-type" onchange="toggleSkinInputs()" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:border-purple-500 focus:outline-none">
               <option value="image">Image (SVG/PNG)</option>
               <option value="color">Color</option>
-              <option value="aura">Aura Effect</option>
             </select>
           </div>
           <div id="skin-color-input">
@@ -129,43 +135,6 @@
           <label class="block text-sm text-gray-400 mb-1">SVG or PNG file (120x400, transparent bg)</label>
           <input id="skin-file" type="file" accept=".svg,.png" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white" />
         </div>
-        <div id="skin-aura-img-input" class="mt-3" style="display:none">
-          <label class="block text-sm text-gray-400 mb-1">Display Image (optional — shown in shop/inventory)</label>
-          <input id="skin-aura-img" type="file" accept=".svg,.png,.jpg,.jpeg,.webp" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white" />
-        </div>
-        <div id="skin-aura-input" class="mt-3" style="display:none">
-          <label class="block text-sm text-gray-400 mb-2">Aura Configuration</label>
-          <div class="grid grid-cols-2 gap-3">
-            <div>
-              <label class="block text-xs text-gray-500 mb-1">Effect Preset</label>
-              <select id="aura-effect" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:border-purple-500 focus:outline-none">
-                <option value="glow-pulse">Glow Pulse</option>
-                <option value="particle-trail">Particle Trail</option>
-                <option value="ring-orbit">Ring Orbit</option>
-                <option value="flame">Flame</option>
-                <option value="electric">Electric</option>
-                <option value="rainbow">Rainbow</option>
-                <option value="frost">Frost</option>
-              </select>
-            </div>
-            <div>
-              <label class="block text-xs text-gray-500 mb-1">Primary Color</label>
-              <input id="aura-color" type="color" value="#a855f7" class="w-full h-9 bg-gray-800 border border-gray-700 rounded-lg cursor-pointer" />
-            </div>
-            <div>
-              <label class="block text-xs text-gray-500 mb-1">Secondary Color (optional)</label>
-              <input id="aura-color2" type="color" value="#ec4899" class="w-full h-9 bg-gray-800 border border-gray-700 rounded-lg cursor-pointer" />
-            </div>
-            <div>
-              <label class="block text-xs text-gray-500 mb-1">Intensity (<span id="aura-intensity-val">1.0</span>)</label>
-              <input id="aura-intensity" type="range" min="0.5" max="2.0" step="0.1" value="1.0" class="w-full" oninput="document.getElementById('aura-intensity-val').textContent=this.value" />
-            </div>
-            <div class="col-span-2">
-              <label class="block text-xs text-gray-500 mb-1">Speed (<span id="aura-speed-val">1.0</span>)</label>
-              <input id="aura-speed" type="range" min="0.5" max="2.0" step="0.1" value="1.0" class="w-full" oninput="document.getElementById('aura-speed-val').textContent=this.value" />
-            </div>
-          </div>
-        </div>
         <button onclick="uploadSkin()" class="mt-3 bg-purple-600 hover:bg-purple-700 px-4 py-2 rounded-lg text-sm font-medium transition">
           Upload Skin
         </button>
@@ -173,6 +142,90 @@
 
       <!-- CRATE LIST -->
       <div id="crate-list" class="space-y-4"></div>
+
+      </div><!-- /admin-tab-crates -->
+
+      <div id="admin-tab-layout" class="hidden">
+        <h2 class="text-xl font-bold mb-4">Shop Layout Builder</h2>
+        <p class="text-gray-400 text-sm mb-4">Design the shop page layout. Add sections with items, then save.</p>
+
+        <div class="flex gap-4">
+          <!-- Section List (left) -->
+          <div class="w-64 flex-shrink-0">
+            <div class="flex items-center justify-between mb-3">
+              <h3 class="text-sm font-bold text-gray-300 uppercase">Sections</h3>
+              <div class="relative">
+                <button id="add-section-btn" onclick="document.getElementById('add-section-dropdown').classList.toggle('hidden')" class="bg-purple-600 hover:bg-purple-700 text-white text-xs px-3 py-1.5 rounded-lg font-medium">+ Add Section</button>
+                <div id="add-section-dropdown" class="hidden absolute right-0 mt-1 bg-gray-800 border border-gray-700 rounded-lg shadow-lg z-10 w-40">
+                  <button onclick="addSection('featured')" class="block w-full text-left px-3 py-2 text-sm text-gray-300 hover:bg-gray-700 rounded-t-lg">Featured</button>
+                  <button onclick="addSection('grid')" class="block w-full text-left px-3 py-2 text-sm text-gray-300 hover:bg-gray-700">Grid</button>
+                  <button onclick="addSection('banner')" class="block w-full text-left px-3 py-2 text-sm text-gray-300 hover:bg-gray-700 rounded-b-lg">Banner</button>
+                </div>
+              </div>
+            </div>
+            <div id="layout-section-list" class="space-y-2">
+              <p class="text-gray-500 text-sm text-center py-4">No sections yet</p>
+            </div>
+          </div>
+
+          <!-- Section Editor (right) -->
+          <div class="flex-1 min-w-0">
+            <div id="layout-editor-empty" class="text-center py-16 text-gray-500">
+              <p class="text-lg mb-2">Select a section to edit</p>
+              <p class="text-sm">Or add a new section from the left panel</p>
+            </div>
+            <div id="layout-editor" class="hidden">
+              <div class="bg-arena-card rounded-xl border border-gray-800 p-4">
+                <div class="flex items-center gap-3 mb-4">
+                  <input id="layout-section-title" type="text" placeholder="Section Title" class="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white" oninput="updateSectionTitle(this.value)" />
+                  <span id="layout-section-type-badge" class="text-xs px-2 py-1 rounded bg-purple-900/50 text-purple-400 uppercase font-bold"></span>
+                </div>
+
+                <!-- Banner upload (only for banner type) -->
+                <div id="layout-banner-upload" class="hidden mb-4">
+                  <label class="block text-sm text-gray-400 mb-2">Banner Image</label>
+                  <div class="border-2 border-dashed border-gray-700 rounded-lg p-6 text-center cursor-pointer hover:border-purple-500 transition" onclick="document.getElementById('layout-banner-file').click()">
+                    <input id="layout-banner-file" type="file" class="hidden" accept="image/*" onchange="uploadBannerImage(this)" />
+                    <div id="layout-banner-preview" class="hidden mb-2"><img id="layout-banner-img" class="max-h-32 mx-auto rounded" /></div>
+                    <p class="text-gray-500 text-sm">Click to upload banner image</p>
+                  </div>
+                </div>
+
+                <!-- Items (for featured/grid) -->
+                <div id="layout-items-section">
+                  <div class="flex items-center justify-between mb-3">
+                    <h4 class="text-sm font-bold text-gray-300">Items</h4>
+                    <button onclick="openItemPicker()" class="bg-gray-700 hover:bg-gray-600 text-white text-xs px-3 py-1.5 rounded-lg font-medium">+ Add Item</button>
+                  </div>
+                  <div id="layout-items-list" class="space-y-2">
+                    <p class="text-gray-500 text-sm text-center py-4">No items in this section</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="flex gap-3 mt-6">
+          <button onclick="saveShopLayout()" class="bg-purple-600 hover:bg-purple-700 text-white px-6 py-2.5 rounded-lg font-bold text-sm">Save Layout</button>
+          <a href="/" target="_blank" class="bg-gray-700 hover:bg-gray-600 text-white px-6 py-2.5 rounded-lg font-bold text-sm inline-flex items-center gap-2">Preview Shop</a>
+        </div>
+      </div><!-- /admin-tab-layout -->
+
+    </div>
+  </div>
+
+  <!-- Item Picker Modal -->
+  <div id="item-picker-modal" class="hidden fixed inset-0 bg-black/70 z-50 flex items-center justify-center" onclick="if(event.target===this)closeItemPicker()">
+    <div class="bg-gray-900 rounded-xl max-w-lg w-full mx-4 max-h-[80vh] overflow-hidden flex flex-col border border-gray-700">
+      <div class="flex items-center justify-between p-4 border-b border-gray-800">
+        <h3 class="text-lg font-bold text-white">Add Item</h3>
+        <button onclick="closeItemPicker()" class="text-gray-400 hover:text-white text-xl">&times;</button>
+      </div>
+      <div class="p-4 border-b border-gray-800">
+        <input id="item-picker-search" type="text" placeholder="Search skins & crates..." class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white" oninput="filterItemPicker(this.value)" />
+      </div>
+      <div id="item-picker-list" class="p-4 overflow-y-auto flex-1 space-y-2" style="max-height:400px"></div>
     </div>
   </div>
 
@@ -204,7 +257,6 @@
           <label class="block text-sm text-gray-400 mb-1">Crate Type</label>
           <select id="edit-crate-type" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:border-purple-500 focus:outline-none">
             <option value="skin">Skin Crate</option>
-            <option value="aura">Aura Crate</option>
             <option value="mixed">Mixed</option>
           </select>
         </div>
@@ -247,7 +299,6 @@
             <select id="edit-skin-type" onchange="toggleEditSkinInputs()" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:border-purple-500 focus:outline-none">
               <option value="image">Image (SVG/PNG)</option>
               <option value="color">Color</option>
-              <option value="aura">Aura Effect</option>
             </select>
           </div>
         </div>
@@ -259,44 +310,6 @@
           <label class="block text-sm text-gray-400 mb-1">Replace image (SVG/PNG) — leave empty to keep current</label>
           <input id="edit-skin-file" type="file" accept=".svg,.png" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white" />
           <div id="edit-skin-current-img" class="mt-2 text-xs text-gray-500"></div>
-        </div>
-        <div id="edit-skin-aura-img-row" style="display:none">
-          <label class="block text-sm text-gray-400 mb-1">Display Image (optional)</label>
-          <input id="edit-skin-aura-img" type="file" accept=".svg,.png,.jpg,.jpeg,.webp" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white" />
-          <div id="edit-skin-aura-current-img" class="mt-1 text-xs text-gray-500"></div>
-        </div>
-        <div id="edit-skin-aura-row" style="display:none">
-          <label class="block text-sm text-gray-400 mb-2">Aura Configuration</label>
-          <div class="grid grid-cols-2 gap-3">
-            <div>
-              <label class="block text-xs text-gray-500 mb-1">Effect</label>
-              <select id="edit-aura-effect" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:border-purple-500 focus:outline-none">
-                <option value="glow-pulse">Glow Pulse</option>
-                <option value="particle-trail">Particle Trail</option>
-                <option value="ring-orbit">Ring Orbit</option>
-                <option value="flame">Flame</option>
-                <option value="electric">Electric</option>
-                <option value="rainbow">Rainbow</option>
-                <option value="frost">Frost</option>
-              </select>
-            </div>
-            <div>
-              <label class="block text-xs text-gray-500 mb-1">Primary Color</label>
-              <input id="edit-aura-color" type="color" value="#a855f7" class="w-full h-9 bg-gray-800 border border-gray-700 rounded-lg cursor-pointer" />
-            </div>
-            <div>
-              <label class="block text-xs text-gray-500 mb-1">Secondary Color</label>
-              <input id="edit-aura-color2" type="color" value="#ec4899" class="w-full h-9 bg-gray-800 border border-gray-700 rounded-lg cursor-pointer" />
-            </div>
-            <div>
-              <label class="block text-xs text-gray-500 mb-1">Intensity (<span id="edit-aura-intensity-val">1.0</span>)</label>
-              <input id="edit-aura-intensity" type="range" min="0.5" max="2.0" step="0.1" value="1.0" class="w-full" oninput="document.getElementById('edit-aura-intensity-val').textContent=this.value" />
-            </div>
-            <div class="col-span-2">
-              <label class="block text-xs text-gray-500 mb-1">Speed (<span id="edit-aura-speed-val">1.0</span>)</label>
-              <input id="edit-aura-speed" type="range" min="0.5" max="2.0" step="0.1" value="1.0" class="w-full" oninput="document.getElementById('edit-aura-speed-val').textContent=this.value" />
-            </div>
-          </div>
         </div>
       </div>
       <div class="flex gap-2 mt-4">
@@ -417,8 +430,6 @@
       const type = document.getElementById('skin-type').value;
       document.getElementById('skin-file-input').style.display = type === 'image' ? '' : 'none';
       document.getElementById('skin-color-input').style.display = type === 'color' ? '' : 'none';
-      document.getElementById('skin-aura-input').style.display = type === 'aura' ? '' : 'none';
-      document.getElementById('skin-aura-img-input').style.display = type === 'aura' ? '' : 'none';
     }
 
     // ============================
@@ -455,7 +466,7 @@
         <div class="bg-arena-card rounded-xl p-4 border-l-4" style="border-color: ${esc(c.imageColor)}">
           <div class="flex items-center justify-between mb-2">
             <div>
-              <h4 class="font-bold">${esc(c.name)} ${c.crateType === 'aura' ? '<span class="text-xs text-purple-400 ml-1">✨ Aura</span>' : c.crateType === 'mixed' ? '<span class="text-xs text-blue-400 ml-1">🔀 Mixed</span>' : ''}</h4>
+              <h4 class="font-bold">${esc(c.name)} ${c.crateType === 'mixed' ? '<span class="text-xs text-blue-400 ml-1">🔀 Mixed</span>' : ''}</h4>
               <p class="text-gray-500 text-xs">${esc(c.description || '')} — ${c.price.toLocaleString()} $PONG — ${c.limited ? 'LIMITED' : 'Standard'} — ${c.active ? 'Active' : 'Inactive'}</p>
             </div>
             <div class="flex gap-2">
@@ -475,9 +486,7 @@
               ${c.skins.map(s => `
                 <div class="bg-gray-800 rounded-lg p-2 flex items-center justify-between">
                   <div class="flex items-center gap-2">
-                    ${s.type === 'aura'
-                      ? `<div class="w-6 h-6 rounded flex items-center justify-center text-purple-400">&#10024;</div>`
-                      : s.type === 'color'
+                    ${s.type === 'color'
                       ? `<div class="w-6 h-6 rounded" style="background:${esc(s.cssValue)}"></div>`
                       : `<img src="${esc(s.imageUrl)}" class="w-6 h-10 object-contain" />`
                     }
@@ -536,22 +545,6 @@
         const ext = file.name.match(/\.(svg|png)$/i)?.[0] || '.svg';
         formData.append('image', file);
         formData.append('fileName', name.toLowerCase().replace(/[^a-z0-9]+/g, '-') + ext);
-      } else if (type === 'aura') {
-        const config = {
-          effect: document.getElementById('aura-effect').value,
-          color: document.getElementById('aura-color').value,
-          color2: document.getElementById('aura-color2').value,
-          intensity: parseFloat(document.getElementById('aura-intensity').value),
-          speed: parseFloat(document.getElementById('aura-speed').value),
-        };
-        formData.append('cssValue', JSON.stringify(config));
-        // Optional display image for aura
-        const auraImgFile = document.getElementById('skin-aura-img').files[0];
-        if (auraImgFile) {
-          const ext = auraImgFile.name.match(/\.\w+$/)?.[0] || '.png';
-          formData.append('image', auraImgFile);
-          formData.append('fileName', name.toLowerCase().replace(/[^a-z0-9]+/g, '-') + ext);
-        }
       } else {
         const css = document.getElementById('skin-css').value;
         if (!css) return alert('Enter a CSS color value');
@@ -616,29 +609,6 @@
         currentImg.innerHTML = '';
       }
 
-      // Show aura image if exists
-      const auraCurrentImg = document.getElementById('edit-skin-aura-current-img');
-      document.getElementById('edit-skin-aura-img').value = '';
-      if (skin.type === 'aura' && skin.imageUrl) {
-        auraCurrentImg.innerHTML = `Current: <img src="${esc(skin.imageUrl)}" class="inline h-8 rounded mt-1" /> <a href="${esc(skin.imageUrl)}" target="_blank" class="text-purple-400 underline ml-1">view</a>`;
-      } else {
-        auraCurrentImg.innerHTML = '';
-      }
-
-      // Populate aura fields if type is aura
-      if (skin.type === 'aura' && skin.cssValue) {
-        try {
-          const cfg = JSON.parse(skin.cssValue);
-          document.getElementById('edit-aura-effect').value = cfg.effect || 'glow-pulse';
-          document.getElementById('edit-aura-color').value = cfg.color || '#a855f7';
-          document.getElementById('edit-aura-color2').value = cfg.color2 || '#ec4899';
-          document.getElementById('edit-aura-intensity').value = cfg.intensity || 1.0;
-          document.getElementById('edit-aura-intensity-val').textContent = cfg.intensity || 1.0;
-          document.getElementById('edit-aura-speed').value = cfg.speed || 1.0;
-          document.getElementById('edit-aura-speed-val').textContent = cfg.speed || 1.0;
-        } catch {}
-      }
-
       toggleEditSkinInputs();
       document.getElementById('edit-skin-modal').classList.remove('hidden');
     }
@@ -651,8 +621,6 @@
       const type = document.getElementById('edit-skin-type').value;
       document.getElementById('edit-skin-file-row').style.display = type === 'image' ? '' : 'none';
       document.getElementById('edit-skin-color-row').style.display = type === 'color' ? '' : 'none';
-      document.getElementById('edit-skin-aura-row').style.display = type === 'aura' ? '' : 'none';
-      document.getElementById('edit-skin-aura-img-row').style.display = type === 'aura' ? '' : 'none';
     }
 
     async function saveEditSkin() {
@@ -670,23 +638,7 @@
         formData.append('cssValue', document.getElementById('edit-skin-css').value);
       }
 
-      if (type === 'aura') {
-        const config = {
-          effect: document.getElementById('edit-aura-effect').value,
-          color: document.getElementById('edit-aura-color').value,
-          color2: document.getElementById('edit-aura-color2').value,
-          intensity: parseFloat(document.getElementById('edit-aura-intensity').value),
-          speed: parseFloat(document.getElementById('edit-aura-speed').value),
-        };
-        formData.append('cssValue', JSON.stringify(config));
-        // Optional display image for aura
-        const auraImgFile = document.getElementById('edit-skin-aura-img').files[0];
-        if (auraImgFile) {
-          const ext = auraImgFile.name.match(/\.\w+$/)?.[0] || '.png';
-          formData.append('image', auraImgFile);
-          formData.append('fileName', document.getElementById('edit-skin-name').value.toLowerCase().replace(/[^a-z0-9]+/g, '-') + ext);
-        }
-      }
+
 
       if (type === 'image') {
         const file = document.getElementById('edit-skin-file').files[0];
@@ -751,6 +703,252 @@
       const div = document.createElement('div');
       div.textContent = str || '';
       return div.innerHTML;
+    }
+
+    // ============================
+    // ADMIN TAB SWITCHING
+    // ============================
+    let adminPassword = adminPw; // alias for layout builder code
+
+    function switchAdminTab(tab) {
+      document.getElementById('admin-tab-crates').classList.toggle('hidden', tab !== 'crates');
+      document.getElementById('admin-tab-layout').classList.toggle('hidden', tab !== 'layout');
+      document.getElementById('admin-tab-btn-crates').className = tab === 'crates'
+        ? 'px-4 py-2 rounded-lg text-sm font-bold bg-purple-600 text-white'
+        : 'px-4 py-2 rounded-lg text-sm font-bold bg-gray-700 text-gray-300 hover:bg-gray-600';
+      document.getElementById('admin-tab-btn-layout').className = tab === 'layout'
+        ? 'px-4 py-2 rounded-lg text-sm font-bold bg-purple-600 text-white'
+        : 'px-4 py-2 rounded-lg text-sm font-bold bg-gray-700 text-gray-300 hover:bg-gray-600';
+      if (tab === 'layout') loadShopLayout();
+    }
+
+    // ============================
+    // SHOP LAYOUT BUILDER
+    // ============================
+    let layoutSections = [];
+    let selectedSectionIdx = -1;
+    let allPickerSkins = [];
+    let allPickerCrates = [];
+
+    async function loadShopLayout() {
+      try {
+        const res = await fetch('/api/admin/shop-layout', { headers: { 'X-Admin-Password': adminPw } });
+        const data = await res.json();
+        layoutSections = (data.layout && data.layout.sections) || [];
+        selectedSectionIdx = -1;
+        renderSectionList();
+        showSectionEditor(-1);
+      } catch (err) { console.error('Failed to load layout:', err); }
+    }
+
+    function renderSectionList() {
+      const container = document.getElementById('layout-section-list');
+      if (layoutSections.length === 0) {
+        container.innerHTML = '<p class="text-gray-500 text-sm text-center py-4">No sections yet</p>';
+        return;
+      }
+      container.innerHTML = layoutSections.map((s, i) => {
+        const typeColors = { featured: 'bg-yellow-900/50 text-yellow-400', grid: 'bg-blue-900/50 text-blue-400', banner: 'bg-green-900/50 text-green-400' };
+        const selected = i === selectedSectionIdx ? 'border-purple-500 bg-purple-900/20' : 'border-gray-700 hover:border-gray-600';
+        return `<div class="border ${selected} rounded-lg p-3 cursor-pointer transition" draggable="true" ondragstart="dragSection(event,${i})" ondragover="event.preventDefault()" ondrop="dropSection(event,${i})" onclick="showSectionEditor(${i})">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2 min-w-0">
+              <span class="cursor-grab text-gray-600">&#x2807;</span>
+              <span class="text-sm font-medium text-white truncate">${esc(s.title || 'Untitled')}</span>
+            </div>
+            <div class="flex items-center gap-2 flex-shrink-0">
+              <span class="text-[10px] px-1.5 py-0.5 rounded ${typeColors[s.type] || 'bg-gray-800 text-gray-400'} uppercase font-bold">${s.type}</span>
+              <button onclick="event.stopPropagation();removeSection(${i})" class="text-gray-500 hover:text-red-400 text-sm">&times;</button>
+            </div>
+          </div>
+          <p class="text-xs text-gray-500 mt-1">${s.type === 'banner' ? 'Banner image' : (s.items ? s.items.length : 0) + ' items'}</p>
+        </div>`;
+      }).join('');
+    }
+
+    function addSection(type) {
+      document.getElementById('add-section-dropdown').classList.add('hidden');
+      const section = { id: crypto.randomUUID(), title: '', type, items: [], order: layoutSections.length, bannerImage: null };
+      layoutSections.push(section);
+      selectedSectionIdx = layoutSections.length - 1;
+      renderSectionList();
+      showSectionEditor(selectedSectionIdx);
+    }
+
+    function removeSection(idx) {
+      layoutSections.splice(idx, 1);
+      if (selectedSectionIdx === idx) selectedSectionIdx = -1;
+      else if (selectedSectionIdx > idx) selectedSectionIdx--;
+      renderSectionList();
+      showSectionEditor(selectedSectionIdx);
+    }
+
+    let dragSectionFrom = -1;
+    function dragSection(e, idx) { dragSectionFrom = idx; e.dataTransfer.effectAllowed = 'move'; }
+    function dropSection(e, idx) {
+      e.preventDefault();
+      if (dragSectionFrom < 0 || dragSectionFrom === idx) return;
+      const item = layoutSections.splice(dragSectionFrom, 1)[0];
+      layoutSections.splice(idx, 0, item);
+      if (selectedSectionIdx === dragSectionFrom) selectedSectionIdx = idx;
+      renderSectionList();
+      dragSectionFrom = -1;
+    }
+
+    function showSectionEditor(idx) {
+      selectedSectionIdx = idx;
+      renderSectionList();
+      const emptyEl = document.getElementById('layout-editor-empty');
+      const editorEl = document.getElementById('layout-editor');
+      if (idx < 0 || idx >= layoutSections.length) {
+        emptyEl.classList.remove('hidden');
+        editorEl.classList.add('hidden');
+        return;
+      }
+      emptyEl.classList.add('hidden');
+      editorEl.classList.remove('hidden');
+      const s = layoutSections[idx];
+      document.getElementById('layout-section-title').value = s.title || '';
+      document.getElementById('layout-section-type-badge').textContent = s.type;
+      document.getElementById('layout-banner-upload').classList.toggle('hidden', s.type !== 'banner');
+      document.getElementById('layout-items-section').classList.toggle('hidden', s.type === 'banner');
+      if (s.type === 'banner' && s.bannerImage) {
+        document.getElementById('layout-banner-preview').classList.remove('hidden');
+        document.getElementById('layout-banner-img').src = s.bannerImage;
+      } else {
+        document.getElementById('layout-banner-preview').classList.add('hidden');
+      }
+      renderItemsList();
+    }
+
+    function updateSectionTitle(val) {
+      if (selectedSectionIdx < 0) return;
+      layoutSections[selectedSectionIdx].title = val;
+      renderSectionList();
+    }
+
+    async function uploadBannerImage(input) {
+      if (!input.files[0] || selectedSectionIdx < 0) return;
+      const formData = new FormData();
+      formData.append('image', input.files[0]);
+      try {
+        const res = await fetch('/api/admin/upload-banner', { method: 'POST', headers: { 'X-Admin-Password': adminPw }, body: formData });
+        const data = await res.json();
+        if (data.imageUrl) {
+          layoutSections[selectedSectionIdx].bannerImage = data.imageUrl;
+          document.getElementById('layout-banner-preview').classList.remove('hidden');
+          document.getElementById('layout-banner-img').src = data.imageUrl;
+        }
+      } catch (err) { alert('Upload failed'); }
+    }
+
+    function renderItemsList() {
+      const container = document.getElementById('layout-items-list');
+      if (selectedSectionIdx < 0) return;
+      const items = layoutSections[selectedSectionIdx].items || [];
+      if (items.length === 0) {
+        container.innerHTML = '<p class="text-gray-500 text-sm text-center py-4">No items in this section</p>';
+        return;
+      }
+      container.innerHTML = items.map((item, i) => {
+        const sizes = ['small', 'medium', 'large'];
+        return `<div class="flex items-center gap-3 bg-gray-800/50 rounded-lg p-2 border border-gray-700" draggable="true" ondragstart="dragItem(event,${i})" ondragover="event.preventDefault()" ondrop="dropItem(event,${i})">
+          <span class="cursor-grab text-gray-600">&#x2807;</span>
+          <span class="text-xs px-1.5 py-0.5 rounded ${item.itemType === 'skin' ? 'bg-purple-900/50 text-purple-400' : 'bg-blue-900/50 text-blue-400'} uppercase font-bold">${item.itemType}</span>
+          <span class="text-sm text-white flex-1 truncate">${esc(item.name || item.itemId)}</span>
+          <select class="bg-gray-700 text-xs text-white rounded px-1.5 py-1 border-0" onchange="setItemSize(${i},this.value)">${sizes.map(sz => `<option value="${sz}" ${item.size===sz?'selected':''}>${sz[0].toUpperCase()+sz.slice(1)}</option>`).join('')}</select>
+          <button onclick="removeItem(${i})" class="text-gray-500 hover:text-red-400 text-sm">&times;</button>
+        </div>`;
+      }).join('');
+    }
+
+    let dragItemFrom = -1;
+    function dragItem(e, idx) { dragItemFrom = idx; e.dataTransfer.effectAllowed = 'move'; }
+    function dropItem(e, idx) {
+      e.preventDefault();
+      if (dragItemFrom < 0 || dragItemFrom === idx || selectedSectionIdx < 0) return;
+      const items = layoutSections[selectedSectionIdx].items;
+      const item = items.splice(dragItemFrom, 1)[0];
+      items.splice(idx, 0, item);
+      renderItemsList();
+      dragItemFrom = -1;
+    }
+
+    function setItemSize(idx, size) {
+      if (selectedSectionIdx < 0) return;
+      layoutSections[selectedSectionIdx].items[idx].size = size;
+    }
+
+    function removeItem(idx) {
+      if (selectedSectionIdx < 0) return;
+      layoutSections[selectedSectionIdx].items.splice(idx, 1);
+      renderItemsList();
+    }
+
+    async function openItemPicker() {
+      document.getElementById('item-picker-modal').classList.remove('hidden');
+      try {
+        const [skinsRes, cratesRes] = await Promise.all([
+          fetch('/api/admin/all-skins', { headers: { 'X-Admin-Password': adminPw } }).then(r => r.json()),
+          fetch('/api/admin/crates', { headers: { 'X-Admin-Password': adminPw } }).then(r => r.json()),
+        ]);
+        allPickerSkins = skinsRes.skins || [];
+        allPickerCrates = (cratesRes.crates || []).map(c => ({ ...c, _isCrate: true }));
+        filterItemPicker('');
+      } catch (err) { console.error('Item picker load error:', err); }
+    }
+
+    function closeItemPicker() { document.getElementById('item-picker-modal').classList.add('hidden'); }
+
+    function filterItemPicker(q) {
+      const lower = q.toLowerCase();
+      const container = document.getElementById('item-picker-list');
+      const filteredSkins = allPickerSkins.filter(s => s.name.toLowerCase().includes(lower));
+      const filteredCrates = allPickerCrates.filter(c => c.name.toLowerCase().includes(lower));
+      let html = '';
+      if (filteredCrates.length > 0) {
+        html += '<p class="text-xs text-gray-500 uppercase font-bold mb-1">Crates</p>';
+        html += filteredCrates.map(c => `<div class="flex items-center gap-3 bg-gray-800/50 rounded-lg p-2 cursor-pointer hover:bg-gray-700 border border-gray-700" onclick="pickItem('crate','${esc(c.crateId)}','${esc(c.name)}')">
+          <div class="w-8 h-8 rounded" style="background:${esc(c.imageColor || '#7c3aed')}"></div>
+          <span class="text-sm text-white flex-1 truncate">${esc(c.name)}</span>
+          <span class="text-xs px-1.5 py-0.5 rounded bg-blue-900/50 text-blue-400">CRATE</span>
+        </div>`).join('');
+      }
+      if (filteredSkins.length > 0) {
+        html += '<p class="text-xs text-gray-500 uppercase font-bold mb-1 mt-3">Skins</p>';
+        html += filteredSkins.map(s => `<div class="flex items-center gap-3 bg-gray-800/50 rounded-lg p-2 cursor-pointer hover:bg-gray-700 border border-gray-700" onclick="pickItem('skin','${esc(s.skinId)}','${esc(s.name)}')">
+          ${s.type === 'color' ? `<div class="w-8 h-8 rounded-full" style="background:${esc(s.cssValue)}"></div>` : `<div class="w-8 h-8 rounded bg-gray-700 flex items-center justify-center"><img src="${esc(s.imageUrl)}" class="h-6 object-contain" /></div>`}
+          <span class="text-sm text-white flex-1 truncate">${esc(s.name)}</span>
+          <span class="text-xs px-1.5 py-0.5 rounded bg-purple-900/50 text-purple-400">SKIN</span>
+        </div>`).join('');
+      }
+      if (!html) html = '<p class="text-gray-500 text-sm text-center py-4">No items found</p>';
+      container.innerHTML = html;
+    }
+
+    function pickItem(itemType, itemId, name) {
+      if (selectedSectionIdx < 0) return;
+      if (!layoutSections[selectedSectionIdx].items) layoutSections[selectedSectionIdx].items = [];
+      layoutSections[selectedSectionIdx].items.push({
+        id: crypto.randomUUID(), itemType, itemId, name, size: 'medium', order: layoutSections[selectedSectionIdx].items.length
+      });
+      closeItemPicker();
+      renderItemsList();
+      renderSectionList();
+    }
+
+    async function saveShopLayout() {
+      try {
+        layoutSections.forEach((s, i) => { s.order = i; if (s.items) s.items.forEach((it, j) => { it.order = j; }); });
+        const res = await fetch('/api/admin/shop-layout', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json', 'X-Admin-Password': adminPw },
+          body: JSON.stringify({ sections: layoutSections }),
+        });
+        const data = await res.json();
+        if (data.layout) alert('Shop layout saved!');
+        else alert('Error: ' + (data.error || 'Unknown'));
+      } catch (err) { alert('Save failed: ' + err.message); }
     }
   </script>
 </body>
