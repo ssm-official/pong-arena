@@ -82,21 +82,55 @@
     .bg-arena-card { transition: box-shadow 0.3s ease; }
     .bg-arena-card:hover { box-shadow: 0 0 20px rgba(168, 85, 247, 0.15); }
 
-    /* Side nav button styles */
-    .side-nav-btn {
-      width: 44px; height: 44px; border-radius: 12px;
-      background: rgba(31, 31, 60, 0.8); backdrop-filter: blur(8px);
-      border: 1px solid #374151; display: flex; align-items: center;
-      justify-content: center; transition: all 0.2s ease; cursor: pointer;
-      color: #9ca3af; position: relative;
+    /* Side nav styles */
+    #side-nav {
+      background: rgba(17, 17, 40, 0.85);
+      backdrop-filter: blur(16px);
+      border: 1px solid rgba(168, 85, 247, 0.2);
+      border-radius: 16px;
+      padding: 8px;
+      box-shadow: 0 0 30px rgba(168, 85, 247, 0.1), 0 8px 32px rgba(0,0,0,0.4);
     }
-    .side-nav-btn:hover { border-color: #a855f7; color: #e9d5ff; }
-    .side-nav-btn.active { background: rgba(126, 58, 237, 0.5); border-color: #a855f7; color: #fff; }
+    .side-nav-btn {
+      width: 46px; height: 46px; border-radius: 12px;
+      background: transparent;
+      border: 1px solid transparent; display: flex; align-items: center;
+      justify-content: center; transition: all 0.25s ease; cursor: pointer;
+      color: #6b7280; position: relative;
+    }
+    .side-nav-btn:hover {
+      background: rgba(168, 85, 247, 0.15); border-color: rgba(168, 85, 247, 0.4);
+      color: #e9d5ff; transform: scale(1.08);
+    }
+    .side-nav-btn.active {
+      background: rgba(126, 58, 237, 0.4); border-color: #a855f7;
+      color: #fff; box-shadow: 0 0 12px rgba(168, 85, 247, 0.3);
+    }
     .side-nav-btn .nav-badge {
       position: absolute; top: -4px; right: -4px; min-width: 16px; height: 16px;
       font-size: 10px; line-height: 16px; text-align: center; border-radius: 99px;
       background: #ef4444; color: white; padding: 0 4px;
     }
+    /* Tooltip labels */
+    .side-nav-btn::after {
+      content: attr(title); position: absolute; right: 56px; top: 50%; transform: translateY(-50%);
+      background: rgba(17, 17, 40, 0.95); color: #e5e7eb; padding: 4px 10px; border-radius: 8px;
+      font-size: 12px; white-space: nowrap; pointer-events: none;
+      opacity: 0; transition: opacity 0.2s ease; border: 1px solid rgba(168,85,247,0.3);
+    }
+    .side-nav-btn:hover::after { opacity: 1; }
+
+    /* Tier button animations */
+    .tier-btn { transition: all 0.25s ease; }
+    .tier-btn:hover { transform: translateY(-3px); box-shadow: 0 4px 15px rgba(0,0,0,0.3); }
+    .tier-btn:active { transform: translateY(0); }
+
+    /* Card entrance animation */
+    @keyframes card-enter {
+      from { opacity: 0; transform: translateY(12px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .card-animate { animation: card-enter 0.4s ease-out both; }
 
     /* Floating ambient particles */
     @keyframes drift-1 { 0% { transform: translate(0, 0); } 50% { transform: translate(30px, -40px); } 100% { transform: translate(0, 0); } }
@@ -374,58 +408,93 @@
             <div class="pong-ball-anim absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-white shadow-[0_0_10px_#fff] pointer-events-none"></div>
           </div>
 
-          <div class="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-5">
-
-            <!-- ===== LEFT COLUMN (main) ===== -->
-            <div class="space-y-5">
-              <!-- Your Balance (horizontal) -->
-              <div class="bg-arena-card rounded-xl p-5 border border-gray-800">
-                <div class="flex items-center gap-5 flex-wrap">
-                  <h3 class="text-sm font-bold text-gray-300">Your Balance</h3>
-                  <div class="bg-gray-800 rounded-lg px-5 py-3 flex items-center gap-4 flex-1 min-w-[200px]">
-                    <div>
-                      <div id="dash-balance-usd" class="text-2xl font-bold text-white">--</div>
-                      <div class="flex items-center gap-1 mt-0.5">
-                        <span id="dash-balance-pong" class="text-xs text-gray-500">--</span>
-                        <span class="text-xs text-gray-600">$PONG</span>
-                      </div>
-                    </div>
-                    <div class="ml-auto text-right">
-                      <span class="text-xs text-gray-400">Record</span>
-                      <div id="dash-your-record" class="font-bold text-white text-sm">0-0</div>
-                    </div>
-                  </div>
-                </div>
+          <!-- Stats Bar (full width above grid) -->
+          <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
+            <div class="bg-arena-card rounded-xl p-4 border border-gray-800 card-animate text-center" style="animation-delay:0.05s">
+              <div class="text-xs text-gray-500 mb-1">Balance</div>
+              <div id="dash-balance-usd" class="text-xl font-bold text-white">--</div>
+              <div class="flex items-center justify-center gap-1 mt-0.5">
+                <span id="dash-balance-pong" class="text-[10px] text-gray-500">--</span>
+                <span class="text-[10px] text-gray-600">$PONG</span>
               </div>
+            </div>
+            <div class="bg-arena-card rounded-xl p-4 border border-gray-800 card-animate text-center" style="animation-delay:0.1s">
+              <div class="text-xs text-gray-500 mb-1">Record</div>
+              <div id="dash-your-record" class="text-xl font-bold text-white">0-0</div>
+            </div>
+            <div class="bg-arena-card rounded-xl p-4 border border-gray-800 card-animate text-center" style="animation-delay:0.15s">
+              <div class="text-xs text-gray-500 mb-1">Market Cap</div>
+              <div id="dash-token-mcap" class="text-xl font-bold text-white">--</div>
+              <div id="dash-token-change" class="text-[10px] mt-0.5 text-gray-400">24h: --</div>
+            </div>
+            <div class="bg-arena-card rounded-xl p-4 border border-gray-800 card-animate text-center" style="animation-delay:0.2s">
+              <div class="text-xs text-gray-500 mb-1">Burned</div>
+              <div id="dash-token-burned" class="text-xl font-bold text-orange-400">--</div>
+              <div class="text-[10px] text-gray-600 mt-0.5">$PONG</div>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
+
+            <!-- ===== LEFT COLUMN ===== -->
+            <div class="space-y-5">
               <!-- Quick Play -->
-              <div class="bg-arena-card rounded-xl p-6 border border-gray-800">
-                <h3 class="text-lg font-bold mb-3">Quick Play</h3>
-                <div class="grid grid-cols-3 gap-2 mb-3">
-                  <button onclick="joinQueue('low')"
-                    class="tier-btn bg-gray-800 border border-green-800 hover:border-green-500 rounded-lg p-3 text-center transition">
-                    <div class="text-green-400 text-sm font-bold">Low</div>
-                    <div id="tier-usd-low" class="text-lg font-bold text-white">--</div>
-                    <div class="text-gray-500 text-xs">10K $PONG</div>
+              <div class="bg-arena-card rounded-xl p-6 border border-gray-800 card-animate">
+                <div class="flex items-center justify-between mb-4">
+                  <h3 class="text-lg font-bold">Quick Play</h3>
+                  <a href="/practice.html" class="text-purple-400 hover:text-purple-300 text-xs">Practice &rarr;</a>
+                </div>
+                <div class="grid grid-cols-4 gap-2 mb-2" id="tier-grid">
+                  <button onclick="joinQueue('t5')"
+                    class="tier-btn bg-gray-800 border border-green-800/60 hover:border-green-500 rounded-lg p-2.5 text-center">
+                    <div class="text-lg font-bold text-white">$5</div>
+                    <div id="tier-pong-t5" class="text-gray-500 text-[10px] truncate">--</div>
                   </button>
-                  <button onclick="joinQueue('medium')"
-                    class="tier-btn bg-gray-800 border border-yellow-800 hover:border-yellow-500 rounded-lg p-3 text-center transition">
-                    <div class="text-yellow-400 text-sm font-bold">Medium</div>
-                    <div id="tier-usd-medium" class="text-lg font-bold text-white">--</div>
-                    <div class="text-gray-500 text-xs">50K $PONG</div>
+                  <button onclick="joinQueue('t10')"
+                    class="tier-btn bg-gray-800 border border-green-800/60 hover:border-green-500 rounded-lg p-2.5 text-center">
+                    <div class="text-lg font-bold text-white">$10</div>
+                    <div id="tier-pong-t10" class="text-gray-500 text-[10px] truncate">--</div>
                   </button>
-                  <button onclick="joinQueue('high')"
-                    class="tier-btn bg-gray-800 border border-red-800 hover:border-red-500 rounded-lg p-3 text-center transition">
-                    <div class="text-red-400 text-sm font-bold">High</div>
-                    <div id="tier-usd-high" class="text-lg font-bold text-white">--</div>
-                    <div class="text-gray-500 text-xs">200K $PONG</div>
+                  <button onclick="joinQueue('t25')"
+                    class="tier-btn bg-gray-800 border border-yellow-800/60 hover:border-yellow-500 rounded-lg p-2.5 text-center">
+                    <div class="text-lg font-bold text-white">$25</div>
+                    <div id="tier-pong-t25" class="text-gray-500 text-[10px] truncate">--</div>
+                  </button>
+                  <button onclick="joinQueue('t50')"
+                    class="tier-btn bg-gray-800 border border-yellow-800/60 hover:border-yellow-500 rounded-lg p-2.5 text-center">
+                    <div class="text-lg font-bold text-white">$50</div>
+                    <div id="tier-pong-t50" class="text-gray-500 text-[10px] truncate">--</div>
+                  </button>
+                  <button onclick="joinQueue('t100')"
+                    class="tier-btn bg-gray-800 border border-orange-800/60 hover:border-orange-500 rounded-lg p-2.5 text-center">
+                    <div class="text-lg font-bold text-white">$100</div>
+                    <div id="tier-pong-t100" class="text-gray-500 text-[10px] truncate">--</div>
+                  </button>
+                  <button onclick="joinQueue('t250')"
+                    class="tier-btn bg-gray-800 border border-red-800/60 hover:border-red-500 rounded-lg p-2.5 text-center">
+                    <div class="text-lg font-bold text-white">$250</div>
+                    <div id="tier-pong-t250" class="text-gray-500 text-[10px] truncate">--</div>
+                  </button>
+                  <button onclick="joinQueue('t500')"
+                    class="tier-btn bg-gray-800 border border-red-800/60 hover:border-red-500 rounded-lg p-2.5 text-center">
+                    <div class="text-lg font-bold text-white">$500</div>
+                    <div id="tier-pong-t500" class="text-gray-500 text-[10px] truncate">--</div>
+                  </button>
+                  <button onclick="joinQueue('t1000')"
+                    class="tier-btn bg-gray-800 border border-purple-800/60 hover:border-purple-500 rounded-lg p-2.5 text-center">
+                    <div class="text-lg font-bold text-white">$1K</div>
+                    <div id="tier-pong-t1000" class="text-gray-500 text-[10px] truncate">--</div>
                   </button>
                 </div>
-                <a href="/practice.html" class="text-purple-400 hover:text-purple-300 text-xs underline">Practice against bots</a>
+                <p class="text-gray-600 text-[10px]">$PONG amounts auto-adjust to live price. Stakes &gt;$1K use Custom Lobbies below.</p>
               </div>
 
               <!-- Custom Lobbies -->
-              <div class="bg-arena-card rounded-xl p-6 border border-gray-800">
-                <h3 class="text-lg font-bold mb-3">Custom Lobbies</h3>
+              <div class="bg-arena-card rounded-xl p-6 border border-gray-800 card-animate" style="animation-delay:0.15s">
+                <div class="flex items-center justify-between mb-3">
+                  <h3 class="text-lg font-bold">Custom Lobbies</h3>
+                  <span class="text-[10px] text-gray-600 bg-gray-800 px-2 py-0.5 rounded">Any stake amount</span>
+                </div>
 
                 <!-- Create Lobby Form -->
                 <div id="lobby-create-section" class="mb-4">
@@ -473,44 +542,30 @@
               </div>
             </div>
 
-            <!-- ===== RIGHT COLUMN (info panels) ===== -->
+            <!-- ===== RIGHT COLUMN ===== -->
             <div class="space-y-5">
-              <!-- My Paddle Preview Panel -->
-              <div class="bg-arena-card rounded-xl p-5 border border-gray-800 cursor-pointer hover:border-purple-700 transition" onclick="openInventoryModal()">
+              <!-- My Paddle + Buy $PONG -->
+              <div class="bg-arena-card rounded-xl p-5 border border-gray-800 cursor-pointer hover:border-purple-700 transition card-animate" style="animation-delay:0.1s" onclick="openInventoryModal()">
                 <div class="flex items-center justify-between mb-3">
                   <h3 class="text-sm font-bold text-gray-300">My Paddle</h3>
-                  <a href="#" onclick="event.stopPropagation();event.preventDefault();openInventoryModal()" class="text-purple-400 hover:text-purple-300 text-xs">My Inventory &rarr;</a>
+                  <a href="#" onclick="event.stopPropagation();event.preventDefault();openInventoryModal()" class="text-purple-400 hover:text-purple-300 text-xs">Inventory &rarr;</a>
                 </div>
-                <div class="flex flex-col items-center gap-2">
-                  <div id="dash-paddle-preview" style="width:30px;height:120px;border-radius:6px;background:#a855f7;box-shadow:0 0 15px #a855f7;transition:all 0.3s ease"></div>
-                  <span id="dash-skin-name" class="text-xs text-gray-300 font-medium">Default</span>
-                  <span id="dash-skin-rarity" class="text-xs px-1.5 py-0.5 rounded hidden"></span>
+                <div class="flex items-center gap-4">
+                  <div id="dash-paddle-preview" style="width:24px;height:90px;border-radius:5px;background:#a855f7;box-shadow:0 0 15px #a855f7;transition:all 0.3s ease;flex-shrink:0"></div>
+                  <div class="flex-1">
+                    <span id="dash-skin-name" class="text-sm text-gray-300 font-medium block">Default</span>
+                    <span id="dash-skin-rarity" class="text-xs px-1.5 py-0.5 rounded hidden mt-1 inline-block"></span>
+                    <a href="https://jup.ag/swap/SOL-GVLfSudckNc8L1MGWUJP5vXUgFNtYJqjytLR7xm3pump" target="_blank" rel="noopener noreferrer"
+                      onclick="event.stopPropagation()"
+                      class="block mt-3 bg-purple-600 hover:bg-purple-700 text-center py-2 rounded-lg font-medium transition text-xs">
+                      Buy $PONG
+                    </a>
+                  </div>
                 </div>
-              </div>
-
-              <!-- $PONG Token Panel -->
-              <div class="bg-arena-card rounded-xl p-5 border border-gray-800">
-                <div class="flex items-center justify-between mb-3">
-                  <h3 class="text-sm font-bold text-gray-300">$PONG Token</h3>
-                  <span class="text-xs text-gray-500 bg-gray-800 px-2 py-0.5 rounded">LIVE</span>
-                </div>
-                <div class="bg-gray-800 rounded-lg p-4 mb-3 text-center">
-                  <div class="text-xs text-gray-400 mb-1">Market Cap</div>
-                  <div id="dash-token-mcap" class="text-2xl font-bold text-white">--</div>
-                  <div id="dash-token-change" class="text-sm mt-1 text-gray-400">24h: --</div>
-                </div>
-                <div class="flex items-center justify-between mb-3 px-1">
-                  <span class="text-xs text-gray-400">Burned</span>
-                  <span id="dash-token-burned" class="text-xs font-bold text-orange-400">--</span>
-                </div>
-                <a href="https://jup.ag/swap/SOL-GVLfSudckNc8L1MGWUJP5vXUgFNtYJqjytLR7xm3pump" target="_blank" rel="noopener noreferrer"
-                  class="block w-full bg-purple-600 hover:bg-purple-700 text-center py-2.5 rounded-lg font-medium transition text-sm">
-                  Buy $PONG
-                </a>
               </div>
 
               <!-- Leaderboard Preview Panel -->
-              <div class="bg-arena-card rounded-xl p-5 border border-gray-800">
+              <div class="bg-arena-card rounded-xl p-5 border border-gray-800 card-animate" style="animation-delay:0.15s">
                 <div class="flex items-center justify-between mb-3">
                   <h3 class="text-sm font-bold text-gray-300">Leaderboard</h3>
                   <a href="#" onclick="event.preventDefault();switchTab('leaderboard')" class="text-purple-400 hover:text-purple-300 text-xs">View All &rarr;</a>
@@ -529,7 +584,7 @@
               </div>
 
               <!-- Friends Mini Card -->
-              <div class="bg-arena-card rounded-xl p-5 border border-gray-800">
+              <div class="bg-arena-card rounded-xl p-5 border border-gray-800 card-animate" style="animation-delay:0.2s">
                 <div class="flex items-center justify-between mb-3">
                   <h3 class="text-sm font-bold text-gray-300">Friends</h3>
                   <a href="#" onclick="event.preventDefault();switchTab('friends')" class="text-purple-400 hover:text-purple-300 text-xs">View All &rarr;</a>
@@ -865,9 +920,12 @@
   </div><!-- /container -->
 
   <!-- ============ ONLINE COUNT (bottom-left, always visible) ============ -->
-  <div id="online-count" class="fixed bottom-4 left-4 bg-arena-card/80 backdrop-blur-sm border border-gray-800 rounded-full px-3 py-1.5 text-xs text-gray-400 flex items-center gap-2 z-30 hidden">
-    <span class="w-2 h-2 rounded-full bg-green-400 animate-pulse"></span>
-    <span id="online-count-num">0</span> online
+  <div id="online-count" class="fixed bottom-5 left-5 bg-arena-card/90 backdrop-blur-md border border-purple-900/40 rounded-xl px-4 py-2.5 text-sm text-gray-300 flex items-center gap-3 z-30 hidden shadow-lg shadow-purple-900/20">
+    <span class="relative flex h-3 w-3">
+      <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+      <span class="relative inline-flex rounded-full h-3 w-3 bg-green-400"></span>
+    </span>
+    <span><span id="online-count-num" class="font-bold text-white">0</span> players online</span>
   </div>
 
   <!-- ============ DM CHAT PANEL (slide-in from right) ============ -->
@@ -1057,6 +1115,6 @@
   <script src="/js/wallet.js?v=33"></script>
   <script src="/js/pong-sim.js?v=34"></script>
   <script src="/js/game-client.js?v=38"></script>
-  <script src="/js/app.js?v=38"></script>
+  <script src="/js/app.js?v=39"></script>
 </body>
 </html>

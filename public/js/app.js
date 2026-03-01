@@ -18,7 +18,16 @@ let pongMarketCap = null;
 let priceLastFetched = 0;
 let priceFetchFailed = false;
 const PRICE_REFRESH_MS = 60000;
+// USD-based tiers — PONG amounts auto-calculated from live price
+const TIER_USD_AMOUNTS = { t5: 5, t10: 10, t25: 25, t50: 50, t100: 100, t250: 250, t500: 500, t1000: 1000 };
+// Legacy compat
 const TIER_PONG_AMOUNTS = { low: 10000, medium: 50000, high: 200000 };
+
+function getTierPongAmount(tier) {
+  const usd = TIER_USD_AMOUNTS[tier];
+  if (!usd || pongPriceUsd <= 0) return 0;
+  return Math.round(usd / pongPriceUsd);
+}
 
 // --- DM state ---
 let dmOpenWallet = null;
@@ -136,23 +145,30 @@ function formatUsd(amount) {
 }
 
 function getTierUsd(tier) {
-  return TIER_PONG_AMOUNTS[tier] * pongPriceUsd;
+  // New USD-based tiers
+  if (TIER_USD_AMOUNTS[tier]) return TIER_USD_AMOUNTS[tier];
+  // Legacy fallback
+  return (TIER_PONG_AMOUNTS[tier] || 0) * pongPriceUsd;
+}
+
+function formatPongShort(pong) {
+  if (pong >= 1e6) return (pong / 1e6).toFixed(1) + 'M';
+  if (pong >= 1e3) return (pong / 1e3).toFixed(0) + 'K';
+  return pong.toLocaleString('en-US', { maximumFractionDigits: 0 });
 }
 
 function updateAllUsdDisplays() {
-  const lowUsd = document.getElementById('tier-usd-low');
-  const medUsd = document.getElementById('tier-usd-medium');
-  const highUsd = document.getElementById('tier-usd-high');
-
-  if (priceFetchFailed || pongPriceUsd <= 0) {
-    if (lowUsd) lowUsd.textContent = 'Price N/A';
-    if (medUsd) medUsd.textContent = 'Price N/A';
-    if (highUsd) highUsd.textContent = 'Price N/A';
-  } else {
-    if (lowUsd) lowUsd.textContent = formatUsd(getTierUsd('low'));
-    if (medUsd) medUsd.textContent = formatUsd(getTierUsd('medium'));
-    if (highUsd) highUsd.textContent = formatUsd(getTierUsd('high'));
-  }
+  // Update all USD-based tier buttons
+  Object.keys(TIER_USD_AMOUNTS).forEach(tier => {
+    const el = document.getElementById(`tier-pong-${tier}`);
+    if (!el) return;
+    if (priceFetchFailed || pongPriceUsd <= 0) {
+      el.textContent = 'Price N/A';
+    } else {
+      const pongAmt = getTierPongAmount(tier);
+      el.textContent = formatPongShort(pongAmt) + ' $PONG';
+    }
+  });
   updateGameStakeDisplay();
   updateTokenPriceCard();
 }
@@ -1771,12 +1787,21 @@ function joinQueue(tier) {
     myLobbyId = null;
     updateLobbyUI();
   }
-  socket.emit('queue-join', { tier });
+  // For USD-based tiers, compute the PONG amount from live price
+  const usdAmount = TIER_USD_AMOUNTS[tier];
+  if (usdAmount && pongPriceUsd <= 0) {
+    return alert('$PONG price not available yet. Please wait a moment.');
+  }
+  const pongAmount = usdAmount ? getTierPongAmount(tier) : (TIER_PONG_AMOUNTS[tier] || 0);
+
+  socket.emit('queue-join', { tier, pongAmount });
   currentGameTier = tier;
   showMatchmakingState('queue');
-  const pongAmt = tier === 'low' ? '10K' : tier === 'medium' ? '50K' : '200K';
-  const usdAmt = pongPriceUsd > 0 ? ` (${formatUsd(getTierUsd(tier))})` : '';
-  document.getElementById('queue-tier-display').textContent = `${tier.toUpperCase()} tier — ${pongAmt} $PONG${usdAmt}`;
+  const pongDisplay = formatPongShort(pongAmount);
+  const usdDisplay = usdAmount ? formatUsd(usdAmount) : '';
+  document.getElementById('queue-tier-display').textContent = usdDisplay
+    ? `${usdDisplay} — ${pongDisplay} $PONG each`
+    : `${pongDisplay} $PONG each`;
 }
 
 function leaveQueue() {
@@ -1803,14 +1828,22 @@ function updateGameStakeDisplay() {
     const usdAmt = pongPriceUsd > 0 ? formatUsd(pongAmt * pongPriceUsd) : '';
     el.textContent = usdAmt ? `${usdAmt} (${pongAmt.toLocaleString()} $PONG each)` : `${pongAmt.toLocaleString()} $PONG each`;
   } else {
-    const pongAmt = TIER_PONG_AMOUNTS[currentGameTier] || 0;
-    const usdAmt = getTierUsd(currentGameTier);
-    if (pongPriceUsd > 0 && pongAmt) {
-      el.textContent = `${formatUsd(usdAmt)} (${(pongAmt / 1000).toFixed(0)}K $PONG each)`;
-    } else if (pongAmt) {
-      el.textContent = `${(pongAmt / 1000).toFixed(0)}K $PONG each`;
+    const usdTier = TIER_USD_AMOUNTS[currentGameTier];
+    if (usdTier) {
+      const pongAmt = getTierPongAmount(currentGameTier);
+      el.textContent = pongAmt > 0
+        ? `${formatUsd(usdTier)} (${formatPongShort(pongAmt)} $PONG each)`
+        : formatUsd(usdTier) + ' each';
     } else {
-      el.textContent = '';
+      const pongAmt = TIER_PONG_AMOUNTS[currentGameTier] || 0;
+      const usdAmt = getTierUsd(currentGameTier);
+      if (pongPriceUsd > 0 && pongAmt) {
+        el.textContent = `${formatUsd(usdAmt)} (${formatPongShort(pongAmt)} $PONG each)`;
+      } else if (pongAmt) {
+        el.textContent = `${formatPongShort(pongAmt)} $PONG each`;
+      } else {
+        el.textContent = '';
+      }
     }
   }
 }
@@ -2450,7 +2483,7 @@ function updateTokenPriceCard() {
 
   if (priceFetchFailed || pongPriceUsd <= 0) {
     mcapEl.textContent = '--';
-    if (changeEl) { changeEl.textContent = '24h: --'; changeEl.className = 'text-sm mt-1 text-gray-400'; }
+    if (changeEl) { changeEl.textContent = '24h: --'; changeEl.className = 'text-[10px] mt-0.5 text-gray-400'; }
     return;
   }
 
@@ -2460,11 +2493,11 @@ function updateTokenPriceCard() {
     if (pongPriceChange24h != null) {
       const sign = pongPriceChange24h >= 0 ? '+' : '';
       changeEl.textContent = `24h: ${sign}${pongPriceChange24h.toFixed(2)}%`;
-      changeEl.className = 'text-sm mt-1 font-medium ' +
+      changeEl.className = 'text-[10px] mt-0.5 font-medium ' +
         (pongPriceChange24h >= 0 ? 'text-green-400' : 'text-red-400');
     } else {
       changeEl.textContent = '24h: --';
-      changeEl.className = 'text-sm mt-1 text-gray-400';
+      changeEl.className = 'text-[10px] mt-0.5 text-gray-400';
     }
   }
 }
@@ -2699,7 +2732,7 @@ function initMusic() {
     audio.play().then(() => {
       musicStarted = true;
     }).catch(() => {
-      // Autoplay blocked — will try again on next user interaction
+      // Autoplay blocked — will retry on user interaction
     });
   }
   musicStarted = true;
@@ -2712,36 +2745,43 @@ function initMusic() {
 
 function dismissLoadingScreen() {
   const screen = document.getElementById('loading-screen');
-  if (!screen) return;
+  if (!screen || screen.classList.contains('fade-out')) return;
   screen.classList.add('fade-out');
   setTimeout(() => {
     screen.style.display = 'none';
   }, 600);
-  // Start music after loading screen dismisses
-  initMusic();
 }
 
-// Auto-dismiss loading screen after delay, or on first interaction
-(function initLoadingScreen() {
-  // Dismiss after 2.5 seconds automatically
-  const autoDismiss = setTimeout(() => {
-    dismissLoadingScreen();
-  }, 2500);
+// Start music IMMEDIATELY on first user interaction (before loading screen ends)
+function tryStartMusic() {
+  if (!musicStarted) initMusic();
+}
 
-  // Also dismiss on any click/key
+(function initLoadingScreen() {
+  // Auto-dismiss after 2s
+  const autoDismiss = setTimeout(dismissLoadingScreen, 2000);
+
   function earlyDismiss() {
     clearTimeout(autoDismiss);
+    tryStartMusic();
     dismissLoadingScreen();
     document.removeEventListener('click', earlyDismiss);
     document.removeEventListener('keydown', earlyDismiss);
   }
   document.addEventListener('click', earlyDismiss);
   document.addEventListener('keydown', earlyDismiss);
+
+  // Also try to play music as soon as page loads (works if user already interacted)
+  if (document.readyState === 'complete') {
+    tryStartMusic();
+  } else {
+    window.addEventListener('load', tryStartMusic);
+  }
 })();
 
-// Ensure music starts on first user click (autoplay policy fallback)
+// Fallback: ensure music starts on first user click
 document.addEventListener('click', function startMusicOnClick() {
-  if (!musicStarted) initMusic();
+  tryStartMusic();
 }, { once: true });
 
 // Initialize music icon state on load
