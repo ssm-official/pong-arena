@@ -162,7 +162,7 @@ router.post('/skin', adminAuth, upload.single('image'), async (req, res) => {
 
     if (req.file) {
       skinData.imageUrl = toDataUrl(req.file);
-      skinData.type = 'image';
+      if (skinData.type !== 'aura') skinData.type = 'image';
     }
 
     if (req.body.cssValue) {
@@ -194,7 +194,7 @@ router.put('/skin/:skinId', adminAuth, upload.single('image'), async (req, res) 
     // If a new image was uploaded, store as base64 data URL
     if (req.file) {
       update.imageUrl = toDataUrl(req.file);
-      update.type = 'image';
+      if ((update.type || skin.type) !== 'aura') update.type = 'image';
     }
 
     const updated = await Skin.findOneAndUpdate(

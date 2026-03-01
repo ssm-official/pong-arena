@@ -266,6 +266,14 @@ mongoose.connect(MONGODB_URI)
   .then(async () => {
     console.log('Connected to MongoDB');
     await seedSkins();
+
+    // One-time fix: aura skins saved as type 'image' due to bug
+    const Skin = require('./models/Skin');
+    const fixed = await Skin.updateMany(
+      { type: { $ne: 'aura' }, cssValue: { $regex: '"effect"' } },
+      { $set: { type: 'aura' } }
+    );
+    if (fixed.modifiedCount > 0) console.log(`Fixed ${fixed.modifiedCount} aura skin(s) with wrong type`);
     const PORT = process.env.PORT || 3000;
     server.listen(PORT, () => {
       console.log(`Pong Arena running at http://localhost:${PORT}`);

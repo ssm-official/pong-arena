@@ -2432,7 +2432,6 @@ socket.on('game-start', (data) => {
   GameClient.setPlayerSkins(p1Skin, p2Skin);
   const p1Aura = data.player1.aura || pendingP1Aura || null;
   const p2Aura = data.player2.aura || pendingP2Aura || null;
-  console.log('[AURA DEBUG] game-start auras:', { p1Aura, p2Aura, rawP1: data.player1.aura, rawP2: data.player2.aura, pendingP1Aura, pendingP2Aura });
   GameClient.setPlayerAuras(p1Aura, p2Aura);
 
   const amP1 = (currentUser.wallet === data.player1.wallet);

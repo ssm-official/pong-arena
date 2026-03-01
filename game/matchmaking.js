@@ -30,16 +30,13 @@ async function getPlayerSkin(wallet) {
 async function getPlayerAura(wallet) {
   try {
     const user = await User.findOne({ wallet }).select('equippedAura');
-    console.log('[AURA DEBUG] getPlayerAura:', wallet, 'equippedAura:', user?.equippedAura);
     if (!user || !user.equippedAura || user.equippedAura === 'none') return null;
     const skin = await Skin.findOne({ skinId: user.equippedAura, type: 'aura' });
-    console.log('[AURA DEBUG] skin lookup:', skin?.skinId, 'cssValue:', skin?.cssValue);
     if (!skin) return null;
     let config = null;
     try { config = JSON.parse(skin.cssValue); } catch { return null; }
     return { skinId: skin.skinId, name: skin.name, rarity: skin.rarity, config };
-  } catch (err) {
-    console.error('[AURA DEBUG] getPlayerAura error:', err);
+  } catch {
     return null;
   }
 }
