@@ -186,6 +186,7 @@ function startPriceRefresh() {
 }
 
 function getAuthHeader() {
+  if (!sessionToken) return '';
   return 'Bearer ' + sessionToken;
 }
 
@@ -336,7 +337,8 @@ function initDashboard() {
 
 // Check wallet before actions that require it
 function requireWallet(action) {
-  if (currentUser) return true;
+  if (currentUser && sessionToken) return true;
+  showToast('Please connect your wallet first');
   connectWallet();
   return false;
 }
@@ -2633,14 +2635,24 @@ async function apiPost(url, body) {
 }
 
 async function apiPostAuth(url, body, authHeader) {
+  if (!authHeader) {
+    throw new Error('Not authenticated. Please connect wallet.');
+  }
   const res = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: authHeader },
     body: JSON.stringify(body)
   });
   const data = await res.json();
-  if (!res.ok && data.error) {
-    throw new Error(data.error);
+  if (!res.ok) {
+    if (res.status === 401) {
+      // Session expired — clear local session so user re-authenticates
+      sessionToken = null;
+      currentUser = null;
+      localStorage.removeItem('pong_session');
+      throw new Error('Session expired. Please reconnect wallet.');
+    }
+    throw new Error(data.error || 'Request failed');
   }
   return data;
 }

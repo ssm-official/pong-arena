@@ -237,7 +237,10 @@ router.post('/open-crate', authMiddleware, async (req, res) => {
 router.post('/equip', authMiddleware, async (req, res) => {
   try {
     const { skinId } = req.body;
+    if (!skinId) return res.status(400).json({ error: 'Missing skinId' });
+
     const user = await User.findOne({ wallet: req.wallet });
+    if (!user) return res.status(404).json({ error: 'User not found' });
 
     // Allow 'default' or any owned skin
     if (skinId !== 'default' && !user.skins.some(s => s.skinId === skinId)) {
@@ -249,6 +252,7 @@ router.post('/equip', authMiddleware, async (req, res) => {
 
     res.json({ status: 'equipped', skinId });
   } catch (err) {
+    console.error('Equip error:', err);
     res.status(500).json({ error: 'Failed to equip skin' });
   }
 });
