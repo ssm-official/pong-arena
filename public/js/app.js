@@ -417,7 +417,7 @@ const TAB_ROUTES = {
   '/friends': 'friends',
   '/opponents': 'opponents',
   '/cosmetics': 'cosmetics',
-  '/shop': 'cosmetics',
+  '/shop': 'shop',
   '/history': 'history',
 };
 const ROUTE_PATHS = {};
@@ -453,7 +453,7 @@ function switchTab(tab, pushState) {
   if (tab === 'profile') loadProfile();
   if (tab === 'friends') loadFriends();
   if (tab === 'cosmetics') loadCosmetics();
-  if (tab === 'shop') { openShopPanel(); return; }
+  if (tab === 'shop') loadShop();
   if (tab === 'history') loadHistory();
   if (tab === 'leaderboard') loadLeaderboard(currentLbSort);
   if (tab === 'opponents') loadRecentOpponents();
@@ -1599,15 +1599,6 @@ socket.on('game-chat-msg', (data) => {
 // SHOP (Crate-based)
 // ===========================================
 
-function openShopPanel() {
-  document.getElementById('shop-panel').classList.remove('hidden');
-  loadShop();
-}
-
-function closeShopPanel() {
-  document.getElementById('shop-panel').classList.add('hidden');
-}
-
 async function loadShop() {
   try {
     const auth = getAuthHeader();
@@ -1647,33 +1638,65 @@ async function loadShop() {
   }
 }
 
+function getCrateIllustration(color, crateType) {
+  const c = esc(color || '#7c3aed');
+  if (crateType === 'aura') {
+    return `<svg viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg" class="w-full h-full">
+      <defs>
+        <radialGradient id="ag${c.replace('#','')}" cx="50%" cy="40%" r="60%"><stop offset="0%" stop-color="${c}" stop-opacity="0.4"/><stop offset="100%" stop-color="${c}" stop-opacity="0"/></radialGradient>
+      </defs>
+      <rect x="14" y="30" width="52" height="36" rx="4" fill="#1a1a3a" stroke="${c}" stroke-width="2"/>
+      <rect x="14" y="30" width="52" height="12" rx="4" fill="${c}" opacity="0.3"/>
+      <line x1="40" y1="30" x2="40" y2="66" stroke="${c}" stroke-width="2" opacity="0.5"/>
+      <rect x="32" y="42" width="16" height="8" rx="2" fill="${c}" opacity="0.6"/>
+      <circle cx="40" cy="22" r="12" fill="url(#ag${c.replace('#','')})"/>
+      <text x="40" y="26" text-anchor="middle" font-size="14" fill="${c}">&#10024;</text>
+    </svg>`;
+  }
+  return `<svg viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg" class="w-full h-full">
+    <rect x="14" y="28" width="52" height="38" rx="4" fill="#1a1a3a" stroke="${c}" stroke-width="2"/>
+    <rect x="14" y="28" width="52" height="13" rx="4" fill="${c}" opacity="0.25"/>
+    <line x1="40" y1="28" x2="40" y2="66" stroke="${c}" stroke-width="2" opacity="0.5"/>
+    <rect x="32" y="41" width="16" height="8" rx="2" fill="${c}" opacity="0.6"/>
+    <path d="M30 28 L40 16 L50 28" stroke="${c}" stroke-width="2" fill="${c}" fill-opacity="0.15" stroke-linejoin="round"/>
+    <rect x="36" y="18" width="8" height="4" rx="1" fill="${c}" opacity="0.5"/>
+  </svg>`;
+}
+
 function renderCrateCard(c, section, ownedCount) {
-  const borderColor = section === 'limited' ? 'border-yellow-600' : section === 'aura' ? 'border-purple-600' : 'border-gray-700';
+  const borderColor = section === 'limited' ? 'border-yellow-600/60' : section === 'aura' ? 'border-purple-600/60' : 'border-gray-700/60';
+  const glowBg = section === 'limited' ? 'rgba(234,179,8,0.06)' : section === 'aura' ? 'rgba(168,85,247,0.06)' : 'rgba(30,30,60,0.5)';
   const usdPrice = pongPriceUsd > 0 ? formatUsd(c.price * pongPriceUsd) + ' / ' : '';
   const owned = ownedCount || 0;
   const crateType = c.crateType || 'skin';
-  const typeBadge = crateType === 'aura' ? '<span class="text-xs text-purple-400 ml-1.5">&#10024; Aura Crate</span>'
-    : crateType === 'mixed' ? '<span class="text-xs text-blue-400 ml-1.5">&#128256; Mixed</span>' : '';
+  const typeBadge = crateType === 'aura' ? '<span class="text-[10px] px-1.5 py-0.5 rounded bg-purple-900/50 text-purple-400">AURA</span>'
+    : crateType === 'mixed' ? '<span class="text-[10px] px-1.5 py-0.5 rounded bg-blue-900/50 text-blue-400">MIXED</span>' : '';
   return `
-    <div class="skin-card bg-arena-card rounded-xl p-4 border ${borderColor} cursor-pointer hover:border-purple-500 transition" onclick="openCratePreview('${c.crateId}')">
-      <div class="flex items-start justify-between mb-2">
-        <div>
-          <h4 class="font-bold">${esc(c.name)}${typeBadge}</h4>
-          <p class="text-gray-500 text-xs">${esc(c.description || '')}</p>
+    <div class="group bg-gray-900/40 rounded-xl border ${borderColor} cursor-pointer hover:border-purple-500 transition-all hover:shadow-[0_0_20px_rgba(168,85,247,0.15)]" onclick="openCratePreview('${c.crateId}')" style="background:${glowBg}">
+      <div class="flex gap-3 p-3">
+        <!-- Crate Illustration -->
+        <div class="w-16 h-16 flex-shrink-0 rounded-lg flex items-center justify-center" style="background:${esc(c.imageColor)}10">
+          ${getCrateIllustration(c.imageColor, crateType)}
         </div>
-        <div class="w-10 h-10 rounded-lg flex-shrink-0" style="background:${esc(c.imageColor)};box-shadow:0 0 15px ${esc(c.imageColor)}55"></div>
-      </div>
-      <div class="flex items-center gap-3 text-xs text-gray-400 mb-3">
-        <span>${c.rarityBreakdown.common} common</span>
-        <span class="text-purple-400">${c.rarityBreakdown.rare} rare</span>
-        <span class="text-yellow-400">${c.rarityBreakdown.legendary} legendary</span>
-      </div>
-      <div class="flex items-center justify-between">
-        <span class="text-sm font-bold text-white">${usdPrice}${c.price.toLocaleString()} $PONG</span>
-        <div class="flex gap-2">
-          ${owned > 0 ? `<button onclick="event.stopPropagation();openOwnedCrate('${c.crateId}')" class="bg-green-600 hover:bg-green-700 px-3 py-1.5 rounded-lg text-xs font-medium transition">Open (${owned})</button>` : ''}
-          <button onclick="event.stopPropagation();buyCrate('${c.crateId}')" class="bg-purple-600 hover:bg-purple-700 px-3 py-1.5 rounded-lg text-xs font-medium transition">Buy</button>
+        <!-- Info -->
+        <div class="flex-1 min-w-0">
+          <div class="flex items-center gap-1.5 mb-0.5">
+            <h4 class="font-bold text-sm truncate">${esc(c.name)}</h4>
+            ${typeBadge}
+          </div>
+          <p class="text-gray-500 text-xs truncate mb-1.5">${esc(c.description || '')}</p>
+          <div class="flex items-center gap-2 text-[10px] text-gray-500">
+            <span>${c.rarityBreakdown.common}C</span>
+            <span class="text-purple-400">${c.rarityBreakdown.rare}R</span>
+            <span class="text-yellow-400">${c.rarityBreakdown.legendary}L</span>
+            <span class="text-gray-600">|</span>
+            <span class="text-white font-semibold">${usdPrice}${c.price.toLocaleString()} $PONG</span>
+          </div>
         </div>
+      </div>
+      <div class="flex gap-2 px-3 pb-3">
+        ${owned > 0 ? `<button onclick="event.stopPropagation();openOwnedCrate('${c.crateId}')" class="flex-1 bg-green-600 hover:bg-green-700 py-1.5 rounded-lg text-xs font-medium transition text-center">Open (${owned})</button>` : ''}
+        <button onclick="event.stopPropagation();buyCrate('${c.crateId}')" class="flex-1 bg-purple-600 hover:bg-purple-700 py-1.5 rounded-lg text-xs font-medium transition text-center">Buy</button>
       </div>
     </div>
   `;
@@ -2999,7 +3022,7 @@ async function loadCosmetics() {
       grid.innerHTML = `
         <div class="col-span-full text-center py-10">
           <p class="text-gray-500 text-sm mb-3">No skins yet!</p>
-          <button onclick="openShopPanel()" class="bg-purple-600 hover:bg-purple-700 px-5 py-2 rounded-lg text-sm font-medium transition">Open Crates in Shop</button>
+          <button onclick="switchTab('shop')" class="bg-purple-600 hover:bg-purple-700 px-5 py-2 rounded-lg text-sm font-medium transition">Open Crates in Shop</button>
         </div>`;
     } else {
       grid.innerHTML = skins.map(s => {
