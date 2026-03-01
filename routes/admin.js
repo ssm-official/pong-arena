@@ -243,17 +243,29 @@ router.get('/shop-layout', adminAuth, async (req, res) => {
   }
 });
 
-// PUT /api/admin/shop-layout — save entire layout
+// PUT /api/admin/shop-layout — save entire layout (canvas elements or legacy sections)
 router.put('/shop-layout', adminAuth, async (req, res) => {
   try {
-    const { sections } = req.body;
+    const { sections, elements, canvasHeight } = req.body;
+
+    // Canvas mode: elements array provided
+    if (Array.isArray(elements)) {
+      const layout = await ShopLayout.findOneAndUpdate(
+        {},
+        { elements, canvasHeight: canvasHeight || 800, sections: [], updatedAt: new Date() },
+        { upsert: true, new: true }
+      );
+      return res.json({ layout });
+    }
+
+    // Legacy mode: sections array
     if (!Array.isArray(sections)) {
-      return res.status(400).json({ error: 'sections must be an array' });
+      return res.status(400).json({ error: 'elements or sections must be an array' });
     }
 
     const layout = await ShopLayout.findOneAndUpdate(
       {},
-      { sections, updatedAt: new Date() },
+      { sections, elements: [], updatedAt: new Date() },
       { upsert: true, new: true }
     );
 

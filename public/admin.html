@@ -146,69 +146,125 @@
       </div><!-- /admin-tab-crates -->
 
       <div id="admin-tab-layout" class="hidden">
-        <h2 class="text-xl font-bold mb-4">Shop Layout Builder</h2>
-        <p class="text-gray-400 text-sm mb-4">Design the shop page layout. Add sections with items, then save.</p>
+        <h2 class="text-xl font-bold mb-4">Shop Layout — Canvas Editor</h2>
+        <p class="text-gray-400 text-sm mb-4">Drag elements anywhere on the canvas to build your shop page.</p>
 
-        <div class="flex gap-4">
-          <!-- Section List (left) -->
-          <div class="w-64 flex-shrink-0">
-            <div class="flex items-center justify-between mb-3">
-              <h3 class="text-sm font-bold text-gray-300 uppercase">Sections</h3>
-              <div class="relative">
-                <button id="add-section-btn" onclick="document.getElementById('add-section-dropdown').classList.toggle('hidden')" class="bg-purple-600 hover:bg-purple-700 text-white text-xs px-3 py-1.5 rounded-lg font-medium">+ Add Section</button>
-                <div id="add-section-dropdown" class="hidden absolute right-0 mt-1 bg-gray-800 border border-gray-700 rounded-lg shadow-lg z-10 w-40">
-                  <button onclick="addSection('featured')" class="block w-full text-left px-3 py-2 text-sm text-gray-300 hover:bg-gray-700 rounded-t-lg">Featured</button>
-                  <button onclick="addSection('grid')" class="block w-full text-left px-3 py-2 text-sm text-gray-300 hover:bg-gray-700">Grid</button>
-                  <button onclick="addSection('banner')" class="block w-full text-left px-3 py-2 text-sm text-gray-300 hover:bg-gray-700 rounded-b-lg">Banner</button>
-                </div>
+        <div class="flex gap-3" style="min-height:600px">
+          <!-- LEFT TOOLBAR -->
+          <div class="w-56 flex-shrink-0 space-y-3">
+            <div class="bg-arena-card rounded-xl border border-gray-800 p-3">
+              <h3 class="text-xs font-bold text-gray-400 uppercase mb-2">Add Element</h3>
+              <div class="grid grid-cols-2 gap-2">
+                <button onclick="canvasAddElement('text')" class="bg-gray-700 hover:bg-gray-600 text-white text-xs px-2 py-2 rounded-lg font-medium">+ Text</button>
+                <button onclick="canvasAddElement('image')" class="bg-gray-700 hover:bg-gray-600 text-white text-xs px-2 py-2 rounded-lg font-medium">+ Image</button>
+                <button onclick="canvasAddElement('skin')" class="bg-purple-700 hover:bg-purple-600 text-white text-xs px-2 py-2 rounded-lg font-medium">+ Skin</button>
+                <button onclick="canvasAddElement('crate')" class="bg-blue-700 hover:bg-blue-600 text-white text-xs px-2 py-2 rounded-lg font-medium">+ Crate</button>
               </div>
             </div>
-            <div id="layout-section-list" class="space-y-2">
-              <p class="text-gray-500 text-sm text-center py-4">No sections yet</p>
+            <div class="bg-arena-card rounded-xl border border-gray-800 p-3">
+              <label class="block text-xs font-bold text-gray-400 uppercase mb-1">Canvas Height (px)</label>
+              <input id="canvas-height-input" type="number" value="800" min="400" max="4000" step="50"
+                class="w-full bg-gray-800 border border-gray-700 rounded-lg px-2 py-1.5 text-sm text-white"
+                oninput="canvasHeightPx=Number(this.value)||800;renderCanvas()" />
+            </div>
+            <div class="bg-arena-card rounded-xl border border-gray-800 p-3">
+              <h3 class="text-xs font-bold text-gray-400 uppercase mb-2">Elements (<span id="el-count">0</span>)</h3>
+              <div id="canvas-element-list" class="space-y-1 max-h-64 overflow-y-auto text-xs"></div>
+            </div>
+            <div class="flex gap-2">
+              <button onclick="saveCanvasLayout()" class="flex-1 bg-purple-600 hover:bg-purple-700 text-white px-4 py-2.5 rounded-lg font-bold text-sm">Save</button>
+              <a href="/" target="_blank" class="bg-gray-700 hover:bg-gray-600 text-white px-4 py-2.5 rounded-lg font-bold text-sm">Preview</a>
             </div>
           </div>
 
-          <!-- Section Editor (right) -->
-          <div class="flex-1 min-w-0">
-            <div id="layout-editor-empty" class="text-center py-16 text-gray-500">
-              <p class="text-lg mb-2">Select a section to edit</p>
-              <p class="text-sm">Or add a new section from the left panel</p>
-            </div>
-            <div id="layout-editor" class="hidden">
-              <div class="bg-arena-card rounded-xl border border-gray-800 p-4">
-                <div class="flex items-center gap-3 mb-4">
-                  <input id="layout-section-title" type="text" placeholder="Section Title" class="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white" oninput="updateSectionTitle(this.value)" />
-                  <span id="layout-section-type-badge" class="text-xs px-2 py-1 rounded bg-purple-900/50 text-purple-400 uppercase font-bold"></span>
-                </div>
-
-                <!-- Banner upload (only for banner type) -->
-                <div id="layout-banner-upload" class="hidden mb-4">
-                  <label class="block text-sm text-gray-400 mb-2">Banner Image</label>
-                  <div class="border-2 border-dashed border-gray-700 rounded-lg p-6 text-center cursor-pointer hover:border-purple-500 transition" onclick="document.getElementById('layout-banner-file').click()">
-                    <input id="layout-banner-file" type="file" class="hidden" accept="image/*" onchange="uploadBannerImage(this)" />
-                    <div id="layout-banner-preview" class="hidden mb-2"><img id="layout-banner-img" class="max-h-32 mx-auto rounded" /></div>
-                    <p class="text-gray-500 text-sm">Click to upload banner image</p>
-                  </div>
-                </div>
-
-                <!-- Items (for featured/grid) -->
-                <div id="layout-items-section">
-                  <div class="flex items-center justify-between mb-3">
-                    <h4 class="text-sm font-bold text-gray-300">Items</h4>
-                    <button onclick="openItemPicker()" class="bg-gray-700 hover:bg-gray-600 text-white text-xs px-3 py-1.5 rounded-lg font-medium">+ Add Item</button>
-                  </div>
-                  <div id="layout-items-list" class="space-y-2">
-                    <p class="text-gray-500 text-sm text-center py-4">No items in this section</p>
-                  </div>
-                </div>
+          <!-- CENTER CANVAS -->
+          <div class="flex-1 min-w-0 flex flex-col">
+            <div id="canvas-wrapper" class="flex-1 bg-gray-950 rounded-xl border border-gray-800 overflow-auto relative"
+              style="background-image:radial-gradient(circle,#333 1px,transparent 1px);background-size:20px 20px">
+              <div id="canvas-area" class="relative mx-auto" style="width:1200px"
+                onmousedown="canvasMouseDown(event)" onmousemove="canvasMouseMove(event)" onmouseup="canvasMouseUp(event)">
               </div>
             </div>
           </div>
-        </div>
 
-        <div class="flex gap-3 mt-6">
-          <button onclick="saveShopLayout()" class="bg-purple-600 hover:bg-purple-700 text-white px-6 py-2.5 rounded-lg font-bold text-sm">Save Layout</button>
-          <a href="/" target="_blank" class="bg-gray-700 hover:bg-gray-600 text-white px-6 py-2.5 rounded-lg font-bold text-sm inline-flex items-center gap-2">Preview Shop</a>
+          <!-- RIGHT PROPERTIES -->
+          <div class="w-56 flex-shrink-0">
+            <div id="props-panel" class="bg-arena-card rounded-xl border border-gray-800 p-3 hidden">
+              <h3 class="text-xs font-bold text-gray-400 uppercase mb-2">Properties</h3>
+              <div class="space-y-2 text-xs">
+                <div id="props-type-badge" class="text-center py-1 rounded bg-purple-900/50 text-purple-400 font-bold uppercase"></div>
+                <!-- Position / size -->
+                <div class="grid grid-cols-2 gap-1.5">
+                  <div><label class="text-gray-500">X %</label><input id="prop-x" type="number" step="0.5" class="w-full bg-gray-800 border border-gray-700 rounded px-1.5 py-1 text-white" onchange="propChanged('x',Number(this.value))"></div>
+                  <div><label class="text-gray-500">Y %</label><input id="prop-y" type="number" step="0.5" class="w-full bg-gray-800 border border-gray-700 rounded px-1.5 py-1 text-white" onchange="propChanged('y',Number(this.value))"></div>
+                  <div><label class="text-gray-500">W %</label><input id="prop-w" type="number" step="0.5" class="w-full bg-gray-800 border border-gray-700 rounded px-1.5 py-1 text-white" onchange="propChanged('w',Number(this.value))"></div>
+                  <div><label class="text-gray-500">H %</label><input id="prop-h" type="number" step="0.5" class="w-full bg-gray-800 border border-gray-700 rounded px-1.5 py-1 text-white" onchange="propChanged('h',Number(this.value))"></div>
+                </div>
+                <!-- Z-order -->
+                <div class="flex items-center gap-1">
+                  <label class="text-gray-500">Z:</label>
+                  <input id="prop-z" type="number" class="w-14 bg-gray-800 border border-gray-700 rounded px-1.5 py-1 text-white" onchange="propChanged('zIndex',Number(this.value))">
+                  <button onclick="moveZ(1)" class="bg-gray-700 hover:bg-gray-600 px-2 py-1 rounded text-gray-300" title="Bring forward">&#x25B2;</button>
+                  <button onclick="moveZ(-1)" class="bg-gray-700 hover:bg-gray-600 px-2 py-1 rounded text-gray-300" title="Send backward">&#x25BC;</button>
+                </div>
+                <!-- Text props -->
+                <div id="props-text" class="hidden space-y-1.5 border-t border-gray-700 pt-2">
+                  <label class="text-gray-500">Text</label>
+                  <textarea id="prop-text" rows="2" class="w-full bg-gray-800 border border-gray-700 rounded px-1.5 py-1 text-white text-xs" oninput="propChanged('text',this.value)"></textarea>
+                  <div class="grid grid-cols-2 gap-1.5">
+                    <div><label class="text-gray-500">Size (px)</label><input id="prop-fontSize" type="number" value="24" min="8" max="200" class="w-full bg-gray-800 border border-gray-700 rounded px-1.5 py-1 text-white" onchange="propChanged('fontSize',Number(this.value))"></div>
+                    <div><label class="text-gray-500">Color</label><input id="prop-fontColor" type="color" value="#ffffff" class="w-full h-7 bg-gray-800 border border-gray-700 rounded cursor-pointer" onchange="propChanged('fontColor',this.value)"></div>
+                  </div>
+                  <div class="grid grid-cols-2 gap-1.5">
+                    <div>
+                      <label class="text-gray-500">Weight</label>
+                      <select id="prop-fontWeight" class="w-full bg-gray-800 border border-gray-700 rounded px-1.5 py-1 text-white" onchange="propChanged('fontWeight',this.value)">
+                        <option value="normal">Normal</option><option value="bold">Bold</option><option value="800">Extra Bold</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label class="text-gray-500">Align</label>
+                      <select id="prop-textAlign" class="w-full bg-gray-800 border border-gray-700 rounded px-1.5 py-1 text-white" onchange="propChanged('textAlign',this.value)">
+                        <option value="left">Left</option><option value="center">Center</option><option value="right">Right</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+                <!-- Image props -->
+                <div id="props-image" class="hidden space-y-1.5 border-t border-gray-700 pt-2">
+                  <label class="text-gray-500">Image</label>
+                  <div class="border-2 border-dashed border-gray-700 rounded-lg p-3 text-center cursor-pointer hover:border-purple-500 transition" onclick="document.getElementById('canvas-img-file').click()">
+                    <input id="canvas-img-file" type="file" class="hidden" accept="image/*" onchange="uploadElementImage(this)" />
+                    <div id="prop-img-preview" class="mb-1"></div>
+                    <p class="text-gray-500 text-[10px]">Click to upload</p>
+                  </div>
+                </div>
+                <!-- Skin/Crate props -->
+                <div id="props-item" class="hidden space-y-1.5 border-t border-gray-700 pt-2">
+                  <div class="flex items-center justify-between">
+                    <label class="text-gray-500">Item</label>
+                    <button onclick="openItemPicker()" class="bg-gray-700 hover:bg-gray-600 text-white text-[10px] px-2 py-1 rounded">Change</button>
+                  </div>
+                  <div id="prop-item-preview" class="text-gray-300 text-xs"></div>
+                </div>
+                <!-- Common styling -->
+                <div class="border-t border-gray-700 pt-2 space-y-1.5">
+                  <div class="grid grid-cols-2 gap-1.5">
+                    <div><label class="text-gray-500">BG Color</label><input id="prop-bgColor" type="color" value="#111128" class="w-full h-7 bg-gray-800 border border-gray-700 rounded cursor-pointer" onchange="propChanged('backgroundColor',this.value)"></div>
+                    <div><label class="text-gray-500">Border</label><input id="prop-borderColor" type="color" value="#333333" class="w-full h-7 bg-gray-800 border border-gray-700 rounded cursor-pointer" onchange="propChanged('borderColor',this.value)"></div>
+                  </div>
+                  <div class="grid grid-cols-2 gap-1.5">
+                    <div><label class="text-gray-500">Radius</label><input id="prop-radius" type="number" min="0" max="50" value="8" class="w-full bg-gray-800 border border-gray-700 rounded px-1.5 py-1 text-white" onchange="propChanged('borderRadius',Number(this.value))"></div>
+                    <div><label class="text-gray-500">Opacity</label><input id="prop-opacity" type="number" min="0" max="1" step="0.05" value="1" class="w-full bg-gray-800 border border-gray-700 rounded px-1.5 py-1 text-white" onchange="propChanged('opacity',Number(this.value))"></div>
+                  </div>
+                </div>
+                <button onclick="deleteSelectedElement()" class="w-full bg-red-900 hover:bg-red-800 text-red-300 text-xs px-3 py-2 rounded-lg font-medium mt-2">Delete Element</button>
+              </div>
+            </div>
+            <div id="props-empty" class="bg-arena-card rounded-xl border border-gray-800 p-4 text-center text-gray-500 text-sm">
+              <p>Click an element to edit its properties</p>
+            </div>
+          </div>
         </div>
       </div><!-- /admin-tab-layout -->
 
@@ -708,7 +764,7 @@
     // ============================
     // ADMIN TAB SWITCHING
     // ============================
-    let adminPassword = adminPw; // alias for layout builder code
+    const adminContainer = document.querySelector('.max-w-4xl');
 
     function switchAdminTab(tab) {
       document.getElementById('admin-tab-crates').classList.toggle('hidden', tab !== 'crates');
@@ -719,183 +775,321 @@
       document.getElementById('admin-tab-btn-layout').className = tab === 'layout'
         ? 'px-4 py-2 rounded-lg text-sm font-bold bg-purple-600 text-white'
         : 'px-4 py-2 rounded-lg text-sm font-bold bg-gray-700 text-gray-300 hover:bg-gray-600';
+      // Widen container for layout canvas
+      if (adminContainer) {
+        adminContainer.classList.toggle('max-w-4xl', tab !== 'layout');
+        adminContainer.classList.toggle('max-w-7xl', tab === 'layout');
+      }
       if (tab === 'layout') loadShopLayout();
     }
 
     // ============================
-    // SHOP LAYOUT BUILDER
+    // CANVAS LAYOUT EDITOR
     // ============================
-    let layoutSections = [];
-    let selectedSectionIdx = -1;
+    let canvasElements = [];
+    let selectedElementId = null;
+    let canvasHeightPx = 800;
     let allPickerSkins = [];
     let allPickerCrates = [];
 
+    // Drag/resize state
+    let isDragging = false;
+    let isResizing = false;
+    let resizeCorner = '';
+    let dragStartX = 0, dragStartY = 0;
+    let dragElStartX = 0, dragElStartY = 0, dragElStartW = 0, dragElStartH = 0;
+
+    function getEl(id) { return canvasElements.find(e => e.id === id); }
+    function selectedEl() { return getEl(selectedElementId); }
+
     async function loadShopLayout() {
       try {
-        const res = await fetch('/api/admin/shop-layout', { headers: { 'X-Admin-Password': adminPw } });
-        const data = await res.json();
-        layoutSections = (data.layout && data.layout.sections) || [];
-        selectedSectionIdx = -1;
-        renderSectionList();
-        showSectionEditor(-1);
+        const [layoutRes, skinsRes, cratesRes] = await Promise.all([
+          fetch('/api/admin/shop-layout', { headers: { 'X-Admin-Password': adminPw } }).then(r => r.json()),
+          fetch('/api/admin/all-skins', { headers: { 'X-Admin-Password': adminPw } }).then(r => r.json()),
+          fetch('/api/admin/crates', { headers: { 'X-Admin-Password': adminPw } }).then(r => r.json()),
+        ]);
+        allPickerSkins = skinsRes.skins || [];
+        allPickerCrates = (cratesRes.crates || []).map(c => ({ ...c, _isCrate: true }));
+        const layout = layoutRes.layout || {};
+        canvasElements = (layout.elements && layout.elements.length > 0) ? layout.elements : [];
+        canvasHeightPx = layout.canvasHeight || 800;
+        document.getElementById('canvas-height-input').value = canvasHeightPx;
+        selectedElementId = null;
+        renderCanvas();
+        updatePropsPanel();
       } catch (err) { console.error('Failed to load layout:', err); }
     }
 
-    function renderSectionList() {
-      const container = document.getElementById('layout-section-list');
-      if (layoutSections.length === 0) {
-        container.innerHTML = '<p class="text-gray-500 text-sm text-center py-4">No sections yet</p>';
-        return;
+    function renderCanvas() {
+      const area = document.getElementById('canvas-area');
+      area.style.height = canvasHeightPx + 'px';
+      let html = '';
+      const sorted = [...canvasElements].sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0));
+      for (const el of sorted) {
+        const sel = el.id === selectedElementId;
+        const border = sel ? 'border:2px solid #a855f7;' : (el.borderColor ? `border:1px solid ${el.borderColor};` : '');
+        const bg = el.backgroundColor ? `background:${el.backgroundColor};` : '';
+        const radius = el.borderRadius ? `border-radius:${el.borderRadius}px;` : '';
+        const opacity = el.opacity != null ? `opacity:${el.opacity};` : '';
+        const base = `position:absolute;left:${el.x}%;top:${el.y}%;width:${el.w}%;height:${el.h}%;z-index:${el.zIndex||0};${border}${bg}${radius}${opacity}overflow:hidden;cursor:move;box-sizing:border-box;`;
+
+        let inner = '';
+        if (el.type === 'text') {
+          const fs = el.fontSize || 24;
+          const fc = el.fontColor || '#fff';
+          const fw = el.fontWeight || 'normal';
+          const ta = el.textAlign || 'left';
+          inner = `<div style="width:100%;height:100%;display:flex;align-items:center;padding:4px;font-size:${fs}px;color:${fc};font-weight:${fw};text-align:${ta};word-break:break-word;line-height:1.2;justify-content:${ta==='center'?'center':ta==='right'?'flex-end':'flex-start'}">${esc(el.text || 'Text')}</div>`;
+        } else if (el.type === 'image') {
+          inner = el.imageUrl ? `<img src="${esc(el.imageUrl)}" style="width:100%;height:100%;object-fit:contain;" />` : '<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:#666;font-size:12px">No image</div>';
+        } else if (el.type === 'skin') {
+          const skin = allPickerSkins.find(s => s.skinId === el.itemId);
+          if (skin) {
+            const preview = skin.type === 'color'
+              ? `<div style="width:40px;height:40px;border-radius:50%;background:${esc(skin.cssValue)};box-shadow:0 0 10px ${esc(skin.cssValue)}"></div>`
+              : `<img src="${esc(skin.imageUrl)}" style="height:60px;object-fit:contain" />`;
+            inner = `<div style="width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;padding:8px">${preview}<span style="font-size:11px;color:#fff;font-weight:bold">${esc(skin.name)}</span><span style="font-size:9px;color:${skin.rarity==='legendary'?'#eab308':skin.rarity==='rare'?'#a855f7':'#9ca3af'}">${skin.rarity}</span></div>`;
+          } else {
+            inner = `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:#a855f7;font-size:11px">Skin: ${esc(el.itemId||'?')}</div>`;
+          }
+        } else if (el.type === 'crate') {
+          const crate = allPickerCrates.find(c => c.crateId === el.itemId);
+          if (crate) {
+            inner = `<div style="width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;padding:8px"><div style="width:40px;height:40px;border-radius:8px;background:${esc(crate.imageColor||'#7c3aed')}30;border:2px solid ${esc(crate.imageColor||'#7c3aed')};display:flex;align-items:center;justify-content:center"><span style="font-size:18px">📦</span></div><span style="font-size:11px;color:#fff;font-weight:bold">${esc(crate.name)}</span></div>`;
+          } else {
+            inner = `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:#60a5fa;font-size:11px">Crate: ${esc(el.itemId||'?')}</div>`;
+          }
+        }
+
+        html += `<div data-elid="${el.id}" style="${base}">${inner}`;
+        if (sel) {
+          const h = 'width:10px;height:10px;background:#a855f7;position:absolute;border-radius:2px;z-index:9999;';
+          html += `<div data-resize="nw" style="${h}top:-5px;left:-5px;cursor:nw-resize"></div>`;
+          html += `<div data-resize="ne" style="${h}top:-5px;right:-5px;cursor:ne-resize"></div>`;
+          html += `<div data-resize="sw" style="${h}bottom:-5px;left:-5px;cursor:sw-resize"></div>`;
+          html += `<div data-resize="se" style="${h}bottom:-5px;right:-5px;cursor:se-resize"></div>`;
+        }
+        html += '</div>';
       }
-      container.innerHTML = layoutSections.map((s, i) => {
-        const typeColors = { featured: 'bg-yellow-900/50 text-yellow-400', grid: 'bg-blue-900/50 text-blue-400', banner: 'bg-green-900/50 text-green-400' };
-        const selected = i === selectedSectionIdx ? 'border-purple-500 bg-purple-900/20' : 'border-gray-700 hover:border-gray-600';
-        return `<div class="border ${selected} rounded-lg p-3 cursor-pointer transition" draggable="true" ondragstart="dragSection(event,${i})" ondragover="event.preventDefault()" ondrop="dropSection(event,${i})" onclick="showSectionEditor(${i})">
-          <div class="flex items-center justify-between">
-            <div class="flex items-center gap-2 min-w-0">
-              <span class="cursor-grab text-gray-600">&#x2807;</span>
-              <span class="text-sm font-medium text-white truncate">${esc(s.title || 'Untitled')}</span>
-            </div>
-            <div class="flex items-center gap-2 flex-shrink-0">
-              <span class="text-[10px] px-1.5 py-0.5 rounded ${typeColors[s.type] || 'bg-gray-800 text-gray-400'} uppercase font-bold">${s.type}</span>
-              <button onclick="event.stopPropagation();removeSection(${i})" class="text-gray-500 hover:text-red-400 text-sm">&times;</button>
-            </div>
-          </div>
-          <p class="text-xs text-gray-500 mt-1">${s.type === 'banner' ? 'Banner image' : (s.items ? s.items.length : 0) + ' items'}</p>
-        </div>`;
-      }).join('');
-    }
-
-    function addSection(type) {
-      document.getElementById('add-section-dropdown').classList.add('hidden');
-      const section = { id: crypto.randomUUID(), title: '', type, items: [], order: layoutSections.length, bannerImage: null };
-      layoutSections.push(section);
-      selectedSectionIdx = layoutSections.length - 1;
-      renderSectionList();
-      showSectionEditor(selectedSectionIdx);
-    }
-
-    function removeSection(idx) {
-      layoutSections.splice(idx, 1);
-      if (selectedSectionIdx === idx) selectedSectionIdx = -1;
-      else if (selectedSectionIdx > idx) selectedSectionIdx--;
-      renderSectionList();
-      showSectionEditor(selectedSectionIdx);
-    }
-
-    let dragSectionFrom = -1;
-    function dragSection(e, idx) { dragSectionFrom = idx; e.dataTransfer.effectAllowed = 'move'; }
-    function dropSection(e, idx) {
-      e.preventDefault();
-      if (dragSectionFrom < 0 || dragSectionFrom === idx) return;
-      const item = layoutSections.splice(dragSectionFrom, 1)[0];
-      layoutSections.splice(idx, 0, item);
-      if (selectedSectionIdx === dragSectionFrom) selectedSectionIdx = idx;
-      renderSectionList();
-      dragSectionFrom = -1;
-    }
-
-    function showSectionEditor(idx) {
-      selectedSectionIdx = idx;
-      renderSectionList();
-      const emptyEl = document.getElementById('layout-editor-empty');
-      const editorEl = document.getElementById('layout-editor');
-      if (idx < 0 || idx >= layoutSections.length) {
-        emptyEl.classList.remove('hidden');
-        editorEl.classList.add('hidden');
-        return;
-      }
-      emptyEl.classList.add('hidden');
-      editorEl.classList.remove('hidden');
-      const s = layoutSections[idx];
-      document.getElementById('layout-section-title').value = s.title || '';
-      document.getElementById('layout-section-type-badge').textContent = s.type;
-      document.getElementById('layout-banner-upload').classList.toggle('hidden', s.type !== 'banner');
-      document.getElementById('layout-items-section').classList.toggle('hidden', s.type === 'banner');
-      if (s.type === 'banner' && s.bannerImage) {
-        document.getElementById('layout-banner-preview').classList.remove('hidden');
-        document.getElementById('layout-banner-img').src = s.bannerImage;
+      area.innerHTML = html;
+      // Update element list
+      const listEl = document.getElementById('canvas-element-list');
+      document.getElementById('el-count').textContent = canvasElements.length;
+      if (canvasElements.length === 0) {
+        listEl.innerHTML = '<p class="text-gray-500 text-center py-2">Empty canvas</p>';
       } else {
-        document.getElementById('layout-banner-preview').classList.add('hidden');
+        listEl.innerHTML = canvasElements.map(el => {
+          const sel = el.id === selectedElementId ? 'bg-purple-900/40 border-purple-500' : 'border-gray-700 hover:border-gray-600';
+          const label = el.type === 'text' ? (el.text||'Text').slice(0,20) : el.type === 'image' ? 'Image' : el.type === 'skin' ? 'Skin' : 'Crate';
+          const typeColor = el.type === 'skin' ? 'text-purple-400' : el.type === 'crate' ? 'text-blue-400' : el.type === 'image' ? 'text-green-400' : 'text-gray-400';
+          return `<div class="border ${sel} rounded p-1.5 cursor-pointer flex items-center gap-1.5 transition" onclick="selectElement('${el.id}')">
+            <span class="${typeColor} font-bold uppercase" style="font-size:9px">${el.type}</span>
+            <span class="text-white truncate flex-1">${esc(label)}</span>
+            <span class="text-gray-600">${el.zIndex||0}</span>
+          </div>`;
+        }).join('');
       }
-      renderItemsList();
     }
 
-    function updateSectionTitle(val) {
-      if (selectedSectionIdx < 0) return;
-      layoutSections[selectedSectionIdx].title = val;
-      renderSectionList();
+    function canvasAddElement(type) {
+      const el = {
+        id: crypto.randomUUID(),
+        type,
+        x: 10, y: 10, w: type === 'text' ? 30 : 15, h: type === 'text' ? 5 : 15,
+        zIndex: canvasElements.length,
+        text: type === 'text' ? 'New Text' : '',
+        fontSize: 24, fontColor: '#ffffff', fontWeight: 'bold', textAlign: 'center',
+        imageUrl: '',
+        itemId: '',
+        backgroundColor: type === 'text' ? '' : '#111128',
+        borderRadius: 8, borderColor: '#333', opacity: 1,
+      };
+      canvasElements.push(el);
+      selectedElementId = el.id;
+      renderCanvas();
+      updatePropsPanel();
+      if (type === 'skin' || type === 'crate') openItemPicker();
     }
 
-    async function uploadBannerImage(input) {
-      if (!input.files[0] || selectedSectionIdx < 0) return;
+    function selectElement(id) {
+      selectedElementId = id;
+      renderCanvas();
+      updatePropsPanel();
+    }
+
+    function updatePropsPanel() {
+      const el = selectedEl();
+      const panel = document.getElementById('props-panel');
+      const empty = document.getElementById('props-empty');
+      if (!el) {
+        panel.classList.add('hidden');
+        empty.classList.remove('hidden');
+        return;
+      }
+      panel.classList.remove('hidden');
+      empty.classList.add('hidden');
+      document.getElementById('props-type-badge').textContent = el.type;
+      document.getElementById('prop-x').value = Math.round(el.x * 10) / 10;
+      document.getElementById('prop-y').value = Math.round(el.y * 10) / 10;
+      document.getElementById('prop-w').value = Math.round(el.w * 10) / 10;
+      document.getElementById('prop-h').value = Math.round(el.h * 10) / 10;
+      document.getElementById('prop-z').value = el.zIndex || 0;
+      // Toggle type-specific sections
+      document.getElementById('props-text').classList.toggle('hidden', el.type !== 'text');
+      document.getElementById('props-image').classList.toggle('hidden', el.type !== 'image');
+      document.getElementById('props-item').classList.toggle('hidden', el.type !== 'skin' && el.type !== 'crate');
+      if (el.type === 'text') {
+        document.getElementById('prop-text').value = el.text || '';
+        document.getElementById('prop-fontSize').value = el.fontSize || 24;
+        document.getElementById('prop-fontColor').value = el.fontColor || '#ffffff';
+        document.getElementById('prop-fontWeight').value = el.fontWeight || 'normal';
+        document.getElementById('prop-textAlign').value = el.textAlign || 'left';
+      }
+      if (el.type === 'image') {
+        document.getElementById('prop-img-preview').innerHTML = el.imageUrl ? `<img src="${esc(el.imageUrl)}" class="max-h-16 mx-auto rounded" />` : '';
+      }
+      if (el.type === 'skin' || el.type === 'crate') {
+        let itemName = el.itemId || 'None';
+        if (el.type === 'skin') { const s = allPickerSkins.find(s => s.skinId === el.itemId); if (s) itemName = s.name; }
+        if (el.type === 'crate') { const c = allPickerCrates.find(c => c.crateId === el.itemId); if (c) itemName = c.name; }
+        document.getElementById('prop-item-preview').textContent = itemName;
+      }
+      // Common styling
+      document.getElementById('prop-bgColor').value = el.backgroundColor || '#111128';
+      document.getElementById('prop-borderColor').value = el.borderColor || '#333333';
+      document.getElementById('prop-radius').value = el.borderRadius ?? 8;
+      document.getElementById('prop-opacity').value = el.opacity ?? 1;
+    }
+
+    function propChanged(prop, val) {
+      const el = selectedEl();
+      if (!el) return;
+      el[prop] = val;
+      renderCanvas();
+    }
+
+    function moveZ(dir) {
+      const el = selectedEl();
+      if (!el) return;
+      el.zIndex = (el.zIndex || 0) + dir;
+      document.getElementById('prop-z').value = el.zIndex;
+      renderCanvas();
+    }
+
+    function deleteSelectedElement() {
+      if (!selectedElementId) return;
+      canvasElements = canvasElements.filter(e => e.id !== selectedElementId);
+      selectedElementId = null;
+      renderCanvas();
+      updatePropsPanel();
+    }
+
+    // Keyboard delete
+    document.addEventListener('keydown', e => {
+      if ((e.key === 'Delete' || e.key === 'Backspace') && selectedElementId && !['INPUT','TEXTAREA','SELECT'].includes(document.activeElement.tagName)) {
+        deleteSelectedElement();
+      }
+    });
+
+    // Mouse events on canvas
+    function canvasMouseDown(e) {
+      const area = document.getElementById('canvas-area');
+      const rect = area.getBoundingClientRect();
+
+      // Check for resize handle
+      if (e.target.dataset.resize) {
+        isResizing = true;
+        resizeCorner = e.target.dataset.resize;
+        const el = selectedEl();
+        if (!el) return;
+        dragStartX = e.clientX;
+        dragStartY = e.clientY;
+        dragElStartX = el.x; dragElStartY = el.y;
+        dragElStartW = el.w; dragElStartH = el.h;
+        e.preventDefault();
+        return;
+      }
+
+      // Check if we clicked an element
+      const elDiv = e.target.closest('[data-elid]');
+      if (elDiv) {
+        const id = elDiv.dataset.elid;
+        selectedElementId = id;
+        const el = getEl(id);
+        if (el) {
+          isDragging = true;
+          dragStartX = e.clientX;
+          dragStartY = e.clientY;
+          dragElStartX = el.x;
+          dragElStartY = el.y;
+        }
+        renderCanvas();
+        updatePropsPanel();
+        e.preventDefault();
+        return;
+      }
+
+      // Clicked empty canvas — deselect
+      selectedElementId = null;
+      renderCanvas();
+      updatePropsPanel();
+    }
+
+    function canvasMouseMove(e) {
+      if (!isDragging && !isResizing) return;
+      const area = document.getElementById('canvas-area');
+      const rect = area.getBoundingClientRect();
+      const dx = e.clientX - dragStartX;
+      const dy = e.clientY - dragStartY;
+      const pctX = (dx / rect.width) * 100;
+      const pctY = (dy / rect.height) * 100;
+      const el = selectedEl();
+      if (!el) return;
+
+      if (isDragging) {
+        el.x = Math.max(0, Math.min(100 - el.w, dragElStartX + pctX));
+        el.y = Math.max(0, Math.min(100 - el.h, dragElStartY + pctY));
+      } else if (isResizing) {
+        let newX = dragElStartX, newY = dragElStartY, newW = dragElStartW, newH = dragElStartH;
+        if (resizeCorner.includes('e')) newW = Math.max(3, dragElStartW + pctX);
+        if (resizeCorner.includes('w')) { newW = Math.max(3, dragElStartW - pctX); newX = dragElStartX + pctX; }
+        if (resizeCorner.includes('s')) newH = Math.max(3, dragElStartH + pctY);
+        if (resizeCorner.includes('n')) { newH = Math.max(3, dragElStartH - pctY); newY = dragElStartY + pctY; }
+        el.x = Math.max(0, newX); el.y = Math.max(0, newY);
+        el.w = Math.min(100 - el.x, newW); el.h = Math.min(100 - el.y, newH);
+      }
+      renderCanvas();
+      updatePropsPanel();
+    }
+
+    function canvasMouseUp(e) {
+      isDragging = false;
+      isResizing = false;
+    }
+
+    async function uploadElementImage(input) {
+      if (!input.files[0] || !selectedElementId) return;
+      const el = selectedEl();
+      if (!el) return;
       const formData = new FormData();
       formData.append('image', input.files[0]);
       try {
         const res = await fetch('/api/admin/upload-banner', { method: 'POST', headers: { 'X-Admin-Password': adminPw }, body: formData });
         const data = await res.json();
         if (data.imageUrl) {
-          layoutSections[selectedSectionIdx].bannerImage = data.imageUrl;
-          document.getElementById('layout-banner-preview').classList.remove('hidden');
-          document.getElementById('layout-banner-img').src = data.imageUrl;
+          el.imageUrl = data.imageUrl;
+          renderCanvas();
+          updatePropsPanel();
         }
       } catch (err) { alert('Upload failed'); }
     }
 
-    function renderItemsList() {
-      const container = document.getElementById('layout-items-list');
-      if (selectedSectionIdx < 0) return;
-      const items = layoutSections[selectedSectionIdx].items || [];
-      if (items.length === 0) {
-        container.innerHTML = '<p class="text-gray-500 text-sm text-center py-4">No items in this section</p>';
-        return;
-      }
-      container.innerHTML = items.map((item, i) => {
-        const sizes = ['small', 'medium', 'large'];
-        return `<div class="flex items-center gap-3 bg-gray-800/50 rounded-lg p-2 border border-gray-700" draggable="true" ondragstart="dragItem(event,${i})" ondragover="event.preventDefault()" ondrop="dropItem(event,${i})">
-          <span class="cursor-grab text-gray-600">&#x2807;</span>
-          <span class="text-xs px-1.5 py-0.5 rounded ${item.itemType === 'skin' ? 'bg-purple-900/50 text-purple-400' : 'bg-blue-900/50 text-blue-400'} uppercase font-bold">${item.itemType}</span>
-          <span class="text-sm text-white flex-1 truncate">${esc(item.name || item.itemId)}</span>
-          <select class="bg-gray-700 text-xs text-white rounded px-1.5 py-1 border-0" onchange="setItemSize(${i},this.value)">${sizes.map(sz => `<option value="${sz}" ${item.size===sz?'selected':''}>${sz[0].toUpperCase()+sz.slice(1)}</option>`).join('')}</select>
-          <button onclick="removeItem(${i})" class="text-gray-500 hover:text-red-400 text-sm">&times;</button>
-        </div>`;
-      }).join('');
-    }
-
-    let dragItemFrom = -1;
-    function dragItem(e, idx) { dragItemFrom = idx; e.dataTransfer.effectAllowed = 'move'; }
-    function dropItem(e, idx) {
-      e.preventDefault();
-      if (dragItemFrom < 0 || dragItemFrom === idx || selectedSectionIdx < 0) return;
-      const items = layoutSections[selectedSectionIdx].items;
-      const item = items.splice(dragItemFrom, 1)[0];
-      items.splice(idx, 0, item);
-      renderItemsList();
-      dragItemFrom = -1;
-    }
-
-    function setItemSize(idx, size) {
-      if (selectedSectionIdx < 0) return;
-      layoutSections[selectedSectionIdx].items[idx].size = size;
-    }
-
-    function removeItem(idx) {
-      if (selectedSectionIdx < 0) return;
-      layoutSections[selectedSectionIdx].items.splice(idx, 1);
-      renderItemsList();
-    }
-
+    // Item picker — rewired for canvas
     async function openItemPicker() {
       document.getElementById('item-picker-modal').classList.remove('hidden');
-      try {
-        const [skinsRes, cratesRes] = await Promise.all([
-          fetch('/api/admin/all-skins', { headers: { 'X-Admin-Password': adminPw } }).then(r => r.json()),
-          fetch('/api/admin/crates', { headers: { 'X-Admin-Password': adminPw } }).then(r => r.json()),
-        ]);
-        allPickerSkins = skinsRes.skins || [];
-        allPickerCrates = (cratesRes.crates || []).map(c => ({ ...c, _isCrate: true }));
-        filterItemPicker('');
-      } catch (err) { console.error('Item picker load error:', err); }
+      document.getElementById('item-picker-search').value = '';
+      filterItemPicker('');
     }
 
     function closeItemPicker() { document.getElementById('item-picker-modal').classList.add('hidden'); }
@@ -903,8 +1097,10 @@
     function filterItemPicker(q) {
       const lower = q.toLowerCase();
       const container = document.getElementById('item-picker-list');
-      const filteredSkins = allPickerSkins.filter(s => s.name.toLowerCase().includes(lower));
-      const filteredCrates = allPickerCrates.filter(c => c.name.toLowerCase().includes(lower));
+      const el = selectedEl();
+      const filterType = el ? el.type : null; // only show matching type
+      const filteredSkins = (filterType === 'skin' || !filterType) ? allPickerSkins.filter(s => s.name.toLowerCase().includes(lower)) : [];
+      const filteredCrates = (filterType === 'crate' || !filterType) ? allPickerCrates.filter(c => c.name.toLowerCase().includes(lower)) : [];
       let html = '';
       if (filteredCrates.length > 0) {
         html += '<p class="text-xs text-gray-500 uppercase font-bold mb-1">Crates</p>';
@@ -927,26 +1123,37 @@
     }
 
     function pickItem(itemType, itemId, name) {
-      if (selectedSectionIdx < 0) return;
-      if (!layoutSections[selectedSectionIdx].items) layoutSections[selectedSectionIdx].items = [];
-      layoutSections[selectedSectionIdx].items.push({
-        id: crypto.randomUUID(), itemType, itemId, name, size: 'medium', order: layoutSections[selectedSectionIdx].items.length
-      });
+      const el = selectedEl();
+      if (el && (el.type === 'skin' || el.type === 'crate')) {
+        el.itemId = itemId;
+        closeItemPicker();
+        renderCanvas();
+        updatePropsPanel();
+        return;
+      }
       closeItemPicker();
-      renderItemsList();
-      renderSectionList();
     }
 
-    async function saveShopLayout() {
+    async function saveCanvasLayout() {
       try {
-        layoutSections.forEach((s, i) => { s.order = i; if (s.items) s.items.forEach((it, j) => { it.order = j; }); });
+        const cleaned = canvasElements.map(el => {
+          const o = { id: el.id, type: el.type, x: el.x, y: el.y, w: el.w, h: el.h, zIndex: el.zIndex || 0 };
+          if (el.type === 'text') { o.text = el.text; o.fontSize = el.fontSize; o.fontColor = el.fontColor; o.fontWeight = el.fontWeight; o.textAlign = el.textAlign; }
+          if (el.type === 'image') o.imageUrl = el.imageUrl;
+          if (el.type === 'skin' || el.type === 'crate') o.itemId = el.itemId;
+          if (el.backgroundColor) o.backgroundColor = el.backgroundColor;
+          if (el.borderRadius) o.borderRadius = el.borderRadius;
+          if (el.borderColor) o.borderColor = el.borderColor;
+          if (el.opacity != null && el.opacity !== 1) o.opacity = el.opacity;
+          return o;
+        });
         const res = await fetch('/api/admin/shop-layout', {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json', 'X-Admin-Password': adminPw },
-          body: JSON.stringify({ sections: layoutSections }),
+          body: JSON.stringify({ elements: cleaned, canvasHeight: canvasHeightPx }),
         });
         const data = await res.json();
-        if (data.layout) alert('Shop layout saved!');
+        if (data.layout) alert('Canvas layout saved!');
         else alert('Error: ' + (data.error || 'Unknown'));
       } catch (err) { alert('Save failed: ' + err.message); }
     }

@@ -1705,9 +1705,16 @@ async function loadShop() {
 
     const layoutContainer = document.getElementById('shop-layout-container');
     const fallback = document.getElementById('shop-fallback');
+    const ownedSkinIds = (res.inventory || []).map(s => s.skinId);
 
-    // If layout has sections, render layout-driven shop
-    if (layout && layout.sections && layout.sections.length > 0) {
+    // Canvas layout (new)
+    if (layout && layout.elements && layout.elements.length > 0) {
+      layoutContainer.innerHTML = '';
+      fallback.classList.add('hidden');
+      layoutContainer.innerHTML = renderCanvasShop(layout, allSkins, allCrates, ownedSkinIds, ownedCrates);
+    }
+    // Section-based layout (legacy)
+    else if (layout && layout.sections && layout.sections.length > 0) {
       layoutContainer.innerHTML = '';
       fallback.classList.add('hidden');
 
@@ -1765,6 +1772,83 @@ function renderShopSection(section, allSkins, allCrates, ownedCrates) {
       ${section.title ? `<h3 class="text-lg font-bold text-white mb-3 ${isFeatured ? 'text-xl bg-gradient-to-r from-yellow-400 to-purple-400 bg-clip-text text-transparent' : ''}">${esc(section.title)}</h3>` : ''}
       <div class="grid ${gridCols} gap-3">${tilesHtml}</div>
     </div>`;
+}
+
+function renderCanvasShop(layout, allSkins, allCrates, ownedSkinIds, ownedCrates) {
+  const ch = layout.canvasHeight || 800;
+  const aspectPct = (ch / 1200) * 100;
+  const sorted = [...layout.elements].sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0));
+  let elHtml = '';
+  for (const el of sorted) {
+    const bg = el.backgroundColor ? `background:${esc(el.backgroundColor)};` : '';
+    const radius = el.borderRadius ? `border-radius:${el.borderRadius}px;` : '';
+    const border = el.borderColor ? `border:1px solid ${esc(el.borderColor)};` : '';
+    const opacity = el.opacity != null ? `opacity:${el.opacity};` : '';
+    const base = `position:absolute;left:${el.x}%;top:${el.y}%;width:${el.w}%;height:${el.h}%;z-index:${el.zIndex||0};${bg}${radius}${border}${opacity}overflow:hidden;box-sizing:border-box;`;
+
+    if (el.type === 'text') {
+      const fs = el.fontSize || 24;
+      const fc = el.fontColor || '#fff';
+      const fw = el.fontWeight || 'normal';
+      const ta = el.textAlign || 'left';
+      const jc = ta === 'center' ? 'center' : ta === 'right' ? 'flex-end' : 'flex-start';
+      elHtml += `<div style="${base}"><div style="width:100%;height:100%;display:flex;align-items:center;padding:4px 8px;font-size:clamp(${Math.max(8,Math.round(fs*0.4))}px,${fs/12}vw,${fs}px);color:${fc};font-weight:${fw};text-align:${ta};word-break:break-word;line-height:1.2;justify-content:${jc}">${esc(el.text || '')}</div></div>`;
+    } else if (el.type === 'image') {
+      elHtml += `<div style="${base}">${el.imageUrl ? `<img src="${esc(el.imageUrl)}" style="width:100%;height:100%;object-fit:contain" />` : ''}</div>`;
+    } else if (el.type === 'skin') {
+      const skin = allSkins.find(s => s.skinId === el.itemId);
+      if (!skin) { elHtml += `<div style="${base}"></div>`; continue; }
+      const owned = ownedSkinIds.includes(skin.skinId);
+      const rarityColor = skin.rarity === 'legendary' ? '#eab308' : skin.rarity === 'rare' ? '#a855f7' : '#6b7280';
+      const rarityBg = skin.rarity === 'legendary' ? 'rgba(234,179,8,0.15)' : skin.rarity === 'rare' ? 'rgba(168,85,247,0.15)' : 'rgba(107,114,128,0.1)';
+      let preview;
+      if (skin.type === 'color') {
+        preview = `<div style="width:40px;height:40px;border-radius:50%;background:${esc(skin.cssValue)};box-shadow:0 0 12px ${esc(skin.cssValue)}"></div>`;
+      } else {
+        preview = `<img src="${esc(skin.imageUrl)}" style="max-height:60%;object-fit:contain" />`;
+      }
+      const priceDisplay = skin.price != null ? (pongPriceUsd > 0 ? formatUsd(skin.price * pongPriceUsd) + ' / ' : '') + Number(skin.price).toLocaleString() + ' $PONG' : '';
+      let actionHtml;
+      if (owned) {
+        actionHtml = '<span style="color:#4ade80;font-size:11px;font-weight:600">Owned</span>';
+      } else if (priceDisplay) {
+        actionHtml = `<button onclick="buySkin('${skin.skinId}')" style="background:#7c3aed;color:#fff;border:none;padding:4px 10px;border-radius:6px;font-size:10px;font-weight:600;cursor:pointer">${priceDisplay}</button>`;
+      } else {
+        actionHtml = '<span style="color:#6b7280;font-size:10px">Crate only</span>';
+      }
+      elHtml += `<div style="${base}border:1px solid ${rarityColor}40;cursor:pointer" class="hover:border-purple-500 transition-all">
+        <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:4px;padding:8px;background:${rarityBg}">
+          ${preview}
+          <div style="text-align:center">
+            <div style="font-size:clamp(10px,1.2vw,13px);font-weight:bold;color:#fff">${esc(skin.name)}</div>
+            <div style="font-size:9px;color:${rarityColor};text-transform:uppercase">${skin.rarity}</div>
+          </div>
+          ${actionHtml}
+        </div>
+      </div>`;
+    } else if (el.type === 'crate') {
+      const crate = allCrates.find(c => c.crateId === el.itemId);
+      if (!crate) { elHtml += `<div style="${base}"></div>`; continue; }
+      const owned = ownedCrates[crate.crateId] || 0;
+      const usdPrice = pongPriceUsd > 0 ? formatUsd(crate.price * pongPriceUsd) + ' / ' : '';
+      const c = esc(crate.imageColor || '#7c3aed');
+      elHtml += `<div style="${base}cursor:pointer" onclick="openCratePreview('${crate.crateId}')" class="hover:border-purple-500 transition-all">
+        <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:6px;padding:8px">
+          <div style="width:48px;height:48px"><svg viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:100%"><rect x="14" y="28" width="52" height="38" rx="4" fill="#1a1a3a" stroke="${c}" stroke-width="2"/><rect x="14" y="28" width="52" height="13" rx="4" fill="${c}" opacity="0.25"/><line x1="40" y1="28" x2="40" y2="66" stroke="${c}" stroke-width="2" opacity="0.5"/><rect x="32" y="41" width="16" height="8" rx="2" fill="${c}" opacity="0.6"/><path d="M30 28 L40 16 L50 28" stroke="${c}" stroke-width="2" fill="${c}" fill-opacity="0.15" stroke-linejoin="round"/></svg></div>
+          <div style="text-align:center">
+            <div style="font-size:clamp(10px,1.2vw,13px);font-weight:bold;color:#fff">${esc(crate.name)}</div>
+            <div style="font-size:9px;color:#9ca3af">${crate.totalSkins || '?'} skins</div>
+            <div style="font-size:10px;color:#a855f7;font-weight:500;margin-top:2px">${usdPrice}${Number(crate.price).toLocaleString()} $PONG</div>
+          </div>
+          <div style="display:flex;gap:4px;flex-wrap:wrap;justify-content:center">
+            ${owned > 0 ? `<button onclick="event.stopPropagation();openOwnedCrate('${crate.crateId}')" style="background:#16a34a;color:#fff;border:none;padding:3px 8px;border-radius:6px;font-size:10px;font-weight:600;cursor:pointer">Open (${owned})</button>` : ''}
+            <button onclick="event.stopPropagation();buyCrate('${crate.crateId}')" style="background:#7c3aed;color:#fff;border:none;padding:3px 8px;border-radius:6px;font-size:10px;font-weight:600;cursor:pointer">Buy</button>
+          </div>
+        </div>
+      </div>`;
+    }
+  }
+  return `<div style="position:relative;width:100%;padding-bottom:${aspectPct}%;overflow:hidden">${elHtml}</div>`;
 }
 
 function renderShopTile(item, size, isFeatured, ownedCount) {
