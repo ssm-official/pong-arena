@@ -24,22 +24,6 @@ async function getPlayerSkin(wallet) {
   }
 }
 
-/**
- * Look up a player's equipped aura data from DB.
- */
-async function getPlayerAura(wallet) {
-  try {
-    const user = await User.findOne({ wallet }).select('equippedAura');
-    if (!user || !user.equippedAura || user.equippedAura === 'none') return null;
-    const skin = await Skin.findOne({ skinId: user.equippedAura, type: 'aura' });
-    if (!skin) return null;
-    let config = null;
-    try { config = JSON.parse(skin.cssValue); } catch { return null; }
-    return { skinId: skin.skinId, name: skin.name, rarity: skin.rarity, config };
-  } catch {
-    return null;
-  }
-}
 
 const SKIP_ESCROW = process.env.SKIP_ESCROW === 'true';
 if (SKIP_ESCROW) console.log('⚠ SKIP_ESCROW mode: games start without token escrow');
@@ -96,24 +80,20 @@ async function startCustomStakeMatch(io, p1, p2, stakeAmount, activeGames) {
   });
 
   if (SKIP_ESCROW) {
-    const [p1Skin, p2Skin, p1Aura, p2Aura] = await Promise.all([
+    const [p1Skin, p2Skin] = await Promise.all([
       getPlayerSkin(p1.wallet),
       getPlayerSkin(p2.wallet),
-      getPlayerAura(p1.wallet),
-      getPlayerAura(p2.wallet),
     ]);
     p1.skin = p1Skin;
     p2.skin = p2Skin;
-    p1.aura = p1Aura;
-    p2.aura = p2Aura;
 
     const game = new PongEngine(gameId, p1, p2, 'duel', io, activeGames, stakeAmount);
     activeGames.set(gameId, game);
 
     const countdownData = {
       gameId, seconds: 30, tier: 'duel',
-      player1: { wallet: p1.wallet, username: p1.username, skin: p1Skin, aura: p1Aura },
-      player2: { wallet: p2.wallet, username: p2.username, skin: p2Skin, aura: p2Aura },
+      player1: { wallet: p1.wallet, username: p1.username, skin: p1Skin },
+      player2: { wallet: p2.wallet, username: p2.username, skin: p2Skin },
       stakeAmount,
       useReadySystem: true,
     };
@@ -285,16 +265,12 @@ function setupMatchmaking(io, socket, onlineUsers, activeGames) {
     if (pending.p1Escrowed && pending.p2Escrowed) {
       pendingEscrow.delete(gameId);
 
-      const [p1Skin, p2Skin, p1Aura, p2Aura] = await Promise.all([
+      const [p1Skin, p2Skin] = await Promise.all([
         getPlayerSkin(pending.player1.wallet),
         getPlayerSkin(pending.player2.wallet),
-        getPlayerAura(pending.player1.wallet),
-        getPlayerAura(pending.player2.wallet),
       ]);
       pending.player1.skin = p1Skin;
       pending.player2.skin = p2Skin;
-      pending.player1.aura = p1Aura;
-      pending.player2.aura = p2Aura;
 
       const customStake = pending.stakeAmount || null;
       const game = new PongEngine(
@@ -311,8 +287,8 @@ function setupMatchmaking(io, socket, onlineUsers, activeGames) {
 
       const countdownData = {
         gameId, seconds: 30, tier: pending.tier,
-        player1: { wallet: pending.player1.wallet, username: pending.player1.username, skin: p1Skin, aura: p1Aura },
-        player2: { wallet: pending.player2.wallet, username: pending.player2.username, skin: p2Skin, aura: p2Aura },
+        player1: { wallet: pending.player1.wallet, username: pending.player1.username, skin: p1Skin },
+        player2: { wallet: pending.player2.wallet, username: pending.player2.username, skin: p2Skin },
         stakeAmount: customStake || STAKE_TIERS[pending.tier],
         useReadySystem: true,
       };
@@ -596,24 +572,20 @@ async function createMatch(io, player1, player2, tier, activeGames, customStakeA
   });
 
   if (SKIP_ESCROW) {
-    const [p1Skin, p2Skin, p1Aura, p2Aura] = await Promise.all([
+    const [p1Skin, p2Skin] = await Promise.all([
       getPlayerSkin(player1.wallet),
       getPlayerSkin(player2.wallet),
-      getPlayerAura(player1.wallet),
-      getPlayerAura(player2.wallet),
     ]);
     player1.skin = p1Skin;
     player2.skin = p2Skin;
-    player1.aura = p1Aura;
-    player2.aura = p2Aura;
 
     const game = new PongEngine(gameId, player1, player2, tier, io, activeGames, stakeAmount);
     activeGames.set(gameId, game);
 
     const countdownData = {
       gameId, seconds: 30, tier,
-      player1: { wallet: player1.wallet, username: player1.username, skin: p1Skin, aura: p1Aura },
-      player2: { wallet: player2.wallet, username: player2.username, skin: p2Skin, aura: p2Aura },
+      player1: { wallet: player1.wallet, username: player1.username, skin: p1Skin },
+      player2: { wallet: player2.wallet, username: player2.username, skin: p2Skin },
       stakeAmount,
       useReadySystem: true,
     };

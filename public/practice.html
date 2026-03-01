@@ -190,8 +190,7 @@
     const SKIN_DRAW_H = 200;
     let playerSkin = null;
     let playerSkinImage = null;
-    let playerAuraConfig = null;
-    let auraTime = 0;
+
 
     // Bot AI state
     let botTargetY = CANVAS_H / 2;
@@ -229,16 +228,8 @@
             }
           }
         }
-        // Load equipped aura (use top-level equippedAura skinId from API)
-        const equippedAuraId = shopData.equippedAura || 'none';
-        const auraSkin = equippedAuraId !== 'none'
-          ? inventory.find(s => s.type === 'aura' && s.skinId === equippedAuraId)
-          : null;
-        if (auraSkin && auraSkin.cssValue) {
-          try {
-            playerAuraConfig = JSON.parse(auraSkin.cssValue);
-          } catch (e) { /* ignore */ }
-        }
+
+
       } catch (e) {
         // Silent fail — just use default purple
       }
@@ -584,211 +575,6 @@
       return ball.y + BALL_SIZE / 2;
     }
 
-    // =============================================
-    // AURA EFFECTS (ported from game-client.js)
-    // =============================================
-    function drawAura(x, y, aura, t) {
-      if (!aura || !aura.effect) return;
-      const intensity = aura.intensity || 1.0;
-      const speed = aura.speed || 1.0;
-      const color = aura.color || '#a855f7';
-      const color2 = aura.color2 || color;
-      const st = t * speed;
-      switch (aura.effect) {
-        case 'glow-pulse': drawGlowPulse(x, y, color, intensity, st); break;
-        case 'particle-trail': drawParticleTrail(x, y, color, color2, intensity, st); break;
-        case 'ring-orbit': drawRingOrbit(x, y, color, intensity, st); break;
-        case 'flame': drawFlame(x, y, color, color2, intensity, st); break;
-        case 'electric': drawElectric(x, y, color, intensity, st); break;
-        case 'rainbow': drawRainbow(x, y, intensity, st); break;
-        case 'frost': drawFrost(x, y, color, intensity, st); break;
-      }
-    }
-    function drawGlowPulse(x, y, color, intensity, t) {
-      ctx.save();
-      const pulse = 0.5 + 0.5 * Math.sin(t * 3);
-      const blur = (15 + pulse * 20) * intensity;
-      ctx.shadowColor = color;
-      ctx.shadowBlur = blur;
-      ctx.fillStyle = 'rgba(0,0,0,0)';
-      ctx.beginPath();
-      ctx.roundRect(x - 4, y - 4, PADDLE_W + 8, PADDLE_H + 8, 8);
-      ctx.fill();
-      ctx.shadowBlur = blur * 0.6;
-      ctx.fill();
-      ctx.shadowBlur = 0;
-      ctx.restore();
-    }
-    function drawParticleTrail(x, y, color, color2, intensity, t) {
-      ctx.save();
-      const count = Math.floor(12 * intensity);
-      for (let i = 0; i < count; i++) {
-        const seed = i * 137.508;
-        const phase = (t * 2 + seed) % 4;
-        const side = i % 4;
-        let px, py;
-        const progress = phase / 4;
-        if (side === 0) { px = x + progress * PADDLE_W; py = y - 3 + Math.sin(t * 3 + seed) * 5; }
-        else if (side === 1) { px = x + PADDLE_W + 3 + Math.sin(t * 3 + seed) * 5; py = y + progress * PADDLE_H; }
-        else if (side === 2) { px = x + PADDLE_W - progress * PADDLE_W; py = y + PADDLE_H + 3 + Math.sin(t * 3 + seed) * 5; }
-        else { px = x - 3 + Math.sin(t * 3 + seed) * 5; py = y + PADDLE_H - progress * PADDLE_H; }
-        const size = (2 + Math.sin(t * 5 + seed) * 1.5) * intensity;
-        const alpha = 0.4 + 0.3 * Math.sin(t * 4 + seed);
-        ctx.globalAlpha = alpha;
-        ctx.fillStyle = i % 2 === 0 ? color : color2;
-        ctx.beginPath();
-        ctx.arc(px, py, size, 0, Math.PI * 2);
-        ctx.fill();
-      }
-      ctx.globalAlpha = 1;
-      ctx.restore();
-    }
-    function drawRingOrbit(x, y, color, intensity, t) {
-      ctx.save();
-      const cx = x + PADDLE_W / 2;
-      const cy = y + PADDLE_H / 2;
-      const count = Math.floor(6 * intensity);
-      for (let i = 0; i < count; i++) {
-        const angle = (t * 2 + i * (Math.PI * 2 / count));
-        const rx = (PADDLE_W / 2 + 12) * intensity;
-        const ry = (PADDLE_H / 2 + 8) * intensity;
-        const px = cx + Math.cos(angle) * rx;
-        const py = cy + Math.sin(angle) * ry;
-        const size = 2.5 * intensity;
-        ctx.fillStyle = color;
-        ctx.shadowColor = color;
-        ctx.shadowBlur = 6;
-        ctx.globalAlpha = 0.7;
-        ctx.beginPath();
-        ctx.arc(px, py, size, 0, Math.PI * 2);
-        ctx.fill();
-      }
-      ctx.shadowBlur = 0;
-      ctx.globalAlpha = 1;
-      ctx.restore();
-    }
-    function drawFlame(x, y, color, color2, intensity, t) {
-      ctx.save();
-      const count = Math.floor(16 * intensity);
-      for (let i = 0; i < count; i++) {
-        const seed = i * 97.31;
-        const edge = i % 2;
-        const baseX = edge === 0 ? x - 2 : x + PADDLE_W + 2;
-        const baseY = y + (i / count) * PADDLE_H;
-        const flicker = Math.sin(t * 8 + seed) * 4 + Math.sin(t * 13 + seed * 2) * 2;
-        const rise = Math.sin(t * 6 + seed) * 6;
-        const px = baseX + (edge === 0 ? -flicker : flicker);
-        const py = baseY + rise;
-        const size = (1.5 + Math.sin(t * 10 + seed) * 1.5) * intensity;
-        const alpha = 0.3 + 0.4 * Math.abs(Math.sin(t * 7 + seed));
-        ctx.globalAlpha = alpha;
-        ctx.fillStyle = Math.sin(t * 5 + seed) > 0 ? color : color2;
-        ctx.beginPath();
-        ctx.arc(px, py, size, 0, Math.PI * 2);
-        ctx.fill();
-      }
-      ctx.globalAlpha = 1;
-      ctx.restore();
-    }
-    function drawElectric(x, y, color, intensity, t) {
-      ctx.save();
-      ctx.strokeStyle = color;
-      ctx.shadowColor = color;
-      ctx.shadowBlur = 8;
-      ctx.lineWidth = 1.5 * intensity;
-      const segments = Math.floor(6 * intensity);
-      for (let i = 0; i < segments; i++) {
-        const seed = i * 53.7;
-        if (Math.sin(t * 12 + seed) < 0.2) continue;
-        ctx.globalAlpha = 0.5 + 0.5 * Math.abs(Math.sin(t * 15 + seed));
-        const startAngle = (t * 3 + seed) % (Math.PI * 2);
-        const cx = x + PADDLE_W / 2;
-        const cy = y + PADDLE_H / 2;
-        const r = PADDLE_W / 2 + 6 + Math.sin(t * 8 + seed) * 4;
-        ctx.beginPath();
-        const sx = cx + Math.cos(startAngle) * r;
-        const sy = cy + Math.sin(startAngle) * (PADDLE_H / 2 + 6);
-        ctx.moveTo(sx, sy);
-        for (let j = 1; j <= 3; j++) {
-          const a = startAngle + j * 0.3;
-          const jr = r + (Math.random() - 0.5) * 8 * intensity;
-          ctx.lineTo(cx + Math.cos(a) * jr, cy + Math.sin(a) * (PADDLE_H / 2 + 6 + (Math.random() - 0.5) * 6));
-        }
-        ctx.stroke();
-      }
-      ctx.shadowBlur = 0;
-      ctx.globalAlpha = 1;
-      ctx.restore();
-    }
-    function drawRainbow(x, y, intensity, t) {
-      ctx.save();
-      const hue = (t * 60) % 360;
-      const color = `hsl(${hue}, 100%, 60%)`;
-      const pulse = 0.5 + 0.5 * Math.sin(t * 2);
-      const blur = (12 + pulse * 18) * intensity;
-      ctx.shadowColor = color;
-      ctx.shadowBlur = blur;
-      ctx.fillStyle = 'rgba(0,0,0,0)';
-      ctx.beginPath();
-      ctx.roundRect(x - 4, y - 4, PADDLE_W + 8, PADDLE_H + 8, 8);
-      ctx.fill();
-      ctx.shadowBlur = blur * 0.5;
-      ctx.fill();
-      const cx = x + PADDLE_W / 2;
-      const cy = y + PADDLE_H / 2;
-      const count = Math.floor(4 * intensity);
-      for (let i = 0; i < count; i++) {
-        const a = t * 2 + i * (Math.PI * 2 / count);
-        const h2 = (hue + i * 90) % 360;
-        ctx.shadowBlur = 4;
-        ctx.shadowColor = `hsl(${h2}, 100%, 60%)`;
-        ctx.fillStyle = `hsl(${h2}, 100%, 60%)`;
-        ctx.globalAlpha = 0.6;
-        ctx.beginPath();
-        ctx.arc(cx + Math.cos(a) * (PADDLE_W / 2 + 10), cy + Math.sin(a) * (PADDLE_H / 2 + 6), 2 * intensity, 0, Math.PI * 2);
-        ctx.fill();
-      }
-      ctx.shadowBlur = 0;
-      ctx.globalAlpha = 1;
-      ctx.restore();
-    }
-    function drawFrost(x, y, color, intensity, t) {
-      ctx.save();
-      const frostColor = color || '#93c5fd';
-      const count = Math.floor(10 * intensity);
-      for (let i = 0; i < count; i++) {
-        const seed = i * 173.13;
-        const phase = ((t * 0.5 + seed / 100) % 3) / 3;
-        const side = i % 4;
-        let px, py;
-        if (side === 0) { px = x + phase * PADDLE_W; py = y - 4 + Math.sin(t + seed) * 3; }
-        else if (side === 1) { px = x + PADDLE_W + 4 + Math.sin(t + seed) * 3; py = y + phase * PADDLE_H; }
-        else if (side === 2) { px = x + PADDLE_W * (1 - phase); py = y + PADDLE_H + 4 + Math.sin(t + seed) * 3; }
-        else { px = x - 4 + Math.sin(t + seed) * 3; py = y + PADDLE_H * (1 - phase); }
-        const size = (1.5 + Math.sin(t * 0.8 + seed) * 0.8) * intensity;
-        ctx.globalAlpha = 0.3 + 0.3 * Math.sin(t * 0.7 + seed);
-        ctx.strokeStyle = frostColor;
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.moveTo(px - size, py); ctx.lineTo(px + size, py);
-        ctx.moveTo(px, py - size); ctx.lineTo(px, py + size);
-        ctx.stroke();
-        ctx.fillStyle = frostColor;
-        ctx.beginPath();
-        ctx.arc(px, py, size * 0.5, 0, Math.PI * 2);
-        ctx.fill();
-      }
-      ctx.shadowColor = frostColor;
-      ctx.shadowBlur = 8 * intensity;
-      ctx.fillStyle = 'rgba(0,0,0,0)';
-      ctx.globalAlpha = 0.3;
-      ctx.beginPath();
-      ctx.roundRect(x - 3, y - 3, PADDLE_W + 6, PADDLE_H + 6, 6);
-      ctx.fill();
-      ctx.shadowBlur = 0;
-      ctx.globalAlpha = 1;
-      ctx.restore();
-    }
 
     // =============================================
     // RENDERING
@@ -816,10 +602,6 @@
       ctx.textAlign = 'center';
       ctx.fillText(score.player, CANVAS_W / 4, CANVAS_H / 2 + 50);
       ctx.fillText(score.bot, (CANVAS_W * 3) / 4, CANVAS_H / 2 + 50);
-
-      // Player aura (drawn behind paddle)
-      auraTime++;
-      if (playerAuraConfig) drawAura(P1_X, simState.paddle1.y, playerAuraConfig, auraTime * 0.016);
 
       // Left paddle (player) - purple with glow
       drawPaddle(P1_X, simState.paddle1.y, true);

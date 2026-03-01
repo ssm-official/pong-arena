@@ -8,6 +8,7 @@ const multer = require('multer');
 const crypto = require('crypto');
 const Crate = require('../models/Crate');
 const Skin = require('../models/Skin');
+const ShopLayout = require('../models/ShopLayout');
 
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'P0ngAr3naAdm1n!2024';
 
@@ -139,14 +140,16 @@ router.delete('/crate/:crateId', adminAuth, async (req, res) => {
 // POST /api/admin/skin — create skin with PNG upload
 router.post('/skin', adminAuth, upload.single('image'), async (req, res) => {
   try {
-    const { name, description, rarity, crateId, type } = req.body;
-    if (!name || !crateId) {
-      return res.status(400).json({ error: 'Name and crateId are required' });
+    const { name, description, rarity, crateId, type, price } = req.body;
+    if (!name) {
+      return res.status(400).json({ error: 'Name is required' });
     }
 
-    // Verify crate exists
-    const crate = await Crate.findOne({ crateId });
-    if (!crate) return res.status(404).json({ error: 'Crate not found' });
+    // Verify crate exists if provided
+    if (crateId) {
+      const crate = await Crate.findOne({ crateId });
+      if (!crate) return res.status(404).json({ error: 'Crate not found' });
+    }
 
     const skinId = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
       + '-' + crypto.randomBytes(3).toString('hex');
@@ -156,13 +159,17 @@ router.post('/skin', adminAuth, upload.single('image'), async (req, res) => {
       name,
       description: description || '',
       rarity: rarity || 'common',
-      crateId,
+      crateId: crateId || null,
       type: type || (req.file ? 'image' : 'color'),
     };
 
+    if (price !== undefined && price !== '' && price !== null) {
+      skinData.price = Number(price);
+    }
+
     if (req.file) {
       skinData.imageUrl = toDataUrl(req.file);
-      if (skinData.type !== 'aura') skinData.type = 'image';
+      skinData.type = 'image';
     }
 
     if (req.body.cssValue) {
@@ -189,12 +196,13 @@ router.put('/skin/:skinId', adminAuth, upload.single('image'), async (req, res) 
     if (req.body.rarity !== undefined) update.rarity = req.body.rarity;
     if (req.body.type !== undefined) update.type = req.body.type;
     if (req.body.cssValue !== undefined) update.cssValue = req.body.cssValue;
-    if (req.body.crateId !== undefined) update.crateId = req.body.crateId;
+    if (req.body.crateId !== undefined) update.crateId = req.body.crateId || null;
+    if (req.body.price !== undefined) update.price = req.body.price !== '' && req.body.price !== null ? Number(req.body.price) : null;
 
     // If a new image was uploaded, store as base64 data URL
     if (req.file) {
       update.imageUrl = toDataUrl(req.file);
-      if ((update.type || skin.type) !== 'aura') update.type = 'image';
+      update.type = 'image';
     }
 
     const updated = await Skin.findOneAndUpdate(
@@ -218,6 +226,62 @@ router.delete('/skin/:skinId', adminAuth, async (req, res) => {
     res.json({ status: 'deleted' });
   } catch (err) {
     res.status(500).json({ error: 'Failed to delete skin' });
+  }
+});
+
+// ===========================================
+// Shop Layout CRUD
+// ===========================================
+
+// GET /api/admin/shop-layout — get current layout
+router.get('/shop-layout', adminAuth, async (req, res) => {
+  try {
+    const layout = await ShopLayout.findOne({}) || { sections: [] };
+    res.json({ layout });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch shop layout' });
+  }
+});
+
+// PUT /api/admin/shop-layout — save entire layout
+router.put('/shop-layout', adminAuth, async (req, res) => {
+  try {
+    const { sections } = req.body;
+    if (!Array.isArray(sections)) {
+      return res.status(400).json({ error: 'sections must be an array' });
+    }
+
+    const layout = await ShopLayout.findOneAndUpdate(
+      {},
+      { sections, updatedAt: new Date() },
+      { upsert: true, new: true }
+    );
+
+    res.json({ layout });
+  } catch (err) {
+    console.error('Save layout error:', err);
+    res.status(500).json({ error: 'Failed to save shop layout' });
+  }
+});
+
+// POST /api/admin/upload-banner — upload banner image, return base64 data URL
+router.post('/upload-banner', adminAuth, upload.single('image'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'No image uploaded' });
+    const dataUrl = toDataUrl(req.file);
+    res.json({ imageUrl: dataUrl });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to upload banner' });
+  }
+});
+
+// GET /api/admin/all-skins — list all skins (for item picker)
+router.get('/all-skins', adminAuth, async (req, res) => {
+  try {
+    const skins = await Skin.find({}).sort({ name: 1 });
+    res.json({ skins });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch skins' });
   }
 });
 

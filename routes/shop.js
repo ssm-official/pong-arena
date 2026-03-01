@@ -1,5 +1,5 @@
 // ===========================================
-// Shop Routes — Crate-based skin shop
+// Shop Routes — Crate + Skin shop with layout
 // ===========================================
 
 const express = require('express');
@@ -7,6 +7,7 @@ const router = express.Router();
 const User = require('../models/User');
 const Skin = require('../models/Skin');
 const Crate = require('../models/Crate');
+const ShopLayout = require('../models/ShopLayout');
 const { authMiddleware, optionalAuth } = require('../middleware/auth');
 const { buildSkinPurchaseTransaction, verifyEscrowTx, burnSkinRevenue, PONG_DECIMALS } = require('../solana/utils');
 
@@ -24,7 +25,7 @@ router.get('/', optionalAuth, async (req, res) => {
     // Try to get user data if wallet is available (auth succeeded)
     let user = null;
     if (req.wallet) {
-      user = await User.findOne({ wallet: req.wallet }).select('skins equippedSkin equippedAura ownedCrates');
+      user = await User.findOne({ wallet: req.wallet }).select('skins equippedSkin ownedCrates');
     }
     const ownedIds = user ? user.skins.map(s => s.skinId) : [];
 
@@ -44,8 +45,7 @@ router.get('/', optionalAuth, async (req, res) => {
     });
 
     const limited = cratesWithSkins.filter(c => c.limited);
-    const aura = cratesWithSkins.filter(c => !c.limited && c.crateType === 'aura');
-    const standard = cratesWithSkins.filter(c => !c.limited && c.crateType !== 'aura');
+    const standard = cratesWithSkins.filter(c => !c.limited);
 
     // Build inventory — owned skins with full data
     const inventory = skins
@@ -63,7 +63,18 @@ router.get('/', optionalAuth, async (req, res) => {
       });
     }
 
-    res.json({ limited, aura, standard, inventory, equippedSkin: user?.equippedSkin || 'default', equippedAura: user?.equippedAura || 'none', ownedCrates: ownedCratesMap });
+    // Standalone skins (direct purchase, have a price set)
+    const standaloneSkins = skins
+      .filter(s => s.price != null)
+      .map(s => ({
+        ...s.toObject(),
+        owned: ownedIds.includes(s.skinId),
+      }));
+
+    // Shop layout
+    const layout = await ShopLayout.findOne({}) || { sections: [] };
+
+    res.json({ limited, standard, skins: standaloneSkins, layout, inventory, equippedSkin: user?.equippedSkin || 'default', ownedCrates: ownedCratesMap });
   } catch (err) {
     console.error('Shop fetch error:', err);
     res.status(500).json({ error: 'Failed to fetch shop' });
@@ -253,37 +264,88 @@ router.post('/equip', authMiddleware, async (req, res) => {
   }
 });
 
+
 /**
- * POST /api/shop/equip-aura
- * Equip an owned aura. Body: { skinId }
+ * GET /api/shop/layout
+ * Returns just the shop layout (for non-auth browsing).
  */
-router.post('/equip-aura', authMiddleware, async (req, res) => {
+router.get('/layout', async (req, res) => {
+  try {
+    const layout = await ShopLayout.findOne({}) || { sections: [] };
+    res.json({ layout });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch layout' });
+  }
+});
+
+/**
+ * POST /api/shop/buy-skin
+ * Direct skin purchase. Body: { skinId }
+ */
+router.post('/buy-skin', authMiddleware, async (req, res) => {
   try {
     const { skinId } = req.body;
     if (!skinId) return res.status(400).json({ error: 'Missing skinId' });
 
-    if (skinId === 'none') {
-      await User.findOneAndUpdate({ wallet: req.wallet }, { equippedAura: 'none' });
-      return res.json({ status: 'equipped', skinId: 'none' });
+    const skin = await Skin.findOne({ skinId });
+    if (!skin) return res.status(404).json({ error: 'Skin not found' });
+    if (skin.price == null) return res.status(400).json({ error: 'Skin is not available for direct purchase' });
+
+    // Check not already owned
+    const user = await User.findOne({ wallet: req.wallet }).select('skins');
+    if (user && user.skins.some(s => s.skinId === skinId)) {
+      return res.status(400).json({ error: 'You already own this skin' });
     }
 
-    const user = await User.findOne({ wallet: req.wallet }).select('skins');
-    if (!user) return res.status(404).json({ error: 'User not found' });
+    // Price is in USD cents — convert to PONG display units
+    // For now, use price field directly as PONG display units (admin sets PONG price)
+    const pongPrice = skin.price;
+    const priceBaseUnits = pongPrice * (10 ** PONG_DECIMALS);
+    const { transaction } = await buildSkinPurchaseTransaction(req.wallet, priceBaseUnits);
 
-    if (!user.skins.some(s => s.skinId === skinId)) {
-      return res.status(400).json({ error: 'You don\'t own this item' });
+    res.json({ transaction, skinId, price: priceBaseUnits });
+  } catch (err) {
+    console.error('Buy skin error:', err);
+    res.status(500).json({ error: 'Failed to create purchase transaction' });
+  }
+});
+
+/**
+ * POST /api/shop/confirm-skin
+ * Verify on-chain, grant skin. Body: { skinId, txSignature }
+ */
+router.post('/confirm-skin', authMiddleware, async (req, res) => {
+  try {
+    const { skinId, txSignature } = req.body;
+    if (!skinId || !txSignature) {
+      return res.status(400).json({ error: 'Missing skinId or txSignature' });
     }
 
     const skin = await Skin.findOne({ skinId });
-    if (!skin || skin.type !== 'aura') {
-      return res.status(400).json({ error: 'Item is not an aura' });
+    if (!skin || skin.price == null) return res.status(404).json({ error: 'Skin not found' });
+
+    const pongPrice = skin.price;
+    const priceBaseUnits = pongPrice * (10 ** PONG_DECIMALS);
+    const verified = await verifyEscrowTx(txSignature, priceBaseUnits, req.wallet);
+    if (!verified) {
+      return res.status(400).json({ error: 'Transaction not confirmed on-chain' });
     }
 
-    await User.findOneAndUpdate({ wallet: req.wallet }, { equippedAura: skinId });
-    res.json({ status: 'equipped', skinId });
+    // Grant skin
+    await User.findOneAndUpdate(
+      { wallet: req.wallet },
+      { $push: { skins: { skinId } } }
+    );
+
+    // Burn 90% of revenue
+    burnSkinRevenue(priceBaseUnits).catch(err => {
+      console.error('Skin burn failed:', err.message);
+    });
+
+    res.json({ status: 'purchased', skinId });
   } catch (err) {
-    console.error('Equip aura error:', err.message);
-    res.status(500).json({ error: 'Failed to equip aura: ' + err.message });
+    console.error('Confirm skin error:', err);
+    res.status(500).json({ error: 'Skin purchase failed' });
   }
 });
 

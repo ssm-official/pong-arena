@@ -7,7 +7,7 @@ const crateSchema = new mongoose.Schema({
   price: { type: Number, required: true },      // in $PONG display units (e.g. 10000)
   imageColor: { type: String, default: '#7c3aed' }, // hex for UI card glow
   limited: { type: Boolean, default: false },
-  crateType: { type: String, enum: ['skin', 'aura', 'mixed'], default: 'skin' },
+  crateType: { type: String, enum: ['skin'], default: 'skin' },
   active: { type: Boolean, default: true },
   createdAt: { type: Date, default: Date.now },
 });

@@ -159,8 +159,8 @@ io.on('connection', (socket) => {
 
       socket.emit('rejoin-game', {
         gameId,
-        player1: { wallet: game.player1.wallet, username: game.player1.username, skin: game.player1.skin || null, aura: game.player1.aura || null },
-        player2: { wallet: game.player2.wallet, username: game.player2.username, skin: game.player2.skin || null, aura: game.player2.aura || null },
+        player1: { wallet: game.player1.wallet, username: game.player1.username, skin: game.player1.skin || null },
+        player2: { wallet: game.player2.wallet, username: game.player2.username, skin: game.player2.skin || null },
         tier: game.tier,
         state: game.state,
       });
@@ -267,13 +267,6 @@ mongoose.connect(MONGODB_URI)
     console.log('Connected to MongoDB');
     await seedSkins();
 
-    // One-time fix: aura skins saved as type 'image' due to bug
-    const Skin = require('./models/Skin');
-    const fixed = await Skin.updateMany(
-      { type: { $ne: 'aura' }, cssValue: { $regex: '"effect"' } },
-      { $set: { type: 'aura' } }
-    );
-    if (fixed.modifiedCount > 0) console.log(`Fixed ${fixed.modifiedCount} aura skin(s) with wrong type`);
     const PORT = process.env.PORT || 3000;
     server.listen(PORT, () => {
       console.log(`Pong Arena running at http://localhost:${PORT}`);

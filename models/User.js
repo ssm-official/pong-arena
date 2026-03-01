@@ -24,7 +24,6 @@ const userSchema = new mongoose.Schema({
     purchasedAt: { type: Date, default: Date.now }
   }],
   equippedSkin: { type: String, default: 'default' },
-  equippedAura: { type: String, default: 'none' },
   stats: {
     wins: { type: Number, default: 0 },
     losses: { type: Number, default: 0 },
