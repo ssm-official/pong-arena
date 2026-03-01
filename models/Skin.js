@@ -5,7 +5,7 @@ const skinSchema = new mongoose.Schema({
   name: { type: String, required: true },
   description: String,
   rarity: { type: String, enum: ['common', 'rare', 'legendary'], default: 'common' },
-  type: { type: String, enum: ['color', 'image'], default: 'color' },
+  type: { type: String, enum: ['color', 'image', 'aura'], default: 'color' },
   cssValue: String,       // hex color for type:'color'
   imageUrl: String,       // path like /skins/golden-warrior.png for type:'image'
   crateId: { type: String, required: true },  // links to parent Crate

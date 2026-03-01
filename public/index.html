@@ -983,9 +983,26 @@
             </div>
           </div>
 
-          <!-- Inventory Grid -->
-          <div id="cosmetics-inventory" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+          <!-- Equipped Aura Preview -->
+          <div class="bg-arena-card rounded-xl p-5 border border-gray-800 mb-4 flex items-center gap-5">
+            <div id="cosmetics-aura-preview" class="w-8 h-8 flex items-center justify-center text-gray-600 text-xl flex-shrink-0">&#10024;</div>
+            <div>
+              <p class="text-xs text-gray-500 uppercase tracking-wider mb-0.5">Equipped Aura</p>
+              <h3 id="cosmetics-equipped-aura-name" class="text-lg font-bold text-white">None</h3>
+              <span id="cosmetics-equipped-aura-rarity" class="text-xs px-2 py-0.5 rounded bg-gray-800 text-gray-400 hidden">common</span>
+            </div>
+          </div>
+
+          <!-- Paddle Skins -->
+          <h3 class="text-sm font-bold text-gray-400 uppercase tracking-wider mb-2">Paddle Skins</h3>
+          <div id="cosmetics-inventory" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 mb-6">
             <p class="text-gray-500 text-sm col-span-full text-center py-8">Loading your skins...</p>
+          </div>
+
+          <!-- Auras -->
+          <h3 class="text-sm font-bold text-gray-400 uppercase tracking-wider mb-2">Auras</h3>
+          <div id="cosmetics-aura-inventory" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+            <p class="text-gray-500 text-sm col-span-full text-center py-4">No auras yet.</p>
           </div>
         </div>
       </div>
@@ -1381,7 +1398,7 @@
   <script src="https://cdn.jsdelivr.net/npm/@solana/web3.js@1.87.6/lib/index.iife.min.js"></script>
   <script src="/js/wallet.js?v=33"></script>
   <script src="/js/pong-sim.js?v=34"></script>
-  <script src="/js/game-client.js?v=38"></script>
-  <script src="/js/app.js?v=52"></script>
+  <script src="/js/game-client.js?v=39"></script>
+  <script src="/js/app.js?v=53"></script>
 </body>
 </html>

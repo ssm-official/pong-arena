@@ -76,6 +76,11 @@ const GameClient = (() => {
   let mySkinImage = null;
   let opponentSkinImage = null;
 
+  // Aura data for both players
+  let myAura = null;
+  let opponentAura = null;
+  let auraTime = 0;
+
   // --- Own paddle ---
   let myY = CANVAS_H / 2 - PADDLE_H / 2;
 
@@ -152,6 +157,16 @@ const GameClient = (() => {
       skinConfig.paddle = mySkin.cssValue;
     } else if (!mySkin) {
       skinConfig.paddle = '#a855f7';
+    }
+  }
+
+  function setPlayerAuras(p1Aura, p2Aura) {
+    if (amPlayer1) {
+      myAura = p1Aura;
+      opponentAura = p2Aura;
+    } else {
+      myAura = p2Aura;
+      opponentAura = p1Aura;
     }
   }
 
@@ -252,6 +267,9 @@ const GameClient = (() => {
       window.socket.emit('paddle-sync', { gameId, y: myY });
     }
 
+    // Advance aura animation clock
+    auraTime += delta / 1000;
+
     // Opponent paddle: smooth lerp toward target
     const oppDiff = oppTargetY - oppDisplayY;
     if (Math.abs(oppDiff) < 1) {
@@ -302,10 +320,19 @@ const GameClient = (() => {
     const p1Y = amPlayer1 ? myDisplayY : oppY;
     const p2Y = amPlayer1 ? oppY : myDisplayY;
 
+    // Determine aura assignments per visual slot
+    const p1Aura = amPlayer1 ? myAura : opponentAura;
+    const p2Aura = amPlayer1 ? opponentAura : myAura;
+
     if (!mirrored) {
+      // Draw auras BEFORE paddles so paddle renders on top
+      if (p1Aura && p1Aura.config) drawAura(PongSim.P1_X, p1Y, p1Aura, auraTime);
+      if (p2Aura && p2Aura.config) drawAura(PongSim.P2_LEFT, p2Y, p2Aura, auraTime);
       drawPaddle(PongSim.P1_X, p1Y, amPlayer1, amPlayer1 ? mySkin : opponentSkin, amPlayer1 ? mySkinImage : opponentSkinImage, false);
       drawPaddle(PongSim.P2_LEFT, p2Y, !amPlayer1, !amPlayer1 ? mySkin : opponentSkin, !amPlayer1 ? mySkinImage : opponentSkinImage, true);
     } else {
+      if (p2Aura && p2Aura.config) drawAura(PongSim.P1_X, p2Y, p2Aura, auraTime);
+      if (p1Aura && p1Aura.config) drawAura(PongSim.P2_LEFT, p1Y, p1Aura, auraTime);
       drawPaddle(PongSim.P1_X, p2Y, !amPlayer1, !amPlayer1 ? mySkin : opponentSkin, !amPlayer1 ? mySkinImage : opponentSkinImage, false);
       drawPaddle(PongSim.P2_LEFT, p1Y, amPlayer1, amPlayer1 ? mySkin : opponentSkin, amPlayer1 ? mySkinImage : opponentSkinImage, true);
     }
@@ -385,6 +412,236 @@ const GameClient = (() => {
     ctx.shadowBlur = 0;
   }
 
+  // ===========================================
+  // AURA EFFECTS — 7 animated canvas effects
+  // ===========================================
+  function drawAura(x, y, aura, t) {
+    const cfg = aura.config;
+    if (!cfg || !cfg.effect) return;
+    const intensity = cfg.intensity || 1.0;
+    const speed = cfg.speed || 1.0;
+    const color = cfg.color || '#a855f7';
+    const color2 = cfg.color2 || color;
+    const st = t * speed; // speed-adjusted time
+
+    switch (cfg.effect) {
+      case 'glow-pulse': drawGlowPulse(x, y, color, intensity, st); break;
+      case 'particle-trail': drawParticleTrail(x, y, color, color2, intensity, st); break;
+      case 'ring-orbit': drawRingOrbit(x, y, color, intensity, st); break;
+      case 'flame': drawFlame(x, y, color, color2, intensity, st); break;
+      case 'electric': drawElectric(x, y, color, intensity, st); break;
+      case 'rainbow': drawRainbow(x, y, intensity, st); break;
+      case 'frost': drawFrost(x, y, color, intensity, st); break;
+    }
+  }
+
+  function drawGlowPulse(x, y, color, intensity, t) {
+    ctx.save();
+    const cx = x + PADDLE_W / 2;
+    const cy = y + PADDLE_H / 2;
+    const pulse = 0.5 + 0.5 * Math.sin(t * 3);
+    const blur = (15 + pulse * 20) * intensity;
+    ctx.shadowColor = color;
+    ctx.shadowBlur = blur;
+    ctx.fillStyle = 'rgba(0,0,0,0)';
+    ctx.beginPath();
+    ctx.roundRect(x - 4, y - 4, PADDLE_W + 8, PADDLE_H + 8, 8);
+    ctx.fill();
+    // Double pass for stronger glow
+    ctx.shadowBlur = blur * 0.6;
+    ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.restore();
+  }
+
+  function drawParticleTrail(x, y, color, color2, intensity, t) {
+    ctx.save();
+    const count = Math.floor(12 * intensity);
+    for (let i = 0; i < count; i++) {
+      const seed = i * 137.508; // golden angle
+      const phase = (t * 2 + seed) % 4;
+      const side = i % 4; // 0=top, 1=right, 2=bottom, 3=left
+      let px, py;
+      const progress = phase / 4;
+      if (side === 0) { px = x + progress * PADDLE_W; py = y - 3 + Math.sin(t * 3 + seed) * 5; }
+      else if (side === 1) { px = x + PADDLE_W + 3 + Math.sin(t * 3 + seed) * 5; py = y + progress * PADDLE_H; }
+      else if (side === 2) { px = x + PADDLE_W - progress * PADDLE_W; py = y + PADDLE_H + 3 + Math.sin(t * 3 + seed) * 5; }
+      else { px = x - 3 + Math.sin(t * 3 + seed) * 5; py = y + PADDLE_H - progress * PADDLE_H; }
+      const size = (2 + Math.sin(t * 5 + seed) * 1.5) * intensity;
+      const alpha = 0.4 + 0.3 * Math.sin(t * 4 + seed);
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = i % 2 === 0 ? color : color2;
+      ctx.beginPath();
+      ctx.arc(px, py, size, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+    ctx.restore();
+  }
+
+  function drawRingOrbit(x, y, color, intensity, t) {
+    ctx.save();
+    const cx = x + PADDLE_W / 2;
+    const cy = y + PADDLE_H / 2;
+    const count = Math.floor(6 * intensity);
+    for (let i = 0; i < count; i++) {
+      const angle = (t * 2 + i * (Math.PI * 2 / count));
+      const rx = (PADDLE_W / 2 + 12) * intensity;
+      const ry = (PADDLE_H / 2 + 8) * intensity;
+      const px = cx + Math.cos(angle) * rx;
+      const py = cy + Math.sin(angle) * ry;
+      const size = 2.5 * intensity;
+      ctx.fillStyle = color;
+      ctx.shadowColor = color;
+      ctx.shadowBlur = 6;
+      ctx.globalAlpha = 0.7;
+      ctx.beginPath();
+      ctx.arc(px, py, size, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.shadowBlur = 0;
+    ctx.globalAlpha = 1;
+    ctx.restore();
+  }
+
+  function drawFlame(x, y, color, color2, intensity, t) {
+    ctx.save();
+    const count = Math.floor(16 * intensity);
+    for (let i = 0; i < count; i++) {
+      const seed = i * 97.31;
+      const edge = i % 2; // 0=left edge, 1=right edge
+      const baseX = edge === 0 ? x - 2 : x + PADDLE_W + 2;
+      const baseY = y + (i / count) * PADDLE_H;
+      const flicker = Math.sin(t * 8 + seed) * 4 + Math.sin(t * 13 + seed * 2) * 2;
+      const rise = Math.sin(t * 6 + seed) * 6;
+      const px = baseX + (edge === 0 ? -flicker : flicker);
+      const py = baseY + rise;
+      const size = (1.5 + Math.sin(t * 10 + seed) * 1.5) * intensity;
+      const alpha = 0.3 + 0.4 * Math.abs(Math.sin(t * 7 + seed));
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = Math.sin(t * 5 + seed) > 0 ? color : color2;
+      ctx.beginPath();
+      ctx.arc(px, py, size, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+    ctx.restore();
+  }
+
+  function drawElectric(x, y, color, intensity, t) {
+    ctx.save();
+    ctx.strokeStyle = color;
+    ctx.shadowColor = color;
+    ctx.shadowBlur = 8;
+    ctx.lineWidth = 1.5 * intensity;
+    const segments = Math.floor(6 * intensity);
+    for (let i = 0; i < segments; i++) {
+      const seed = i * 53.7;
+      // Only draw if "active" this frame (flickering)
+      if (Math.sin(t * 12 + seed) < 0.2) continue;
+      ctx.globalAlpha = 0.5 + 0.5 * Math.abs(Math.sin(t * 15 + seed));
+      const startAngle = (t * 3 + seed) % (Math.PI * 2);
+      const cx = x + PADDLE_W / 2;
+      const cy = y + PADDLE_H / 2;
+      const r = PADDLE_W / 2 + 6 + Math.sin(t * 8 + seed) * 4;
+      ctx.beginPath();
+      const sx = cx + Math.cos(startAngle) * r;
+      const sy = cy + Math.sin(startAngle) * (PADDLE_H / 2 + 6);
+      ctx.moveTo(sx, sy);
+      for (let j = 1; j <= 3; j++) {
+        const a = startAngle + j * 0.3;
+        const jr = r + (Math.random() - 0.5) * 8 * intensity;
+        ctx.lineTo(
+          cx + Math.cos(a) * jr,
+          cy + Math.sin(a) * (PADDLE_H / 2 + 6 + (Math.random() - 0.5) * 6)
+        );
+      }
+      ctx.stroke();
+    }
+    ctx.shadowBlur = 0;
+    ctx.globalAlpha = 1;
+    ctx.restore();
+  }
+
+  function drawRainbow(x, y, intensity, t) {
+    ctx.save();
+    const hue = (t * 60) % 360;
+    const color = `hsl(${hue}, 100%, 60%)`;
+    const cx = x + PADDLE_W / 2;
+    const cy = y + PADDLE_H / 2;
+    const pulse = 0.5 + 0.5 * Math.sin(t * 2);
+    const blur = (12 + pulse * 18) * intensity;
+    ctx.shadowColor = color;
+    ctx.shadowBlur = blur;
+    ctx.fillStyle = 'rgba(0,0,0,0)';
+    ctx.beginPath();
+    ctx.roundRect(x - 4, y - 4, PADDLE_W + 8, PADDLE_H + 8, 8);
+    ctx.fill();
+    ctx.shadowBlur = blur * 0.5;
+    ctx.fill();
+    // Small orbiting dots in rainbow
+    const count = Math.floor(4 * intensity);
+    for (let i = 0; i < count; i++) {
+      const a = t * 2 + i * (Math.PI * 2 / count);
+      const h2 = (hue + i * 90) % 360;
+      ctx.shadowBlur = 4;
+      ctx.shadowColor = `hsl(${h2}, 100%, 60%)`;
+      ctx.fillStyle = `hsl(${h2}, 100%, 60%)`;
+      ctx.globalAlpha = 0.6;
+      ctx.beginPath();
+      ctx.arc(
+        cx + Math.cos(a) * (PADDLE_W / 2 + 10),
+        cy + Math.sin(a) * (PADDLE_H / 2 + 6),
+        2 * intensity, 0, Math.PI * 2
+      );
+      ctx.fill();
+    }
+    ctx.shadowBlur = 0;
+    ctx.globalAlpha = 1;
+    ctx.restore();
+  }
+
+  function drawFrost(x, y, color, intensity, t) {
+    ctx.save();
+    const frostColor = color || '#93c5fd';
+    const count = Math.floor(10 * intensity);
+    for (let i = 0; i < count; i++) {
+      const seed = i * 173.13;
+      const phase = ((t * 0.5 + seed / 100) % 3) / 3; // slow drift
+      const side = i % 4;
+      let px, py;
+      if (side === 0) { px = x + phase * PADDLE_W; py = y - 4 + Math.sin(t + seed) * 3; }
+      else if (side === 1) { px = x + PADDLE_W + 4 + Math.sin(t + seed) * 3; py = y + phase * PADDLE_H; }
+      else if (side === 2) { px = x + PADDLE_W * (1 - phase); py = y + PADDLE_H + 4 + Math.sin(t + seed) * 3; }
+      else { px = x - 4 + Math.sin(t + seed) * 3; py = y + PADDLE_H * (1 - phase); }
+      // Snowflake-like: small cross
+      const size = (1.5 + Math.sin(t * 0.8 + seed) * 0.8) * intensity;
+      ctx.globalAlpha = 0.3 + 0.3 * Math.sin(t * 0.7 + seed);
+      ctx.strokeStyle = frostColor;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(px - size, py); ctx.lineTo(px + size, py);
+      ctx.moveTo(px, py - size); ctx.lineTo(px, py + size);
+      ctx.stroke();
+      // Small dot center
+      ctx.fillStyle = frostColor;
+      ctx.beginPath();
+      ctx.arc(px, py, size * 0.5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    // Subtle icy glow
+    ctx.shadowColor = frostColor;
+    ctx.shadowBlur = 8 * intensity;
+    ctx.fillStyle = 'rgba(0,0,0,0)';
+    ctx.globalAlpha = 0.3;
+    ctx.beginPath();
+    ctx.roundRect(x - 3, y - 3, PADDLE_W + 6, PADDLE_H + 6, 6);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.globalAlpha = 1;
+    ctx.restore();
+  }
+
   function renderCountdown(seconds) {
     if (!ctx) return;
     ctx.fillStyle = '#0f0f2a';
@@ -449,12 +706,15 @@ const GameClient = (() => {
     opponentSkin = null;
     mySkinImage = null;
     opponentSkinImage = null;
+    myAura = null;
+    opponentAura = null;
+    auraTime = 0;
     skinConfig.paddle = '#a855f7';
     Object.keys(keys).forEach(k => keys[k] = false);
   }
 
   return {
-    init, setGameInfo, setSkins, setPlayerSkins, setMirrored, updateState,
+    init, setGameInfo, setSkins, setPlayerSkins, setPlayerAuras, setMirrored, updateState,
     startRendering, stopRendering, renderCountdown,
     cleanup,
   };

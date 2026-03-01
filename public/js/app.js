@@ -1621,14 +1621,24 @@ async function loadShop() {
     standardGrid.innerHTML = (res.standard || []).map(c => renderCrateCard(c, false, ownedCrates[c.crateId] || 0)).join('');
     const inventory = document.getElementById('shop-inventory');
     if (res.inventory && res.inventory.length > 0) {
-      inventory.innerHTML = res.inventory.map(s => `
+      inventory.innerHTML = res.inventory.map(s => {
+        let previewHtml, bgStyle;
+        if (s.type === 'aura') {
+          let aColor = '#a855f7';
+          try { aColor = JSON.parse(s.cssValue).color || '#a855f7'; } catch {}
+          previewHtml = `<span style="font-size:24px;color:${esc(aColor)}">&#10024;</span>`;
+          bgStyle = `background:${esc(aColor)}15`;
+        } else if (s.type === 'color') {
+          previewHtml = `<div class="w-8 h-8 rounded-full" style="background:${esc(s.cssValue)};box-shadow:0 0 12px ${esc(s.cssValue)}"></div>`;
+          bgStyle = `background:${esc(s.cssValue)}33`;
+        } else {
+          previewHtml = `<img src="${esc(s.imageUrl)}" class="h-14 object-contain" />`;
+          bgStyle = 'background:#1a1a3a';
+        }
+        return `
         <div class="skin-card bg-arena-card rounded-xl p-3 border ${s.equipped ? 'border-purple-500' : 'border-gray-800'}">
-          <div class="w-full h-16 rounded-lg mb-2 flex items-center justify-center"
-            style="background: ${s.type === 'color' ? esc(s.cssValue) + '33' : '#1a1a3a'}">
-            ${s.type === 'color'
-              ? `<div class="w-8 h-8 rounded-full" style="background:${esc(s.cssValue)};box-shadow:0 0 12px ${esc(s.cssValue)}"></div>`
-              : `<img src="${esc(s.imageUrl)}" class="h-14 object-contain" />`
-            }
+          <div class="w-full h-16 rounded-lg mb-2 flex items-center justify-center" style="${bgStyle}">
+            ${previewHtml}
           </div>
           <h4 class="font-bold text-xs">${esc(s.name)}</h4>
           <div class="flex items-center justify-between mt-1">
@@ -1637,12 +1647,13 @@ async function loadShop() {
               s.rarity === 'rare' ? 'bg-purple-900 text-purple-300' :
               'bg-gray-800 text-gray-400'
             }">${s.rarity}</span>
-            <button onclick="equipSkin('${s.skinId}')" class="text-xs ${s.equipped ? 'text-green-400' : 'text-purple-400 hover:text-purple-300'}">
+            <button onclick="${s.type === 'aura' ? `equipAuraFromCosmetics('${s.skinId}')` : `equipSkin('${s.skinId}')`}" class="text-xs ${s.equipped ? 'text-green-400' : 'text-purple-400 hover:text-purple-300'}">
               ${s.equipped ? 'Equipped' : 'Equip'}
             </button>
           </div>
         </div>
-      `).join('');
+      `;
+      }).join('');
     } else {
       inventory.innerHTML = '<p class="text-gray-500 text-sm col-span-full">No skins yet. Open a crate!</p>';
     }
@@ -1704,13 +1715,23 @@ async function openCratePreview(crateId) {
         : 'bg-gray-800 text-gray-400';
       const chancePct = s.chance >= 1 ? s.chance.toFixed(0) + '%' : s.chance.toFixed(1) + '%';
       const chanceColor = s.rarity === 'legendary' ? 'text-yellow-400' : s.rarity === 'rare' ? 'text-purple-400' : 'text-gray-400';
-      const preview = s.type === 'color'
-        ? `<div class="w-8 h-8 rounded-full" style="background:${esc(s.cssValue)};box-shadow:0 0 12px ${esc(s.cssValue)}"></div>`
-        : `<img src="${esc(s.imageUrl)}" class="h-14 object-contain" />`;
+      let preview, bgColor;
+      if (s.type === 'aura') {
+        let aC = '#a855f7';
+        try { aC = JSON.parse(s.cssValue).color || '#a855f7'; } catch {}
+        preview = `<span style="font-size:28px;color:${esc(aC)}">&#10024;</span>`;
+        bgColor = esc(aC) + '15';
+      } else if (s.type === 'color') {
+        preview = `<div class="w-8 h-8 rounded-full" style="background:${esc(s.cssValue)};box-shadow:0 0 12px ${esc(s.cssValue)}"></div>`;
+        bgColor = esc(s.cssValue) + '33';
+      } else {
+        preview = `<img src="${esc(s.imageUrl)}" class="h-14 object-contain" />`;
+        bgColor = '#1a1a3a';
+      }
       return `
         <div class="bg-gray-800/50 rounded-lg p-3 flex flex-col items-center gap-1.5 border border-gray-700">
           <div class="w-full h-16 rounded-lg flex items-center justify-center"
-            style="background:${s.type === 'color' ? esc(s.cssValue) + '33' : '#1a1a3a'}">
+            style="background:${bgColor}">
             ${preview}
           </div>
           <h4 class="font-bold text-xs text-center truncate w-full">${esc(s.name)}</h4>
@@ -1830,7 +1851,11 @@ function buildRollerStrip(wonSkin, crateSkins) {
     const card = document.createElement('div');
     card.className = `roller-card rarity-${skin.rarity}`;
     card.style.background = '#111128';
-    if (skin.type === 'color') {
+    if (skin.type === 'aura') {
+      let aColor = '#a855f7';
+      try { aColor = JSON.parse(skin.cssValue).color || '#a855f7'; } catch {}
+      card.innerHTML = `<div style="font-size:32px;color:${esc(aColor)}">&#10024;</div><div style="font-size:10px;color:#ccc;margin-top:4px;text-align:center;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;max-width:90px">${esc(skin.name)}</div>`;
+    } else if (skin.type === 'color') {
       card.innerHTML = `<div style="width:36px;height:36px;border-radius:50%;background:${esc(skin.cssValue)};box-shadow:0 0 10px ${esc(skin.cssValue)}"></div><div style="font-size:10px;color:#ccc;margin-top:4px;text-align:center;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;max-width:90px">${esc(skin.name)}</div>`;
     } else {
       card.innerHTML = `<img src="${esc(skin.imageUrl)}" style="height:44px;object-fit:contain;" /><div style="font-size:10px;color:#ccc;margin-top:4px;text-align:center;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;max-width:90px">${esc(skin.name)}</div>`;
@@ -1878,7 +1903,12 @@ function showFinalReveal(skin, isDuplicate) {
   const nameEl = document.getElementById('roller-reveal-name');
   const rarityEl = document.getElementById('roller-reveal-rarity');
   const revealDiv = document.getElementById('roller-reveal');
-  if (skin.type === 'color') {
+  if (skin.type === 'aura') {
+    let aColor = '#a855f7';
+    try { aColor = JSON.parse(skin.cssValue).color || '#a855f7'; } catch {}
+    preview.innerHTML = `<div style="font-size:48px;color:${esc(aColor)}">&#10024;</div>`;
+    preview.style.background = aColor + '15';
+  } else if (skin.type === 'color') {
     preview.innerHTML = `<div class="w-16 h-16 rounded-full" style="background:${esc(skin.cssValue)};box-shadow:0 0 20px ${esc(skin.cssValue)}"></div>`;
     preview.style.background = skin.cssValue + '22';
   } else {
@@ -2218,6 +2248,8 @@ function pickSide(side) {
 // Socket: Game countdown (30s ready-up phase)
 let pendingP1Skin = null;
 let pendingP2Skin = null;
+let pendingP1Aura = null;
+let pendingP2Aura = null;
 let intermissionCountdownInterval = null;
 
 socket.on('game-countdown', (data) => {
@@ -2234,6 +2266,8 @@ socket.on('game-countdown', (data) => {
 
   pendingP1Skin = data.player1?.skin || null;
   pendingP2Skin = data.player2?.skin || null;
+  pendingP1Aura = data.player1?.aura || null;
+  pendingP2Aura = data.player2?.aura || null;
 
   chosenSide = 'left';
   pickSide('left');
@@ -2288,6 +2322,9 @@ socket.on('game-start', (data) => {
   const p1Skin = data.player1.skin || pendingP1Skin || null;
   const p2Skin = data.player2.skin || pendingP2Skin || null;
   GameClient.setPlayerSkins(p1Skin, p2Skin);
+  const p1Aura = data.player1.aura || pendingP1Aura || null;
+  const p2Aura = data.player2.aura || pendingP2Aura || null;
+  GameClient.setPlayerAuras(p1Aura, p2Aura);
 
   const amP1 = (currentUser.wallet === data.player1.wallet);
   const myNaturalSide = amP1 ? 'left' : 'right';
@@ -2386,6 +2423,7 @@ socket.on('rejoin-game', (data) => {
   if (intermission) intermission.classList.add('hidden');
   GameClient.setGameInfo(data.gameId, data.player1.wallet);
   GameClient.setPlayerSkins(data.player1.skin || null, data.player2.skin || null);
+  GameClient.setPlayerAuras(data.player1.aura || null, data.player2.aura || null);
   const amP1 = (currentUser.wallet === data.player1.wallet);
   const myNaturalSide = amP1 ? 'left' : 'right';
   isMirrored = (chosenSide !== myNaturalSide);
@@ -2836,19 +2874,29 @@ function renderInventoryGrid() {
     const rarityClass = s.rarity === 'legendary' ? 'bg-yellow-900 text-yellow-300'
       : s.rarity === 'rare' ? 'bg-purple-900 text-purple-300'
       : 'bg-gray-800 text-gray-400';
-    const preview = s.type === 'color'
-      ? `<div class="w-8 h-8 rounded-full" style="background:${esc(s.cssValue)};box-shadow:0 0 12px ${esc(s.cssValue)}"></div>`
-      : `<img src="${esc(s.imageUrl)}" class="h-14 object-contain" />`;
+    let preview, bgStyle;
+    if (s.type === 'aura') {
+      let aC = '#a855f7';
+      try { aC = JSON.parse(s.cssValue).color || '#a855f7'; } catch {}
+      preview = `<span style="font-size:24px;color:${esc(aC)}">&#10024;</span>`;
+      bgStyle = `background:${esc(aC)}15`;
+    } else if (s.type === 'color') {
+      preview = `<div class="w-8 h-8 rounded-full" style="background:${esc(s.cssValue)};box-shadow:0 0 12px ${esc(s.cssValue)}"></div>`;
+      bgStyle = `background:${esc(s.cssValue)}33`;
+    } else {
+      preview = `<img src="${esc(s.imageUrl)}" class="h-14 object-contain" />`;
+      bgStyle = 'background:#1a1a3a';
+    }
     const btnClass = s.equipped ? 'text-green-400' : 'text-purple-400 hover:text-purple-300';
+    const equipFn = s.type === 'aura' ? `equipAuraFromCosmetics('${s.skinId}')` : `equipSkinFromModal('${s.skinId}')`;
     return `
       <div class="bg-gray-800/50 rounded-lg p-3 flex flex-col items-center gap-1.5 border border-gray-700">
-        <div class="w-full h-16 rounded-lg flex items-center justify-center"
-          style="background:${s.type === 'color' ? esc(s.cssValue) + '33' : '#1a1a3a'}">
+        <div class="w-full h-16 rounded-lg flex items-center justify-center" style="${bgStyle}">
           ${preview}
         </div>
         <h4 class="font-bold text-xs text-center truncate w-full">${esc(s.name)}</h4>
         <span class="text-xs px-1.5 py-0.5 rounded ${rarityClass}">${s.rarity}</span>
-        <button onclick="equipSkinFromModal('${s.skinId}')" class="text-xs font-medium ${btnClass}">
+        <button onclick="${equipFn}" class="text-xs font-medium ${btnClass}">
           ${s.equipped ? 'Equipped' : 'Equip'}
         </button>
       </div>
@@ -2878,18 +2926,30 @@ async function equipSkinFromModal(skinId) {
 
 async function loadCosmetics() {
   const grid = document.getElementById('cosmetics-inventory');
+  const auraGrid = document.getElementById('cosmetics-aura-inventory');
   const paddlePreview = document.getElementById('cosmetics-paddle-preview');
   const equippedName = document.getElementById('cosmetics-equipped-name');
   const equippedRarity = document.getElementById('cosmetics-equipped-rarity');
+  const auraPreview = document.getElementById('cosmetics-aura-preview');
+  const equippedAuraName = document.getElementById('cosmetics-equipped-aura-name');
+  const equippedAuraRarity = document.getElementById('cosmetics-equipped-aura-rarity');
   if (!grid) return;
 
   try {
     const res = await fetch('/api/shop', { headers: { Authorization: getAuthHeader() } }).then(r => r.json());
     const inventory = res.inventory || [];
     dashInventory = inventory;
+    const equippedAuraId = res.equippedAura || 'none';
+
+    // Split into skins and auras
+    const skins = inventory.filter(s => s.type !== 'aura');
+    const auras = inventory.filter(s => s.type === 'aura');
+
+    // Mark equipped aura
+    auras.forEach(a => { a.equippedAura = a.skinId === equippedAuraId; });
 
     // Update equipped paddle preview
-    const equipped = inventory.find(s => s.equipped);
+    const equipped = skins.find(s => s.equipped);
     if (equipped && paddlePreview) {
       if (equipped.type === 'color') {
         paddlePreview.style.background = esc(equipped.cssValue);
@@ -2918,39 +2978,93 @@ async function loadCosmetics() {
       if (equippedRarity) equippedRarity.classList.add('hidden');
     }
 
-    if (inventory.length === 0) {
+    // Update equipped aura preview
+    const equippedAura = auras.find(a => a.equippedAura);
+    if (equippedAura && auraPreview) {
+      let auraColor = '#a855f7';
+      try { auraColor = JSON.parse(equippedAura.cssValue).color || '#a855f7'; } catch {}
+      auraPreview.innerHTML = '&#10024;';
+      auraPreview.style.color = auraColor;
+      if (equippedAuraName) equippedAuraName.textContent = equippedAura.name;
+      if (equippedAuraRarity) {
+        const rc = equippedAura.rarity === 'legendary' ? 'bg-yellow-900 text-yellow-300'
+          : equippedAura.rarity === 'rare' ? 'bg-purple-900 text-purple-300'
+          : 'bg-gray-800 text-gray-400';
+        equippedAuraRarity.className = 'text-xs px-2 py-0.5 rounded ' + rc;
+        equippedAuraRarity.textContent = equippedAura.rarity;
+        equippedAuraRarity.classList.remove('hidden');
+      }
+    } else {
+      if (auraPreview) { auraPreview.innerHTML = '&#10024;'; auraPreview.style.color = '#4b5563'; }
+      if (equippedAuraName) equippedAuraName.textContent = 'None';
+      if (equippedAuraRarity) equippedAuraRarity.classList.add('hidden');
+    }
+
+    // Render skins grid
+    if (skins.length === 0) {
       grid.innerHTML = `
         <div class="col-span-full text-center py-10">
           <p class="text-gray-500 text-sm mb-3">No skins yet!</p>
           <button onclick="switchTab('shop')" class="bg-purple-600 hover:bg-purple-700 px-5 py-2 rounded-lg text-sm font-medium transition">Open Crates in Shop</button>
         </div>`;
-      return;
+    } else {
+      grid.innerHTML = skins.map(s => {
+        const rarityClass = s.rarity === 'legendary' ? 'bg-yellow-900 text-yellow-300'
+          : s.rarity === 'rare' ? 'bg-purple-900 text-purple-300'
+          : 'bg-gray-800 text-gray-400';
+        const borderClass = s.equipped ? 'border-purple-500 shadow-[0_0_12px_rgba(168,85,247,0.3)]' : 'border-gray-800 hover:border-gray-600';
+        const preview = s.type === 'color'
+          ? `<div class="w-10 h-10 rounded-full" style="background:${esc(s.cssValue)};box-shadow:0 0 12px ${esc(s.cssValue)}"></div>`
+          : `<img src="${esc(s.imageUrl)}" class="h-16 object-contain" />`;
+        return `
+          <div class="skin-card bg-arena-card rounded-xl p-3 border ${borderClass} transition-all">
+            <div class="w-full h-20 rounded-lg mb-2 flex items-center justify-center"
+              style="background: ${s.type === 'color' ? esc(s.cssValue) + '22' : '#1a1a3a'}">
+              ${preview}
+            </div>
+            <h4 class="font-bold text-sm truncate">${esc(s.name)}</h4>
+            <div class="flex items-center justify-between mt-1.5">
+              <span class="text-xs px-1.5 py-0.5 rounded ${rarityClass}">${s.rarity}</span>
+              <button onclick="equipFromCosmetics('${s.skinId}')" class="text-xs font-medium ${s.equipped ? 'text-green-400' : 'text-purple-400 hover:text-purple-300'}">
+                ${s.equipped ? '✓ Equipped' : 'Equip'}
+              </button>
+            </div>
+          </div>
+        `;
+      }).join('');
     }
 
-    grid.innerHTML = inventory.map(s => {
-      const rarityClass = s.rarity === 'legendary' ? 'bg-yellow-900 text-yellow-300'
-        : s.rarity === 'rare' ? 'bg-purple-900 text-purple-300'
-        : 'bg-gray-800 text-gray-400';
-      const borderClass = s.equipped ? 'border-purple-500 shadow-[0_0_12px_rgba(168,85,247,0.3)]' : 'border-gray-800 hover:border-gray-600';
-      const preview = s.type === 'color'
-        ? `<div class="w-10 h-10 rounded-full" style="background:${esc(s.cssValue)};box-shadow:0 0 12px ${esc(s.cssValue)}"></div>`
-        : `<img src="${esc(s.imageUrl)}" class="h-16 object-contain" />`;
-      return `
-        <div class="skin-card bg-arena-card rounded-xl p-3 border ${borderClass} transition-all">
-          <div class="w-full h-20 rounded-lg mb-2 flex items-center justify-center"
-            style="background: ${s.type === 'color' ? esc(s.cssValue) + '22' : '#1a1a3a'}">
-            ${preview}
-          </div>
-          <h4 class="font-bold text-sm truncate">${esc(s.name)}</h4>
-          <div class="flex items-center justify-between mt-1.5">
-            <span class="text-xs px-1.5 py-0.5 rounded ${rarityClass}">${s.rarity}</span>
-            <button onclick="equipFromCosmetics('${s.skinId}')" class="text-xs font-medium ${s.equipped ? 'text-green-400' : 'text-purple-400 hover:text-purple-300'}">
-              ${s.equipped ? '✓ Equipped' : 'Equip'}
-            </button>
-          </div>
-        </div>
-      `;
-    }).join('');
+    // Render auras grid
+    if (auraGrid) {
+      if (auras.length === 0) {
+        auraGrid.innerHTML = '<p class="text-gray-500 text-sm col-span-full text-center py-4">No auras yet. Open crates to find auras!</p>';
+      } else {
+        auraGrid.innerHTML = auras.map(a => {
+          let auraColor = '#a855f7';
+          let effectName = 'unknown';
+          try { const cfg = JSON.parse(a.cssValue); auraColor = cfg.color || '#a855f7'; effectName = cfg.effect || 'unknown'; } catch {}
+          const rarityClass = a.rarity === 'legendary' ? 'bg-yellow-900 text-yellow-300'
+            : a.rarity === 'rare' ? 'bg-purple-900 text-purple-300'
+            : 'bg-gray-800 text-gray-400';
+          const borderClass = a.equippedAura ? 'border-purple-500 shadow-[0_0_12px_rgba(168,85,247,0.3)]' : 'border-gray-800 hover:border-gray-600';
+          return `
+            <div class="skin-card bg-arena-card rounded-xl p-3 border ${borderClass} transition-all">
+              <div class="w-full h-20 rounded-lg mb-2 flex items-center justify-center" style="background:${esc(auraColor)}15">
+                <span style="color:${esc(auraColor)};font-size:28px">&#10024;</span>
+              </div>
+              <h4 class="font-bold text-sm truncate">${esc(a.name)}</h4>
+              <p class="text-xs text-gray-500 truncate">${esc(effectName)}</p>
+              <div class="flex items-center justify-between mt-1.5">
+                <span class="text-xs px-1.5 py-0.5 rounded ${rarityClass}">${a.rarity}</span>
+                <button onclick="equipAuraFromCosmetics('${a.skinId}')" class="text-xs font-medium ${a.equippedAura ? 'text-green-400' : 'text-purple-400 hover:text-purple-300'}">
+                  ${a.equippedAura ? '✓ Equipped' : 'Equip'}
+                </button>
+              </div>
+            </div>
+          `;
+        }).join('');
+      }
+    }
   } catch (err) {
     grid.innerHTML = '<p class="text-red-400 text-sm col-span-full text-center py-8">Failed to load cosmetics.</p>';
     console.error('Failed to load cosmetics:', err);
@@ -2970,6 +3084,20 @@ async function equipFromCosmetics(skinId) {
   } catch (err) {
     console.error('Equip failed:', err);
     showToast(err.message || 'Failed to equip skin');
+  }
+}
+
+async function equipAuraFromCosmetics(skinId) {
+  if (!requireWallet('equip')) return;
+  try {
+    const result = await apiPostAuth('/api/shop/equip-aura', { skinId }, getAuthHeader());
+    if (result.status === 'equipped') {
+      loadCosmetics();
+      showToast('Aura equipped!');
+    }
+  } catch (err) {
+    console.error('Equip aura failed:', err);
+    showToast(err.message || 'Failed to equip aura');
   }
 }
 

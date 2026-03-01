@@ -107,6 +107,7 @@
             <select id="skin-type" onchange="toggleSkinInputs()" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:border-purple-500 focus:outline-none">
               <option value="image">Image (SVG/PNG)</option>
               <option value="color">Color</option>
+              <option value="aura">Aura Effect</option>
             </select>
           </div>
           <div id="skin-color-input">
@@ -118,6 +119,39 @@
           <label class="block text-sm text-gray-400 mb-1">SVG or PNG file (120x400, transparent bg)</label>
           <input id="skin-file" type="file" accept=".svg,.png" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white" />
         </div>
+        <div id="skin-aura-input" class="mt-3 hidden">
+          <label class="block text-sm text-gray-400 mb-2">Aura Configuration</label>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs text-gray-500 mb-1">Effect Preset</label>
+              <select id="aura-effect" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:border-purple-500 focus:outline-none">
+                <option value="glow-pulse">Glow Pulse</option>
+                <option value="particle-trail">Particle Trail</option>
+                <option value="ring-orbit">Ring Orbit</option>
+                <option value="flame">Flame</option>
+                <option value="electric">Electric</option>
+                <option value="rainbow">Rainbow</option>
+                <option value="frost">Frost</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-xs text-gray-500 mb-1">Primary Color</label>
+              <input id="aura-color" type="color" value="#a855f7" class="w-full h-9 bg-gray-800 border border-gray-700 rounded-lg cursor-pointer" />
+            </div>
+            <div>
+              <label class="block text-xs text-gray-500 mb-1">Secondary Color (optional)</label>
+              <input id="aura-color2" type="color" value="#ec4899" class="w-full h-9 bg-gray-800 border border-gray-700 rounded-lg cursor-pointer" />
+            </div>
+            <div>
+              <label class="block text-xs text-gray-500 mb-1">Intensity (<span id="aura-intensity-val">1.0</span>)</label>
+              <input id="aura-intensity" type="range" min="0.5" max="2.0" step="0.1" value="1.0" class="w-full" oninput="document.getElementById('aura-intensity-val').textContent=this.value" />
+            </div>
+            <div class="col-span-2">
+              <label class="block text-xs text-gray-500 mb-1">Speed (<span id="aura-speed-val">1.0</span>)</label>
+              <input id="aura-speed" type="range" min="0.5" max="2.0" step="0.1" value="1.0" class="w-full" oninput="document.getElementById('aura-speed-val').textContent=this.value" />
+            </div>
+          </div>
+        </div>
         <button onclick="uploadSkin()" class="mt-3 bg-purple-600 hover:bg-purple-700 px-4 py-2 rounded-lg text-sm font-medium transition">
           Upload Skin
         </button>
@@ -125,6 +159,41 @@
 
       <!-- CRATE LIST -->
       <div id="crate-list" class="space-y-4"></div>
+    </div>
+  </div>
+
+  <!-- EDIT CRATE MODAL -->
+  <div id="edit-crate-modal" class="hidden fixed inset-0 bg-black/80 z-50 flex items-center justify-center">
+    <div class="bg-arena-card rounded-xl p-6 max-w-md w-full mx-4 glow-border">
+      <h3 class="text-lg font-bold text-purple-400 mb-3">Edit Crate</h3>
+      <input type="hidden" id="edit-crate-id" />
+      <div class="space-y-3">
+        <div>
+          <label class="block text-sm text-gray-400 mb-1">Name</label>
+          <input id="edit-crate-name" type="text" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:border-purple-500 focus:outline-none" />
+        </div>
+        <div>
+          <label class="block text-sm text-gray-400 mb-1">Description</label>
+          <input id="edit-crate-desc" type="text" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:border-purple-500 focus:outline-none" />
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-sm text-gray-400 mb-1">Price (PONG)</label>
+            <input id="edit-crate-price" type="number" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:border-purple-500 focus:outline-none" />
+          </div>
+          <div>
+            <label class="block text-sm text-gray-400 mb-1">Glow Color</label>
+            <input id="edit-crate-color" type="text" placeholder="#7c3aed" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:border-purple-500 focus:outline-none" />
+          </div>
+        </div>
+        <label class="flex items-center gap-2 text-sm text-gray-300 cursor-pointer">
+          <input id="edit-crate-limited" type="checkbox" class="rounded" /> Limited edition
+        </label>
+      </div>
+      <div class="flex gap-2 mt-4">
+        <button onclick="saveEditCrate()" class="flex-1 bg-purple-600 hover:bg-purple-700 py-2 rounded-lg font-medium transition">Save</button>
+        <button onclick="closeEditCrate()" class="bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded-lg text-sm transition">Cancel</button>
+      </div>
     </div>
   </div>
 
@@ -156,6 +225,7 @@
             <select id="edit-skin-type" onchange="toggleEditSkinInputs()" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:border-purple-500 focus:outline-none">
               <option value="image">Image (SVG/PNG)</option>
               <option value="color">Color</option>
+              <option value="aura">Aura Effect</option>
             </select>
           </div>
         </div>
@@ -167,6 +237,39 @@
           <label class="block text-sm text-gray-400 mb-1">Replace image (SVG/PNG) — leave empty to keep current</label>
           <input id="edit-skin-file" type="file" accept=".svg,.png" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white" />
           <div id="edit-skin-current-img" class="mt-2 text-xs text-gray-500"></div>
+        </div>
+        <div id="edit-skin-aura-row" class="hidden">
+          <label class="block text-sm text-gray-400 mb-2">Aura Configuration</label>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs text-gray-500 mb-1">Effect</label>
+              <select id="edit-aura-effect" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:border-purple-500 focus:outline-none">
+                <option value="glow-pulse">Glow Pulse</option>
+                <option value="particle-trail">Particle Trail</option>
+                <option value="ring-orbit">Ring Orbit</option>
+                <option value="flame">Flame</option>
+                <option value="electric">Electric</option>
+                <option value="rainbow">Rainbow</option>
+                <option value="frost">Frost</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-xs text-gray-500 mb-1">Primary Color</label>
+              <input id="edit-aura-color" type="color" value="#a855f7" class="w-full h-9 bg-gray-800 border border-gray-700 rounded-lg cursor-pointer" />
+            </div>
+            <div>
+              <label class="block text-xs text-gray-500 mb-1">Secondary Color</label>
+              <input id="edit-aura-color2" type="color" value="#ec4899" class="w-full h-9 bg-gray-800 border border-gray-700 rounded-lg cursor-pointer" />
+            </div>
+            <div>
+              <label class="block text-xs text-gray-500 mb-1">Intensity (<span id="edit-aura-intensity-val">1.0</span>)</label>
+              <input id="edit-aura-intensity" type="range" min="0.5" max="2.0" step="0.1" value="1.0" class="w-full" oninput="document.getElementById('edit-aura-intensity-val').textContent=this.value" />
+            </div>
+            <div class="col-span-2">
+              <label class="block text-xs text-gray-500 mb-1">Speed (<span id="edit-aura-speed-val">1.0</span>)</label>
+              <input id="edit-aura-speed" type="range" min="0.5" max="2.0" step="0.1" value="1.0" class="w-full" oninput="document.getElementById('edit-aura-speed-val').textContent=this.value" />
+            </div>
+          </div>
         </div>
       </div>
       <div class="flex gap-2 mt-4">
@@ -287,20 +390,24 @@
       const type = document.getElementById('skin-type').value;
       document.getElementById('skin-file-input').style.display = type === 'image' ? '' : 'none';
       document.getElementById('skin-color-input').style.display = type === 'color' ? '' : 'none';
+      document.getElementById('skin-aura-input').style.display = type === 'aura' ? '' : 'none';
     }
 
     // ============================
     // CRATE CRUD
     // ============================
     let allSkinsMap = {}; // skinId -> skin object for edit lookups
+    let allCratesMap = {}; // crateId -> crate object for edit lookups
 
     async function loadCrates() {
       const res = await fetch('/api/admin/crates', { headers: { 'x-admin-password': adminPw } }).then(r => r.json());
       const crates = res.crates || [];
 
-      // Build skin lookup map
+      // Build lookup maps
       allSkinsMap = {};
+      allCratesMap = {};
       for (const c of crates) {
+        allCratesMap[c.crateId] = c;
         for (const s of (c.skins || [])) {
           allSkinsMap[s.skinId] = s;
         }
@@ -324,6 +431,9 @@
               <p class="text-gray-500 text-xs">${esc(c.description || '')} — ${c.price.toLocaleString()} $PONG — ${c.limited ? 'LIMITED' : 'Standard'} — ${c.active ? 'Active' : 'Inactive'}</p>
             </div>
             <div class="flex gap-2">
+              <button onclick="openEditCrate('${c.crateId}')" class="text-xs px-3 py-1 rounded bg-purple-900 text-purple-300 hover:bg-purple-800">
+                Edit
+              </button>
               <button onclick="toggleCrate('${c.crateId}', ${!c.active})" class="text-xs px-3 py-1 rounded ${c.active ? 'bg-red-900 text-red-300 hover:bg-red-800' : 'bg-green-900 text-green-300 hover:bg-green-800'}">
                 ${c.active ? 'Deactivate' : 'Activate'}
               </button>
@@ -337,7 +447,9 @@
               ${c.skins.map(s => `
                 <div class="bg-gray-800 rounded-lg p-2 flex items-center justify-between">
                   <div class="flex items-center gap-2">
-                    ${s.type === 'color'
+                    ${s.type === 'aura'
+                      ? `<div class="w-6 h-6 rounded flex items-center justify-center text-purple-400">&#10024;</div>`
+                      : s.type === 'color'
                       ? `<div class="w-6 h-6 rounded" style="background:${esc(s.cssValue)}"></div>`
                       : `<img src="${esc(s.imageUrl)}" class="w-6 h-10 object-contain" />`
                     }
@@ -395,6 +507,15 @@
         const ext = file.name.match(/\.(svg|png)$/i)?.[0] || '.svg';
         formData.append('image', file);
         formData.append('fileName', name.toLowerCase().replace(/[^a-z0-9]+/g, '-') + ext);
+      } else if (type === 'aura') {
+        const config = {
+          effect: document.getElementById('aura-effect').value,
+          color: document.getElementById('aura-color').value,
+          color2: document.getElementById('aura-color2').value,
+          intensity: parseFloat(document.getElementById('aura-intensity').value),
+          speed: parseFloat(document.getElementById('aura-speed').value),
+        };
+        formData.append('cssValue', JSON.stringify(config));
       } else {
         const css = document.getElementById('skin-css').value;
         if (!css) return alert('Enter a CSS color value');
@@ -459,6 +580,20 @@
         currentImg.innerHTML = '';
       }
 
+      // Populate aura fields if type is aura
+      if (skin.type === 'aura' && skin.cssValue) {
+        try {
+          const cfg = JSON.parse(skin.cssValue);
+          document.getElementById('edit-aura-effect').value = cfg.effect || 'glow-pulse';
+          document.getElementById('edit-aura-color').value = cfg.color || '#a855f7';
+          document.getElementById('edit-aura-color2').value = cfg.color2 || '#ec4899';
+          document.getElementById('edit-aura-intensity').value = cfg.intensity || 1.0;
+          document.getElementById('edit-aura-intensity-val').textContent = cfg.intensity || 1.0;
+          document.getElementById('edit-aura-speed').value = cfg.speed || 1.0;
+          document.getElementById('edit-aura-speed-val').textContent = cfg.speed || 1.0;
+        } catch {}
+      }
+
       toggleEditSkinInputs();
       document.getElementById('edit-skin-modal').classList.remove('hidden');
     }
@@ -471,6 +606,7 @@
       const type = document.getElementById('edit-skin-type').value;
       document.getElementById('edit-skin-file-row').style.display = type === 'image' ? '' : 'none';
       document.getElementById('edit-skin-color-row').style.display = type === 'color' ? '' : 'none';
+      document.getElementById('edit-skin-aura-row').style.display = type === 'aura' ? '' : 'none';
     }
 
     async function saveEditSkin() {
@@ -486,6 +622,17 @@
 
       if (type === 'color') {
         formData.append('cssValue', document.getElementById('edit-skin-css').value);
+      }
+
+      if (type === 'aura') {
+        const config = {
+          effect: document.getElementById('edit-aura-effect').value,
+          color: document.getElementById('edit-aura-color').value,
+          color2: document.getElementById('edit-aura-color2').value,
+          intensity: parseFloat(document.getElementById('edit-aura-intensity').value),
+          speed: parseFloat(document.getElementById('edit-aura-speed').value),
+        };
+        formData.append('cssValue', JSON.stringify(config));
       }
 
       if (type === 'image') {
@@ -505,6 +652,43 @@
 
       if (res.error) return alert(res.error);
       closeEditSkin();
+      loadCrates();
+    }
+
+    // ============================
+    // EDIT CRATE MODAL
+    // ============================
+    function openEditCrate(crateId) {
+      const crate = allCratesMap[crateId];
+      if (!crate) return alert('Crate not found');
+      document.getElementById('edit-crate-id').value = crate.crateId;
+      document.getElementById('edit-crate-name').value = crate.name || '';
+      document.getElementById('edit-crate-desc').value = crate.description || '';
+      document.getElementById('edit-crate-price').value = crate.price || 10000;
+      document.getElementById('edit-crate-color').value = crate.imageColor || '#7c3aed';
+      document.getElementById('edit-crate-limited').checked = !!crate.limited;
+      document.getElementById('edit-crate-modal').classList.remove('hidden');
+    }
+
+    function closeEditCrate() {
+      document.getElementById('edit-crate-modal').classList.add('hidden');
+    }
+
+    async function saveEditCrate() {
+      const crateId = document.getElementById('edit-crate-id').value;
+      if (!crateId) return;
+      const body = {
+        name: document.getElementById('edit-crate-name').value,
+        description: document.getElementById('edit-crate-desc').value,
+        price: Number(document.getElementById('edit-crate-price').value),
+        imageColor: document.getElementById('edit-crate-color').value,
+        limited: document.getElementById('edit-crate-limited').checked,
+      };
+      const res = await fetch(`/api/admin/crate/${crateId}`, {
+        method: 'PUT', headers: headers(), body: JSON.stringify(body)
+      }).then(r => r.json());
+      if (res.error) return alert(res.error);
+      closeEditCrate();
       loadCrates();
     }
 

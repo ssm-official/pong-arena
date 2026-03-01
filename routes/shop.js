@@ -24,7 +24,7 @@ router.get('/', optionalAuth, async (req, res) => {
     // Try to get user data if wallet is available (auth succeeded)
     let user = null;
     if (req.wallet) {
-      user = await User.findOne({ wallet: req.wallet }).select('skins equippedSkin ownedCrates');
+      user = await User.findOne({ wallet: req.wallet }).select('skins equippedSkin equippedAura ownedCrates');
     }
     const ownedIds = user ? user.skins.map(s => s.skinId) : [];
 
@@ -62,7 +62,7 @@ router.get('/', optionalAuth, async (req, res) => {
       });
     }
 
-    res.json({ limited, standard, inventory, equippedSkin: user?.equippedSkin || 'default', ownedCrates: ownedCratesMap });
+    res.json({ limited, standard, inventory, equippedSkin: user?.equippedSkin || 'default', equippedAura: user?.equippedAura || 'none', ownedCrates: ownedCratesMap });
   } catch (err) {
     console.error('Shop fetch error:', err);
     res.status(500).json({ error: 'Failed to fetch shop' });
@@ -249,6 +249,40 @@ router.post('/equip', authMiddleware, async (req, res) => {
   } catch (err) {
     console.error('Equip error:', err.message);
     res.status(500).json({ error: 'Failed to equip skin: ' + err.message });
+  }
+});
+
+/**
+ * POST /api/shop/equip-aura
+ * Equip an owned aura. Body: { skinId }
+ */
+router.post('/equip-aura', authMiddleware, async (req, res) => {
+  try {
+    const { skinId } = req.body;
+    if (!skinId) return res.status(400).json({ error: 'Missing skinId' });
+
+    if (skinId === 'none') {
+      await User.findOneAndUpdate({ wallet: req.wallet }, { equippedAura: 'none' });
+      return res.json({ status: 'equipped', skinId: 'none' });
+    }
+
+    const user = await User.findOne({ wallet: req.wallet }).select('skins');
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    if (!user.skins.some(s => s.skinId === skinId)) {
+      return res.status(400).json({ error: 'You don\'t own this item' });
+    }
+
+    const skin = await Skin.findOne({ skinId });
+    if (!skin || skin.type !== 'aura') {
+      return res.status(400).json({ error: 'Item is not an aura' });
+    }
+
+    await User.findOneAndUpdate({ wallet: req.wallet }, { equippedAura: skinId });
+    res.json({ status: 'equipped', skinId });
+  } catch (err) {
+    console.error('Equip aura error:', err.message);
+    res.status(500).json({ error: 'Failed to equip aura: ' + err.message });
   }
 });
 

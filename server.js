@@ -147,8 +147,8 @@ io.on('connection', (socket) => {
 
       socket.emit('rejoin-game', {
         gameId,
-        player1: { wallet: game.player1.wallet, username: game.player1.username, skin: game.player1.skin || null },
-        player2: { wallet: game.player2.wallet, username: game.player2.username, skin: game.player2.skin || null },
+        player1: { wallet: game.player1.wallet, username: game.player1.username, skin: game.player1.skin || null, aura: game.player1.aura || null },
+        player2: { wallet: game.player2.wallet, username: game.player2.username, skin: game.player2.skin || null, aura: game.player2.aura || null },
         tier: game.tier,
         state: game.state,
       });
