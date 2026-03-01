@@ -2571,12 +2571,7 @@ async function loadDashboardLeaderboard(sort) {
 }
 
 function updateDashboardStats() {
-  const recordEl = document.getElementById('dash-your-record');
-  if (recordEl && currentUser) {
-    const wins = currentUser.stats?.wins || 0;
-    const losses = currentUser.stats?.losses || 0;
-    recordEl.textContent = `${wins}W - ${losses}L`;
-  }
+  // Stats updated via other dashboard functions (balance, burned, etc.)
 }
 
 async function fetchDashboardBalance() {
@@ -2714,17 +2709,21 @@ function updateTokenPriceCard() {
 async function fetchBurnedTotal() {
   try {
     const res = await fetch('/api/stats/burned').then(r => r.json());
-    const el = document.getElementById('dash-token-burned');
-    if (!el) return;
     const burned = res.totalBurned || 0;
-    if (burned <= 0) { el.textContent = '0 $PONG'; return; }
-    const pong = burned / 1e6;
-    if (pong >= 1e6) el.textContent = (pong / 1e6).toFixed(2) + 'M $PONG';
-    else if (pong >= 1e3) el.textContent = (pong / 1e3).toFixed(1) + 'K $PONG';
-    else el.textContent = pong.toLocaleString() + ' $PONG';
+    let text;
+    if (burned <= 0) { text = '0'; }
+    else {
+      const pong = burned / 1e6;
+      if (pong >= 1e6) text = (pong / 1e6).toFixed(2) + 'M';
+      else if (pong >= 1e3) text = (pong / 1e3).toFixed(1) + 'K';
+      else text = pong.toLocaleString();
+    }
+    // Update all burned display elements
+    const els = [document.getElementById('dash-token-burned'), document.getElementById('dash-burned-amount')];
+    els.forEach(el => { if (el) el.textContent = text + ' $PONG'; });
   } catch (e) {
-    const el = document.getElementById('dash-token-burned');
-    if (el) el.textContent = '--';
+    const els = [document.getElementById('dash-token-burned'), document.getElementById('dash-burned-amount')];
+    els.forEach(el => { if (el) el.textContent = '--'; });
   }
 }
 

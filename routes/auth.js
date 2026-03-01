@@ -48,12 +48,12 @@ router.post('/login', async (req, res) => {
     // Check if user exists
     const user = await User.findOne({ wallet });
     if (user) {
-      const token = createSession(wallet);
+      const token = await createSession(wallet);
       return res.json({ status: 'existing', user, token });
     }
 
     // First-time user — return a temp token so register doesn't need re-signing
-    const token = createSession(wallet);
+    const token = await createSession(wallet);
     return res.json({ status: 'new', wallet, token });
   } catch (err) {
     console.error('Login error:', err);
@@ -124,7 +124,7 @@ router.post('/register', async (req, res) => {
       bio: bio || '',
     });
 
-    const token = createSession(wallet);
+    const token = await createSession(wallet);
     res.json({ status: 'created', user, token });
   } catch (err) {
     console.error('Register error:', err);
