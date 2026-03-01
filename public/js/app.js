@@ -158,15 +158,18 @@ function formatPongShort(pong) {
 }
 
 function updateAllUsdDisplays() {
-  // Update all USD-based tier buttons
+  // Update all USD-based tier buttons (modal + dashboard quick tiers)
   Object.keys(TIER_USD_AMOUNTS).forEach(tier => {
     const el = document.getElementById(`tier-pong-${tier}`);
-    if (!el) return;
-    if (priceFetchFailed || pongPriceUsd <= 0) {
-      el.textContent = 'Price N/A';
-    } else {
-      const pongAmt = getTierPongAmount(tier);
-      el.textContent = formatPongShort(pongAmt) + ' $PONG';
+    if (el) {
+      if (priceFetchFailed || pongPriceUsd <= 0) el.textContent = 'Price N/A';
+      else el.textContent = formatPongShort(getTierPongAmount(tier)) + ' $PONG';
+    }
+    // Dashboard quick-tier buttons
+    const dashEl = document.getElementById(`dash-tier-pong-${tier}`);
+    if (dashEl) {
+      if (priceFetchFailed || pongPriceUsd <= 0) dashEl.textContent = '-- PONG';
+      else dashEl.textContent = formatPongShort(getTierPongAmount(tier)) + ' PONG';
     }
   });
   updateGameStakeDisplay();
@@ -301,6 +304,9 @@ function showApp() {
   updateNav();
   removeWalletLocks();
   updateDashboardNickname();
+  // Hide the connect wallet button in wallet card since we're logged in
+  const connectCardBtn = document.getElementById('btn-connect-wallet-card');
+  if (connectCardBtn) connectCardBtn.classList.add('hidden');
   // Route to the tab matching the current URL, or default to play
   const initialTab = getTabFromPath();
   switchTab(initialTab, false);
@@ -633,16 +639,31 @@ async function saveNickname() {
 }
 
 function openHandleChange() {
-  const newHandle = prompt('Enter new handle (3-20 chars, letters/numbers/underscores).\n\nThis costs $10 worth of $PONG.');
-  if (!newHandle) return;
-  if (newHandle.length < 3 || newHandle.length > 20 || !/^[a-zA-Z0-9_]+$/.test(newHandle)) {
-    showToast('Invalid handle format');
-    return;
-  }
-  changeHandle(newHandle);
+  if (!requireWallet('change handle')) return;
+  const input = document.getElementById('handle-change-input');
+  input.value = '';
+  document.getElementById('handle-change-error').classList.add('hidden');
+  document.getElementById('handle-change-modal').classList.remove('hidden');
+  input.focus();
 }
 
-async function changeHandle(newHandle) {
+function closeHandleChange() {
+  document.getElementById('handle-change-modal').classList.add('hidden');
+}
+
+async function submitHandleChange() {
+  const newHandle = document.getElementById('handle-change-input').value.trim();
+  const errEl = document.getElementById('handle-change-error');
+  if (!newHandle || newHandle.length < 3 || newHandle.length > 20) {
+    errEl.textContent = 'Handle must be 3-20 characters';
+    errEl.classList.remove('hidden');
+    return;
+  }
+  if (!/^[a-zA-Z0-9_]+$/.test(newHandle)) {
+    errEl.textContent = 'Only letters, numbers, underscores allowed';
+    errEl.classList.remove('hidden');
+    return;
+  }
   try {
     const res = await fetch('/api/profile/handle', {
       method: 'PUT',
@@ -650,16 +671,19 @@ async function changeHandle(newHandle) {
       body: JSON.stringify({ handle: newHandle })
     }).then(r => r.json());
     if (res.error) {
-      showToast(res.error);
+      errEl.textContent = res.error;
+      errEl.classList.remove('hidden');
       return;
     }
     currentUser = res.user;
     updateNav();
     updateDashboardNickname();
     loadProfile();
+    closeHandleChange();
     showToast('Handle changed to @' + newHandle);
   } catch (e) {
-    showToast('Handle change failed: ' + e.message);
+    errEl.textContent = 'Failed: ' + e.message;
+    errEl.classList.remove('hidden');
   }
 }
 
@@ -2464,9 +2488,11 @@ socket.on('online-users', (users) => {
   // Update online count display
   const countEl = document.getElementById('online-count-num');
   if (countEl) countEl.textContent = users.length;
-  // Update dashboard online count
+  // Update dashboard online/player counts
   const dashCount = document.getElementById('dash-online-count');
   if (dashCount) dashCount.textContent = users.length;
+  const dashPlayers = document.getElementById('dash-players-ingame');
+  if (dashPlayers) dashPlayers.textContent = users.length;
 });
 
 // Socket: Errors
