@@ -25,12 +25,12 @@
       font-family: 'Segoe UI', system-ui, sans-serif;
       min-height: 100vh;
     }
-    /* Center court dashed line */
+    /* Center court dashed line (offset for 100px sidebar) */
     body::before {
       content: '';
       position: fixed;
       top: 0; bottom: 0;
-      left: 50%;
+      left: calc(50% + 50px);
       width: 2px;
       background: repeating-linear-gradient(to bottom, rgba(168,85,247,0.06) 0px, rgba(168,85,247,0.06) 12px, transparent 12px, transparent 24px);
       pointer-events: none;
@@ -478,7 +478,7 @@
           </div>
 
           <!-- ===== 3-COLUMN DASHBOARD LAYOUT ===== -->
-          <div class="grid grid-cols-1 lg:grid-cols-[240px_1fr_240px] gap-3 max-w-5xl mx-auto">
+          <div class="grid grid-cols-1 lg:grid-cols-[220px_1fr_220px] gap-3 max-w-4xl mx-auto">
 
             <!-- ===== LEFT COLUMN ===== -->
             <div class="space-y-3">
