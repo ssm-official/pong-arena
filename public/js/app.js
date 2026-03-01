@@ -414,6 +414,7 @@ const TAB_ROUTES = {
   '/profile': 'profile',
   '/friends': 'friends',
   '/opponents': 'opponents',
+  '/cosmetics': 'cosmetics',
   '/shop': 'shop',
   '/history': 'history',
 };
@@ -449,6 +450,7 @@ function switchTab(tab, pushState) {
   if (tab === 'play') loadDashboard();
   if (tab === 'profile') loadProfile();
   if (tab === 'friends') loadFriends();
+  if (tab === 'cosmetics') loadCosmetics();
   if (tab === 'shop') loadShop();
   if (tab === 'history') loadHistory();
   if (tab === 'leaderboard') loadLeaderboard(currentLbSort);
@@ -2839,6 +2841,173 @@ async function equipSkinFromModal(skinId) {
 }
 
 // ===========================================
+// COSMETICS TAB
+// ===========================================
+
+async function loadCosmetics() {
+  const grid = document.getElementById('cosmetics-inventory');
+  const paddlePreview = document.getElementById('cosmetics-paddle-preview');
+  const equippedName = document.getElementById('cosmetics-equipped-name');
+  const equippedRarity = document.getElementById('cosmetics-equipped-rarity');
+  if (!grid) return;
+
+  try {
+    const res = await fetch('/api/shop', { headers: { Authorization: getAuthHeader() } }).then(r => r.json());
+    const inventory = res.inventory || [];
+    dashInventory = inventory;
+
+    // Update equipped paddle preview
+    const equipped = inventory.find(s => s.equipped);
+    if (equipped && paddlePreview) {
+      if (equipped.type === 'color') {
+        paddlePreview.style.background = esc(equipped.cssValue);
+        paddlePreview.style.boxShadow = '0 0 15px ' + esc(equipped.cssValue);
+        paddlePreview.style.backgroundImage = '';
+      } else {
+        paddlePreview.style.background = 'url(' + esc(equipped.imageUrl) + ') center/cover no-repeat';
+        paddlePreview.style.boxShadow = 'none';
+      }
+      if (equippedName) equippedName.textContent = equipped.name;
+      if (equippedRarity) {
+        const rc = equipped.rarity === 'legendary' ? 'bg-yellow-900 text-yellow-300'
+          : equipped.rarity === 'rare' ? 'bg-purple-900 text-purple-300'
+          : 'bg-gray-800 text-gray-400';
+        equippedRarity.className = 'text-xs px-2 py-0.5 rounded ' + rc;
+        equippedRarity.textContent = equipped.rarity;
+        equippedRarity.classList.remove('hidden');
+      }
+    } else {
+      if (paddlePreview) {
+        paddlePreview.style.background = '#a855f7';
+        paddlePreview.style.boxShadow = '0 0 15px #a855f7';
+        paddlePreview.style.backgroundImage = '';
+      }
+      if (equippedName) equippedName.textContent = 'Default';
+      if (equippedRarity) equippedRarity.classList.add('hidden');
+    }
+
+    if (inventory.length === 0) {
+      grid.innerHTML = `
+        <div class="col-span-full text-center py-10">
+          <p class="text-gray-500 text-sm mb-3">No skins yet!</p>
+          <button onclick="switchTab('shop')" class="bg-purple-600 hover:bg-purple-700 px-5 py-2 rounded-lg text-sm font-medium transition">Open Crates in Shop</button>
+        </div>`;
+      return;
+    }
+
+    grid.innerHTML = inventory.map(s => {
+      const rarityClass = s.rarity === 'legendary' ? 'bg-yellow-900 text-yellow-300'
+        : s.rarity === 'rare' ? 'bg-purple-900 text-purple-300'
+        : 'bg-gray-800 text-gray-400';
+      const borderClass = s.equipped ? 'border-purple-500 shadow-[0_0_12px_rgba(168,85,247,0.3)]' : 'border-gray-800 hover:border-gray-600';
+      const preview = s.type === 'color'
+        ? `<div class="w-10 h-10 rounded-full" style="background:${esc(s.cssValue)};box-shadow:0 0 12px ${esc(s.cssValue)}"></div>`
+        : `<img src="${esc(s.imageUrl)}" class="h-16 object-contain" />`;
+      return `
+        <div class="skin-card bg-arena-card rounded-xl p-3 border ${borderClass} transition-all">
+          <div class="w-full h-20 rounded-lg mb-2 flex items-center justify-center"
+            style="background: ${s.type === 'color' ? esc(s.cssValue) + '22' : '#1a1a3a'}">
+            ${preview}
+          </div>
+          <h4 class="font-bold text-sm truncate">${esc(s.name)}</h4>
+          <div class="flex items-center justify-between mt-1.5">
+            <span class="text-xs px-1.5 py-0.5 rounded ${rarityClass}">${s.rarity}</span>
+            <button onclick="equipFromCosmetics('${s.skinId}')" class="text-xs font-medium ${s.equipped ? 'text-green-400' : 'text-purple-400 hover:text-purple-300'}">
+              ${s.equipped ? '✓ Equipped' : 'Equip'}
+            </button>
+          </div>
+        </div>
+      `;
+    }).join('');
+  } catch (err) {
+    grid.innerHTML = '<p class="text-red-400 text-sm col-span-full text-center py-8">Failed to load cosmetics.</p>';
+    console.error('Failed to load cosmetics:', err);
+  }
+}
+
+async function equipFromCosmetics(skinId) {
+  try {
+    await apiPostAuth('/api/shop/equip', { skinId }, getAuthHeader());
+    dashInventory.forEach(s => { s.equipped = s.skinId === skinId; });
+    loadCosmetics();
+    updatePaddlePreview();
+  } catch (err) {
+    alert('Failed to equip: ' + err.message);
+  }
+}
+
+// ===========================================
+// BUY $PONG MODAL
+// ===========================================
+
+let solPriceUsd = 0;
+
+async function fetchSolPrice() {
+  try {
+    const res = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd');
+    if (res.ok) {
+      const data = await res.json();
+      if (data.solana && data.solana.usd) {
+        solPriceUsd = data.solana.usd;
+      }
+    }
+  } catch (e) { console.warn('SOL price fetch failed:', e.message); }
+}
+
+function openBuyPong() {
+  if (!requireWallet('buy')) return;
+  fetchSolPrice().then(() => {
+    const priceDisplay = document.getElementById('buy-pong-price-display');
+    const solDisplay = document.getElementById('buy-sol-price-display');
+    if (priceDisplay && pongPriceUsd > 0) priceDisplay.textContent = '$' + pongPriceUsd.toFixed(8);
+    if (solDisplay && solPriceUsd > 0) solDisplay.textContent = '$' + solPriceUsd.toFixed(2);
+  });
+  document.getElementById('buy-sol-input').value = '';
+  document.getElementById('buy-pong-estimate').textContent = '--';
+  const errEl = document.getElementById('buy-pong-error');
+  if (errEl) errEl.classList.add('hidden');
+  document.getElementById('buy-pong-modal').classList.remove('hidden');
+}
+
+function closeBuyPong() {
+  document.getElementById('buy-pong-modal').classList.add('hidden');
+}
+
+function updateBuyPongEstimate() {
+  const solAmount = parseFloat(document.getElementById('buy-sol-input').value);
+  const estimateEl = document.getElementById('buy-pong-estimate');
+  if (!solAmount || solAmount <= 0 || solPriceUsd <= 0 || pongPriceUsd <= 0) {
+    estimateEl.textContent = '--';
+    return;
+  }
+  const usdValue = solAmount * solPriceUsd;
+  const pongAmount = Math.floor(usdValue / pongPriceUsd);
+  estimateEl.textContent = pongAmount.toLocaleString();
+}
+
+async function executeBuyPong() {
+  const solAmount = parseFloat(document.getElementById('buy-sol-input').value);
+  const errEl = document.getElementById('buy-pong-error');
+  errEl.classList.add('hidden');
+
+  if (!solAmount || solAmount <= 0) {
+    errEl.textContent = 'Enter a valid SOL amount';
+    errEl.classList.remove('hidden');
+    return;
+  }
+  if (solAmount < 0.001) {
+    errEl.textContent = 'Minimum 0.001 SOL';
+    errEl.classList.remove('hidden');
+    return;
+  }
+
+  // Open Jupiter swap in new tab with the $PONG token pre-selected
+  const jupiterUrl = `https://jup.ag/swap/SOL-${PONG_TOKEN_MINT}?amount=${solAmount}`;
+  window.open(jupiterUrl, '_blank');
+  closeBuyPong();
+}
+
+// ===========================================
 // SETTINGS MODAL
 // ===========================================
 
@@ -2922,11 +3091,13 @@ function initMusic() {
   if (musicEnabled) {
     audio.play().then(() => {
       musicStarted = true;
+      updateMusicIcon();
     }).catch(() => {
       // Autoplay blocked — will retry on user interaction
     });
+  } else {
+    musicStarted = true;
   }
-  musicStarted = true;
   updateMusicIcon();
 }
 
@@ -2951,8 +3122,11 @@ function tryStartMusic() {
 tryStartMusic();
 
 (function initLoadingScreen() {
-  // Auto-dismiss after 1.5s
-  const autoDismiss = setTimeout(dismissLoadingScreen, 1500);
+  // Auto-dismiss after 1.5s and try to start music
+  const autoDismiss = setTimeout(() => {
+    tryStartMusic();
+    dismissLoadingScreen();
+  }, 1500);
 
   function earlyDismiss() {
     clearTimeout(autoDismiss);
@@ -2960,17 +3134,30 @@ tryStartMusic();
     dismissLoadingScreen();
     document.removeEventListener('click', earlyDismiss);
     document.removeEventListener('keydown', earlyDismiss);
+    document.removeEventListener('touchstart', earlyDismiss);
   }
   document.addEventListener('click', earlyDismiss);
   document.addEventListener('keydown', earlyDismiss);
+  document.addEventListener('touchstart', earlyDismiss);
 })();
 
-// Fallback: catch ANY user interaction to start music
-['click', 'keydown', 'touchstart', 'mousedown'].forEach(evt => {
-  document.addEventListener(evt, function startMusicHandler() {
-    tryStartMusic();
-    document.removeEventListener(evt, startMusicHandler);
-  }, { once: true });
+// Persistent fallback: keep trying on ANY user interaction until music starts
+function persistentMusicStart() {
+  if (musicStarted) return;
+  const audio = document.getElementById('bg-music');
+  if (!audio || !musicEnabled) return;
+  audio.volume = musicVolume / 100;
+  audio.play().then(() => {
+    musicStarted = true;
+    updateMusicIcon();
+    // Remove all listeners once music starts
+    ['click', 'keydown', 'touchstart', 'mousedown', 'scroll'].forEach(evt => {
+      document.removeEventListener(evt, persistentMusicStart);
+    });
+  }).catch(() => {});
+}
+['click', 'keydown', 'touchstart', 'mousedown', 'scroll'].forEach(evt => {
+  document.addEventListener(evt, persistentMusicStart);
 });
 
 // Initialize music icon state on load
