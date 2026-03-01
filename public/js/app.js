@@ -44,6 +44,11 @@ let lastGameOpponent = null;
 // --- Leaderboard ---
 let currentLbSort = 'earnings';
 
+// --- Music state ---
+let musicStarted = false;
+let musicEnabled = localStorage.getItem('pong-music-enabled') !== 'false'; // default true
+let musicVolume = parseInt(localStorage.getItem('pong-music-volume') || '30', 10);
+
 // ===========================================
 // USD PRICE FETCH (with fallback)
 // ===========================================
@@ -269,6 +274,9 @@ function showView(view) {
 function showApp() {
   showView('app');
   updateNav();
+  // Show side nav
+  const sideNav = document.getElementById('side-nav');
+  if (sideNav) { sideNav.classList.remove('hidden'); sideNav.style.display = 'flex'; }
   // Route to the tab matching the current URL, or default to play
   const initialTab = getTabFromPath();
   switchTab(initialTab, false);
@@ -286,11 +294,21 @@ function showApp() {
 }
 
 function updateNav() {
-  document.getElementById('btn-connect').textContent = shortenAddress(currentUser.wallet);
-  document.getElementById('btn-connect').onclick = null;
+  const connectBtn = document.getElementById('btn-connect');
+  connectBtn.title = shortenAddress(currentUser.wallet);
+  connectBtn.onclick = null;
+  // Change wallet icon to connected state
+  connectBtn.style.background = 'rgba(22, 163, 74, 0.4)';
+  connectBtn.style.borderColor = '#22c55e';
   document.getElementById('nav-username').textContent = currentUser.username;
-  if (currentUser.pfp) document.getElementById('nav-pfp').src = currentUser.pfp;
-  document.getElementById('nav-user').classList.remove('hidden');
+  const navPfp = document.getElementById('nav-pfp');
+  if (currentUser.pfp && navPfp) {
+    navPfp.src = currentUser.pfp;
+    navPfp.style.display = 'block';
+    // hide the fallback svg
+    const fallbackSvg = navPfp.nextElementSibling;
+    if (fallbackSvg) fallbackSvg.style.display = 'none';
+  }
 }
 
 // ===========================================
@@ -322,6 +340,11 @@ function switchTab(tab, pushState) {
   document.getElementById(`tab-${tab}`).classList.remove('hidden');
   const tabBtn = document.querySelector(`[data-tab="${tab}"]`);
   if (tabBtn) tabBtn.classList.add('tab-active');
+
+  // Update side nav active state
+  document.querySelectorAll('#side-nav [data-nav]').forEach(btn => {
+    btn.classList.toggle('active', btn.getAttribute('data-nav') === tab);
+  });
 
   // Update URL (don't push on popstate or initial load)
   if (pushState !== false) {
@@ -957,12 +980,15 @@ async function fetchUnreadCounts() {
 
 function updateFriendsBadge() {
   const total = Object.values(unreadCounts).reduce((sum, c) => sum + c, 0);
-  const badge = document.getElementById('friends-badge');
-  if (total > 0) {
-    badge.textContent = total;
-    badge.classList.remove('hidden');
-  } else {
-    badge.classList.add('hidden');
+  // Update nav badge on side nav
+  const navBadge = document.getElementById('nav-friends-badge');
+  if (navBadge) {
+    if (total > 0) {
+      navBadge.textContent = total;
+      navBadge.classList.remove('hidden');
+    } else {
+      navBadge.classList.add('hidden');
+    }
   }
 }
 
@@ -2586,4 +2612,141 @@ async function equipSkinFromModal(skinId) {
   } catch (err) {
     alert('Failed to equip: ' + err.message);
   }
+}
+
+// ===========================================
+// SETTINGS MODAL
+// ===========================================
+
+function openSettings() {
+  const modal = document.getElementById('settings-modal');
+  if (!modal) return;
+  // Sync UI with current state
+  const toggle = document.getElementById('settings-music-toggle');
+  if (toggle) toggle.checked = musicEnabled;
+  const slider = document.getElementById('settings-volume-slider');
+  if (slider) slider.value = musicVolume;
+  const label = document.getElementById('settings-volume-label');
+  if (label) label.textContent = musicVolume + '%';
+  modal.classList.remove('hidden');
+}
+
+function closeSettings() {
+  const modal = document.getElementById('settings-modal');
+  if (modal) modal.classList.add('hidden');
+}
+
+function toggleMusicSetting(enabled) {
+  musicEnabled = enabled;
+  localStorage.setItem('pong-music-enabled', enabled ? 'true' : 'false');
+  const audio = document.getElementById('bg-music');
+  if (!audio) return;
+  if (enabled && musicStarted) {
+    audio.play().catch(() => {});
+  } else {
+    audio.pause();
+  }
+  updateMusicIcon();
+}
+
+function toggleMusic() {
+  musicEnabled = !musicEnabled;
+  localStorage.setItem('pong-music-enabled', musicEnabled ? 'true' : 'false');
+  const audio = document.getElementById('bg-music');
+  if (!audio) return;
+  if (musicEnabled) {
+    if (!musicStarted) {
+      initMusic();
+    } else {
+      audio.play().catch(() => {});
+    }
+  } else {
+    audio.pause();
+  }
+  updateMusicIcon();
+}
+
+function setMusicVolume(val) {
+  musicVolume = parseInt(val, 10);
+  localStorage.setItem('pong-music-volume', String(musicVolume));
+  const audio = document.getElementById('bg-music');
+  if (audio) audio.volume = musicVolume / 100;
+  const label = document.getElementById('settings-volume-label');
+  if (label) label.textContent = musicVolume + '%';
+}
+
+function updateMusicIcon() {
+  const onIcon = document.getElementById('music-icon-on');
+  const offIcon = document.getElementById('music-icon-off');
+  const btn = document.getElementById('btn-music-toggle');
+  if (!onIcon || !offIcon) return;
+  if (musicEnabled) {
+    onIcon.classList.remove('hidden');
+    offIcon.classList.add('hidden');
+    if (btn) { btn.style.color = '#c084fc'; }
+  } else {
+    onIcon.classList.add('hidden');
+    offIcon.classList.remove('hidden');
+    if (btn) { btn.style.color = ''; }
+  }
+}
+
+function initMusic() {
+  const audio = document.getElementById('bg-music');
+  if (!audio || musicStarted) return;
+  audio.volume = musicVolume / 100;
+  if (musicEnabled) {
+    audio.play().then(() => {
+      musicStarted = true;
+    }).catch(() => {
+      // Autoplay blocked — will try again on next user interaction
+    });
+  }
+  musicStarted = true;
+  updateMusicIcon();
+}
+
+// ===========================================
+// LOADING SCREEN
+// ===========================================
+
+function dismissLoadingScreen() {
+  const screen = document.getElementById('loading-screen');
+  if (!screen) return;
+  screen.classList.add('fade-out');
+  setTimeout(() => {
+    screen.style.display = 'none';
+  }, 600);
+  // Start music after loading screen dismisses
+  initMusic();
+}
+
+// Auto-dismiss loading screen after delay, or on first interaction
+(function initLoadingScreen() {
+  // Dismiss after 2.5 seconds automatically
+  const autoDismiss = setTimeout(() => {
+    dismissLoadingScreen();
+  }, 2500);
+
+  // Also dismiss on any click/key
+  function earlyDismiss() {
+    clearTimeout(autoDismiss);
+    dismissLoadingScreen();
+    document.removeEventListener('click', earlyDismiss);
+    document.removeEventListener('keydown', earlyDismiss);
+  }
+  document.addEventListener('click', earlyDismiss);
+  document.addEventListener('keydown', earlyDismiss);
+})();
+
+// Ensure music starts on first user click (autoplay policy fallback)
+document.addEventListener('click', function startMusicOnClick() {
+  if (!musicStarted) initMusic();
+}, { once: true });
+
+// Initialize music icon state on load
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', updateMusicIcon);
+} else {
+  updateMusicIcon();
 }
