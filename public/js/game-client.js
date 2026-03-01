@@ -168,6 +168,7 @@ const GameClient = (() => {
       myAura = p2Aura;
       opponentAura = p1Aura;
     }
+    console.log('[AURA DEBUG] setPlayerAuras:', { amPlayer1, myAura, opponentAura });
   }
 
   function setMirrored(val) {
