@@ -2943,10 +2943,20 @@ function updatePaddlePreview(auraSkin) {
   const rarityEl = document.getElementById('dash-skin-rarity');
   if (!paddle) return;
   const equipped = dashInventory.find(s => s.equipped);
+  // Resolve aura color once
+  let auraColor = null;
+  if (auraSkin) {
+    auraColor = '#a855f7';
+    try { auraColor = JSON.parse(auraSkin.cssValue).color || '#a855f7'; } catch {}
+  }
+
   if (equipped) {
     if (equipped.type === 'color') {
       paddle.style.background = esc(equipped.cssValue);
       paddle.style.backgroundImage = '';
+    } else if (auraColor) {
+      // Layer aura tint over the skin image
+      paddle.style.background = `linear-gradient(${auraColor}35, ${auraColor}35), url(${esc(equipped.imageUrl)}) center/cover no-repeat`;
     } else {
       paddle.style.background = 'url(' + esc(equipped.imageUrl) + ') center/cover no-repeat';
     }
@@ -2965,24 +2975,24 @@ function updatePaddlePreview(auraSkin) {
   }
 
   // Apply aura glow to player bar paddle
-  if (auraSkin) {
-    let auraColor = '#a855f7';
-    try { auraColor = JSON.parse(auraSkin.cssValue).color || '#a855f7'; } catch {}
-    paddle.style.boxShadow = `0 0 15px ${auraColor}, 0 0 30px ${auraColor}40`;
+  if (auraColor) {
+    paddle.style.boxShadow = `0 0 6px ${auraColor}, inset 0 0 8px ${auraColor}80`;
   } else {
     const glowColor = equipped && equipped.type === 'color' ? equipped.cssValue : '#a855f7';
-    paddle.style.boxShadow = '0 0 15px ' + glowColor;
+    paddle.style.boxShadow = '0 0 10px ' + glowColor;
   }
 
   // Dashboard Customize card — sync skin + aura to the right paddle preview
   const dashPaddleRight = document.getElementById('dash-paddle-preview-right');
   const dashAuraName = document.getElementById('dash-aura-name');
   if (dashPaddleRight) {
-    // Apply the same skin styling to the Customize card paddle
+    // Apply skin + aura overlay to the Customize card paddle
     if (equipped) {
       if (equipped.type === 'color') {
         dashPaddleRight.style.background = esc(equipped.cssValue);
         dashPaddleRight.style.backgroundImage = '';
+      } else if (auraColor) {
+        dashPaddleRight.style.background = `linear-gradient(${auraColor}35, ${auraColor}35), url(${esc(equipped.imageUrl)}) center/cover no-repeat`;
       } else {
         dashPaddleRight.style.background = 'url(' + esc(equipped.imageUrl) + ') center/cover no-repeat';
       }
@@ -2991,11 +3001,9 @@ function updatePaddlePreview(auraSkin) {
       dashPaddleRight.style.backgroundImage = '';
     }
 
-    // Apply aura glow
-    if (auraSkin) {
-      let auraColor = '#a855f7';
-      try { auraColor = JSON.parse(auraSkin.cssValue).color || '#a855f7'; } catch {}
-      dashPaddleRight.style.boxShadow = `0 0 20px ${auraColor}, 0 0 40px ${auraColor}40`;
+    // Apply aura glow — inset so it's on the skin, not floating around it
+    if (auraColor) {
+      dashPaddleRight.style.boxShadow = `0 0 8px ${auraColor}, inset 0 0 12px ${auraColor}80`;
       if (dashAuraName) dashAuraName.textContent = 'Aura: ' + auraSkin.name;
     } else {
       const glowColor = equipped && equipped.type === 'color' ? equipped.cssValue : '#a855f7';
