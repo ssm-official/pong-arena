@@ -2945,11 +2945,9 @@ function updatePaddlePreview(auraSkin) {
   if (equipped) {
     if (equipped.type === 'color') {
       paddle.style.background = esc(equipped.cssValue);
-      paddle.style.boxShadow = '0 0 15px ' + esc(equipped.cssValue);
       paddle.style.backgroundImage = '';
     } else {
       paddle.style.background = 'url(' + esc(equipped.imageUrl) + ') center/cover no-repeat';
-      paddle.style.boxShadow = 'none';
     }
     nameEl.textContent = equipped.name;
     const rarityClass = equipped.rarity === 'legendary' ? 'bg-yellow-900 text-yellow-300'
@@ -2960,10 +2958,19 @@ function updatePaddlePreview(auraSkin) {
     rarityEl.classList.remove('hidden');
   } else {
     paddle.style.background = '#a855f7';
-    paddle.style.boxShadow = '0 0 15px #a855f7';
     paddle.style.backgroundImage = '';
     nameEl.textContent = 'Default';
     rarityEl.classList.add('hidden');
+  }
+
+  // Apply aura glow to player bar paddle
+  if (auraSkin) {
+    let auraColor = '#a855f7';
+    try { auraColor = JSON.parse(auraSkin.cssValue).color || '#a855f7'; } catch {}
+    paddle.style.boxShadow = `0 0 15px ${auraColor}, 0 0 30px ${auraColor}40`;
+  } else {
+    const glowColor = equipped && equipped.type === 'color' ? equipped.cssValue : '#a855f7';
+    paddle.style.boxShadow = '0 0 15px ' + glowColor;
   }
 
   // Dashboard Customize card — sync skin + aura to the right paddle preview
