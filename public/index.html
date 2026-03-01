@@ -352,11 +352,17 @@
     </a>
 
     <!-- Settings -->
-    <button class="side-nav-btn" onclick="openSettings()">
+    <button class="side-nav-btn" data-nav="settings" onclick="switchTab('settings')">
       <div class="nav-icon">
         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
       </div>
       <span class="nav-label">Settings</span>
+    </button>
+
+    <!-- Tokenomics -->
+    <button class="side-nav-btn" data-nav="tokenomics" onclick="switchTab('tokenomics')">
+      <div class="nav-icon">💰</div>
+      <span class="nav-label">Tokenomics</span>
     </button>
 
     <!-- Music toggle -->
@@ -624,10 +630,6 @@
                 </div>
                 <div class="flex items-center justify-center gap-3 py-3">
                   <div id="dash-paddle-preview-right" style="width:14px;height:52px;border-radius:4px;background:#a855f7;box-shadow:0 0 12px #a855f7"></div>
-                  <div id="dash-aura-preview" style="width:14px;height:52px;border-radius:4px;display:none"></div>
-                </div>
-                <div class="text-center mb-1.5">
-                  <span id="dash-aura-name" class="text-[10px] text-gray-500">Aura: None</span>
                 </div>
                 <button onclick="switchTab('cosmetics')" class="w-full bg-gray-800/60 hover:bg-gray-700/60 text-gray-300 text-[10px] py-2 rounded-lg transition font-medium border border-gray-700/50">Change Appearance</button>
               </div>
@@ -955,44 +957,40 @@
         </div>
       </div>
 
-      <!-- ===== SHOP TAB (Fortnite-style Item Shop) ===== -->
+      <!-- ===== SHOP TAB (Full-Page Layout-Driven Item Shop) ===== -->
       <div id="tab-shop" class="tab-content hidden">
-        <div class="max-w-3xl mx-auto">
+        <div class="w-full max-w-5xl mx-auto px-4">
           <!-- Shop Header -->
-          <div class="text-center mb-5">
-            <h2 class="text-2xl font-black bg-gradient-to-r from-purple-400 via-pink-400 to-purple-400 bg-clip-text text-transparent tracking-wide">ITEM SHOP</h2>
-            <p class="text-gray-500 text-xs mt-1">Open crates to unlock paddle skins & auras. 90% of purchases are burned!</p>
+          <div class="text-center mb-6">
+            <h2 class="text-3xl font-black bg-gradient-to-r from-purple-400 via-pink-400 to-purple-400 bg-clip-text text-transparent tracking-wide">ITEM SHOP</h2>
+            <p class="text-gray-500 text-xs mt-1">Buy skins directly or open crates. 90% of all purchases are burned!</p>
           </div>
 
-          <!-- Shop Panel Container -->
-          <div class="bg-arena-card rounded-2xl border border-purple-900/20 overflow-hidden">
-            <!-- Limited Releases Section -->
-            <div id="shop-limited-section" class="hidden">
-              <div class="px-5 pt-5 pb-2 flex items-center gap-2">
-                <span class="w-2 h-2 rounded-full bg-yellow-400 animate-pulse"></span>
-                <h3 class="text-sm font-bold text-yellow-400 uppercase tracking-wider">Limited Releases</h3>
-              </div>
-              <div id="shop-limited-grid" class="px-5 pb-5 grid grid-cols-1 sm:grid-cols-2 gap-3"></div>
-              <div class="border-b border-gray-800/50"></div>
-            </div>
+          <!-- Dynamic shop sections render here -->
+          <div id="shop-layout-container"></div>
 
-            <!-- Aura Crates Section -->
-            <div id="shop-aura-section" class="hidden">
-              <div class="px-5 pt-5 pb-2 flex items-center gap-2">
-                <span class="text-purple-400">&#10024;</span>
-                <h3 class="text-sm font-bold text-purple-400 uppercase tracking-wider">Aura Crates</h3>
+          <!-- Fallback: Legacy crate sections (shown when no layout configured) -->
+          <div id="shop-fallback" class="hidden">
+            <!-- Limited Releases Section -->
+            <div id="shop-limited-section" class="hidden mb-4">
+              <div class="bg-arena-card rounded-2xl border border-yellow-900/30 overflow-hidden">
+                <div class="px-5 pt-5 pb-2 flex items-center gap-2">
+                  <span class="w-2 h-2 rounded-full bg-yellow-400 animate-pulse"></span>
+                  <h3 class="text-sm font-bold text-yellow-400 uppercase tracking-wider">Limited Releases</h3>
+                </div>
+                <div id="shop-limited-grid" class="px-5 pb-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3"></div>
               </div>
-              <div id="shop-aura-grid" class="px-5 pb-5 grid grid-cols-1 sm:grid-cols-2 gap-3"></div>
-              <div class="border-b border-gray-800/50"></div>
             </div>
 
             <!-- Standard Crates Section -->
-            <div>
-              <div class="px-5 pt-5 pb-2 flex items-center gap-2">
-                <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>
-                <h3 class="text-sm font-bold text-gray-300 uppercase tracking-wider">Standard Crates</h3>
+            <div class="mb-4">
+              <div class="bg-arena-card rounded-2xl border border-purple-900/20 overflow-hidden">
+                <div class="px-5 pt-5 pb-2 flex items-center gap-2">
+                  <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>
+                  <h3 class="text-sm font-bold text-gray-300 uppercase tracking-wider">Standard Crates</h3>
+                </div>
+                <div id="shop-standard-grid" class="px-5 pb-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3"></div>
               </div>
-              <div id="shop-standard-grid" class="px-5 pb-5 grid grid-cols-1 sm:grid-cols-2 gap-3"></div>
             </div>
           </div>
         </div>
@@ -1027,26 +1025,92 @@
             </div>
           </div>
 
-          <!-- Equipped Aura Preview -->
-          <div class="bg-arena-card rounded-xl p-5 border border-gray-800 mb-4 flex items-center gap-5">
-            <div id="cosmetics-aura-preview" class="w-8 h-8 flex items-center justify-center text-gray-600 text-xl flex-shrink-0">&#10024;</div>
-            <div>
-              <p class="text-xs text-gray-500 uppercase tracking-wider mb-0.5">Equipped Aura</p>
-              <h3 id="cosmetics-equipped-aura-name" class="text-lg font-bold text-white">None</h3>
-              <span id="cosmetics-equipped-aura-rarity" class="text-xs px-2 py-0.5 rounded bg-gray-800 text-gray-400 hidden">common</span>
-            </div>
-          </div>
-
           <!-- Paddle Skins -->
           <h3 class="text-sm font-bold text-gray-400 uppercase tracking-wider mb-2">Paddle Skins</h3>
           <div id="cosmetics-inventory" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 mb-6">
             <p class="text-gray-500 text-sm col-span-full text-center py-8">Loading your skins...</p>
           </div>
+        </div>
+      </div>
 
-          <!-- Auras -->
-          <h3 class="text-sm font-bold text-gray-400 uppercase tracking-wider mb-2">Auras</h3>
-          <div id="cosmetics-aura-inventory" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-            <p class="text-gray-500 text-sm col-span-full text-center py-4">No auras yet.</p>
+      <!-- ===== SETTINGS TAB ===== -->
+      <div id="tab-settings" class="tab-content hidden">
+        <div class="max-w-2xl mx-auto">
+          <h2 class="text-2xl font-black text-white mb-6">Settings</h2>
+
+          <!-- Game Settings -->
+          <div class="bg-arena-card rounded-2xl border border-purple-900/20 p-5 mb-4">
+            <h3 class="text-sm font-bold text-gray-300 uppercase tracking-wider mb-4">Game Settings</h3>
+            <div class="space-y-4">
+              <div class="flex items-center justify-between">
+                <span class="text-sm text-gray-400">Background Music</span>
+                <label class="toggle-switch">
+                  <input type="checkbox" id="settings-page-music-toggle" onchange="toggleMusicSetting(this.checked)" checked />
+                  <span class="toggle-slider"></span>
+                </label>
+              </div>
+              <div class="flex items-center justify-between">
+                <span class="text-sm text-gray-400">Volume</span>
+                <div class="flex items-center gap-3 flex-1 ml-4">
+                  <input type="range" id="settings-page-volume-slider" class="volume-slider flex-1" min="0" max="100" value="30" oninput="setMusicVolume(this.value);document.getElementById('settings-page-volume-label').textContent=this.value+'%'" />
+                  <span id="settings-page-volume-label" class="text-xs text-gray-500 w-8 text-right">30%</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Legal & Info -->
+          <div class="bg-arena-card rounded-2xl border border-purple-900/20 p-5">
+            <h3 class="text-sm font-bold text-gray-300 uppercase tracking-wider mb-4">Legal & Info</h3>
+            <div class="space-y-2">
+              <button onclick="showLegalModal('Terms of Service')" class="w-full text-left px-4 py-3 bg-gray-800/50 rounded-lg text-sm text-gray-300 hover:bg-gray-700 transition flex items-center justify-between">
+                Terms of Service <span class="text-gray-600">&rarr;</span>
+              </button>
+              <button onclick="showLegalModal('Privacy Policy')" class="w-full text-left px-4 py-3 bg-gray-800/50 rounded-lg text-sm text-gray-300 hover:bg-gray-700 transition flex items-center justify-between">
+                Privacy Policy <span class="text-gray-600">&rarr;</span>
+              </button>
+              <button onclick="showLegalModal('About')" class="w-full text-left px-4 py-3 bg-gray-800/50 rounded-lg text-sm text-gray-300 hover:bg-gray-700 transition flex items-center justify-between">
+                About <span class="text-gray-600">&rarr;</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Legal Modal -->
+      <div id="legal-modal" class="hidden fixed inset-0 bg-black/70 z-50 flex items-center justify-center" onclick="if(event.target===this)closeLegalModal()">
+        <div class="bg-arena-card rounded-xl max-w-md w-full mx-4 p-6 text-center">
+          <h3 id="legal-modal-title" class="text-lg font-bold text-white mb-4"></h3>
+          <p class="text-gray-400 text-sm mb-6">Coming soon.</p>
+          <button onclick="closeLegalModal()" class="bg-gray-700 hover:bg-gray-600 px-6 py-2 rounded-lg text-sm font-medium transition">Close</button>
+        </div>
+      </div>
+
+      <!-- ===== TOKENOMICS TAB ===== -->
+      <div id="tab-tokenomics" class="tab-content hidden">
+        <div class="max-w-2xl mx-auto">
+          <h2 class="text-2xl font-black bg-gradient-to-r from-yellow-400 to-purple-400 bg-clip-text text-transparent mb-6">Tokenomics</h2>
+
+          <!-- Burn Stats -->
+          <div class="bg-arena-card rounded-2xl border border-purple-900/20 p-5 mb-4">
+            <h3 class="text-sm font-bold text-gray-300 uppercase tracking-wider mb-3">Burn Mechanism</h3>
+            <p class="text-gray-400 text-sm mb-3">5% of every match pot and 90% of all shop revenue is permanently burned.</p>
+            <div class="bg-gray-800/50 rounded-lg p-4 text-center">
+              <p class="text-xs text-gray-500 uppercase mb-1">Total $PONG Burned</p>
+              <p id="tokenomics-burned" class="text-2xl font-black text-orange-400">Loading...</p>
+            </div>
+          </div>
+
+          <!-- Token Distribution -->
+          <div class="bg-arena-card rounded-2xl border border-purple-900/20 p-5 mb-4">
+            <h3 class="text-sm font-bold text-gray-300 uppercase tracking-wider mb-3">Token Distribution</h3>
+            <p class="text-gray-500 text-sm">More details coming soon.</p>
+          </div>
+
+          <!-- Supply Info -->
+          <div class="bg-arena-card rounded-2xl border border-purple-900/20 p-5">
+            <h3 class="text-sm font-bold text-gray-300 uppercase tracking-wider mb-3">Supply Info</h3>
+            <p class="text-gray-500 text-sm">More details coming soon.</p>
           </div>
         </div>
       </div>
