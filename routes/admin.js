@@ -72,7 +72,7 @@ router.get('/crates', adminAuth, async (req, res) => {
 // POST /api/admin/crate — create new crate
 router.post('/crate', adminAuth, async (req, res) => {
   try {
-    const { name, description, price, imageColor, limited } = req.body;
+    const { name, description, price, imageColor, limited, crateType } = req.body;
     if (!name || !price) {
       return res.status(400).json({ error: 'Name and price are required' });
     }
@@ -87,6 +87,7 @@ router.post('/crate', adminAuth, async (req, res) => {
       price: Number(price),
       imageColor: imageColor || '#7c3aed',
       limited: !!limited,
+      crateType: crateType || 'skin',
       active: true,
     });
 
@@ -100,7 +101,7 @@ router.post('/crate', adminAuth, async (req, res) => {
 // PUT /api/admin/crate/:crateId — update crate
 router.put('/crate/:crateId', adminAuth, async (req, res) => {
   try {
-    const { name, description, price, imageColor, limited, active } = req.body;
+    const { name, description, price, imageColor, limited, active, crateType } = req.body;
     const update = {};
     if (name !== undefined) update.name = name;
     if (description !== undefined) update.description = description;
@@ -108,6 +109,7 @@ router.put('/crate/:crateId', adminAuth, async (req, res) => {
     if (imageColor !== undefined) update.imageColor = imageColor;
     if (limited !== undefined) update.limited = !!limited;
     if (active !== undefined) update.active = !!active;
+    if (crateType !== undefined) update.crateType = crateType;
 
     const crate = await Crate.findOneAndUpdate(
       { crateId: req.params.crateId },

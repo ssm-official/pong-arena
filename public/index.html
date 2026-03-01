@@ -308,7 +308,7 @@
     </button>
 
     <!-- Shop -->
-    <button class="side-nav-btn" data-nav="shop" onclick="switchTab('shop')">
+    <button class="side-nav-btn" onclick="openShopPanel()">
       <div class="nav-icon">
         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"/></svg>
       </div>
@@ -916,43 +916,8 @@
         </div>
       </div>
 
-      <!-- ===== SHOP TAB ===== -->
-      <div id="tab-shop" class="tab-content hidden">
-        <p class="text-gray-500 text-sm mb-4">Open crates to get random paddle skins. 90% of purchases are burned!</p>
-        <div id="shop-limited-section" class="hidden mb-6">
-          <h3 class="text-lg font-bold mb-3 text-yellow-400 flex items-center gap-2">
-            <span class="w-2 h-2 rounded-full bg-yellow-400 animate-pulse"></span> Limited Releases
-          </h3>
-          <div id="shop-limited-grid" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
-        </div>
-        <div class="mb-6">
-          <h3 class="text-lg font-bold mb-3">Standard Crates</h3>
-          <div id="shop-standard-grid" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
-        </div>
-        <div class="border-t border-gray-800 pt-6">
-          <h3 class="text-lg font-bold mb-3">Your Inventory</h3>
-          <div id="shop-inventory" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3"></div>
-        </div>
-        <!-- Crate Roller Modal -->
-        <div id="crate-roller-modal" class="hidden fixed inset-0 bg-black/90 z-50 flex flex-col items-center justify-center">
-          <div id="roller-flash" class="fixed inset-0 bg-yellow-400 opacity-0 pointer-events-none z-[60] transition-opacity duration-200"></div>
-          <p class="text-gray-400 text-sm mb-4">Opening crate...</p>
-          <div class="relative w-[340px] sm:w-[500px] md:w-[600px] overflow-hidden rounded-xl border border-gray-700 bg-arena-card" style="height:120px;">
-            <div class="absolute top-0 bottom-0 left-1/2 -translate-x-1/2 w-[3px] bg-purple-500 z-10"></div>
-            <div class="absolute top-0 left-1/2 -translate-x-1/2 z-10 w-0 h-0 border-l-[8px] border-r-[8px] border-t-[10px] border-transparent border-t-purple-500"></div>
-            <div class="absolute bottom-0 left-1/2 -translate-x-1/2 z-10 w-0 h-0 border-l-[8px] border-r-[8px] border-b-[10px] border-transparent border-b-purple-500"></div>
-            <div id="roller-strip" class="absolute top-0 left-0 flex items-center h-full" style="will-change:transform;"></div>
-          </div>
-          <div id="roller-reveal" class="hidden mt-6 text-center">
-            <div id="roller-reveal-preview" class="w-24 h-24 rounded-lg mx-auto mb-3 flex items-center justify-center"></div>
-            <h3 id="roller-reveal-name" class="text-xl font-bold mb-1"></h3>
-            <p id="roller-reveal-rarity" class="text-sm mb-4 font-bold"></p>
-            <button onclick="closeRoller()" class="bg-purple-600 hover:bg-purple-700 px-6 py-2 rounded-lg font-medium transition">
-              Nice!
-            </button>
-          </div>
-        </div>
-      </div>
+      <!-- ===== SHOP TAB (kept as empty placeholder for routing compat) ===== -->
+      <div id="tab-shop" class="tab-content hidden"></div>
 
       <!-- ===== HISTORY TAB ===== -->
       <div id="tab-history" class="tab-content hidden">
@@ -967,7 +932,7 @@
         <div class="max-w-3xl mx-auto">
           <div class="flex items-center justify-between mb-4">
             <h2 class="text-xl font-bold">My Cosmetics</h2>
-            <button onclick="switchTab('shop')" class="bg-purple-600 hover:bg-purple-700 px-4 py-1.5 rounded-lg text-sm font-medium transition flex items-center gap-1.5">
+            <button onclick="openShopPanel()" class="bg-purple-600 hover:bg-purple-700 px-4 py-1.5 rounded-lg text-sm font-medium transition flex items-center gap-1.5">
               <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"/></svg>
               Shop
             </button>
@@ -1144,7 +1109,7 @@
         <p class="text-gray-500 text-sm col-span-3">Loading...</p>
       </div>
       <div class="p-4 border-t border-gray-800">
-        <button onclick="closeInventoryModal();switchTab('shop')" class="w-full bg-purple-600 hover:bg-purple-700 py-2.5 rounded-lg font-medium transition">Shop</button>
+        <button onclick="closeInventoryModal();openShopPanel()" class="w-full bg-purple-600 hover:bg-purple-700 py-2.5 rounded-lg font-medium transition">Shop</button>
       </div>
     </div>
   </div>
@@ -1390,6 +1355,58 @@
     </div>
   </div>
 
+  <!-- ============ SHOP FLOATING PANEL ============ -->
+  <div id="shop-panel" class="hidden fixed inset-0 z-50 flex items-center justify-center">
+    <div class="absolute inset-0 bg-black/70" onclick="closeShopPanel()"></div>
+    <div class="relative bg-arena-card border border-purple-900/30 rounded-2xl max-w-2xl w-full mx-4 max-h-[85vh] overflow-y-auto glow-border z-10">
+      <div class="sticky top-0 bg-arena-card border-b border-gray-800 px-6 py-4 flex items-center justify-between rounded-t-2xl z-10">
+        <div>
+          <h2 class="text-xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">Crate Shop</h2>
+          <p class="text-gray-500 text-xs mt-0.5">Open crates to get random paddle skins & auras. 90% burned!</p>
+        </div>
+        <button onclick="closeShopPanel()" class="text-gray-400 hover:text-white text-2xl leading-none">&times;</button>
+      </div>
+      <div class="p-6 space-y-6">
+        <div id="shop-limited-section" class="hidden">
+          <h3 class="text-lg font-bold mb-3 text-yellow-400 flex items-center gap-2">
+            <span class="w-2 h-2 rounded-full bg-yellow-400 animate-pulse"></span> Limited Releases
+          </h3>
+          <div id="shop-limited-grid" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
+        </div>
+        <div id="shop-aura-section" class="hidden">
+          <h3 class="text-lg font-bold mb-3 text-purple-400 flex items-center gap-2">
+            <span>&#10024;</span> Aura Crates
+          </h3>
+          <div id="shop-aura-grid" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
+        </div>
+        <div>
+          <h3 class="text-lg font-bold mb-3">Standard Crates</h3>
+          <div id="shop-standard-grid" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ CRATE ROLLER MODAL ============ -->
+  <div id="crate-roller-modal" class="hidden fixed inset-0 bg-black/90 z-[55] flex flex-col items-center justify-center">
+    <div id="roller-flash" class="fixed inset-0 bg-yellow-400 opacity-0 pointer-events-none z-[60] transition-opacity duration-200"></div>
+    <p class="text-gray-400 text-sm mb-4">Opening crate...</p>
+    <div class="relative w-[340px] sm:w-[500px] md:w-[600px] overflow-hidden rounded-xl border border-gray-700 bg-arena-card" style="height:120px;">
+      <div class="absolute top-0 bottom-0 left-1/2 -translate-x-1/2 w-[3px] bg-purple-500 z-10"></div>
+      <div class="absolute top-0 left-1/2 -translate-x-1/2 z-10 w-0 h-0 border-l-[8px] border-r-[8px] border-t-[10px] border-transparent border-t-purple-500"></div>
+      <div class="absolute bottom-0 left-1/2 -translate-x-1/2 z-10 w-0 h-0 border-l-[8px] border-r-[8px] border-b-[10px] border-transparent border-b-purple-500"></div>
+      <div id="roller-strip" class="absolute top-0 left-0 flex items-center h-full" style="will-change:transform;"></div>
+    </div>
+    <div id="roller-reveal" class="hidden mt-6 text-center">
+      <div id="roller-reveal-preview" class="w-24 h-24 rounded-lg mx-auto mb-3 flex items-center justify-center"></div>
+      <h3 id="roller-reveal-name" class="text-xl font-bold mb-1"></h3>
+      <p id="roller-reveal-rarity" class="text-sm mb-4 font-bold"></p>
+      <button onclick="closeRoller()" class="bg-purple-600 hover:bg-purple-700 px-6 py-2 rounded-lg font-medium transition">
+        Nice!
+      </button>
+    </div>
+  </div>
+
   <!-- ============ TOAST NOTIFICATION ============ -->
   <div id="toast-notification" class="toast-notification"></div>
 
@@ -1399,6 +1416,6 @@
   <script src="/js/wallet.js?v=33"></script>
   <script src="/js/pong-sim.js?v=34"></script>
   <script src="/js/game-client.js?v=39"></script>
-  <script src="/js/app.js?v=53"></script>
+  <script src="/js/app.js?v=54"></script>
 </body>
 </html>

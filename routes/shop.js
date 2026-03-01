@@ -44,7 +44,8 @@ router.get('/', optionalAuth, async (req, res) => {
     });
 
     const limited = cratesWithSkins.filter(c => c.limited);
-    const standard = cratesWithSkins.filter(c => !c.limited);
+    const aura = cratesWithSkins.filter(c => !c.limited && c.crateType === 'aura');
+    const standard = cratesWithSkins.filter(c => !c.limited && c.crateType !== 'aura');
 
     // Build inventory — owned skins with full data
     const inventory = skins
@@ -62,7 +63,7 @@ router.get('/', optionalAuth, async (req, res) => {
       });
     }
 
-    res.json({ limited, standard, inventory, equippedSkin: user?.equippedSkin || 'default', equippedAura: user?.equippedAura || 'none', ownedCrates: ownedCratesMap });
+    res.json({ limited, aura, standard, inventory, equippedSkin: user?.equippedSkin || 'default', equippedAura: user?.equippedAura || 'none', ownedCrates: ownedCratesMap });
   } catch (err) {
     console.error('Shop fetch error:', err);
     res.status(500).json({ error: 'Failed to fetch shop' });
