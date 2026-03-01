@@ -253,14 +253,17 @@ async function connectWallet() {
 }
 
 async function registerUser() {
-  const username = document.getElementById('reg-username').value.trim();
+  const handle = document.getElementById('reg-handle').value.trim();
+  const nickname = document.getElementById('reg-nickname').value.trim();
   const bio = document.getElementById('reg-bio').value.trim();
-  if (!username) return showRegError('Username is required');
+  if (!handle) return showRegError('Handle is required');
+  if (handle.length < 3) return showRegError('Handle must be at least 3 characters');
+  if (!/^[a-zA-Z0-9_]+$/.test(handle)) return showRegError('Handle can only contain letters, numbers, underscores');
   try {
     const res = await fetch('/api/auth/register', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: getAuthHeader() },
-      body: JSON.stringify({ wallet: WalletManager.getWallet(), username, pfp: '', bio })
+      body: JSON.stringify({ wallet: WalletManager.getWallet(), handle, nickname: nickname || handle, pfp: '', bio })
     }).then(r => r.json());
     if (res.error) return showRegError(res.error);
     sessionToken = res.token;
@@ -297,6 +300,7 @@ function showApp() {
   showView('app');
   updateNav();
   removeWalletLocks();
+  updateDashboardNickname();
   // Route to the tab matching the current URL, or default to play
   const initialTab = getTabFromPath();
   switchTab(initialTab, false);
@@ -349,7 +353,7 @@ function applyWalletLocks() {
   const lockConfigs = [
     { id: 'card-balance', label: 'Connect wallet to view balance' },
     { id: 'card-record', label: 'Connect wallet to view record' },
-    { id: 'card-paddle', label: 'Connect wallet to view paddle' },
+    { id: 'card-nickname', label: 'Connect wallet to set nickname' },
     { id: 'card-friends', label: 'Connect wallet to see friends' },
   ];
   lockConfigs.forEach(({ id, label }) => {
@@ -383,7 +387,7 @@ function updateNav() {
   // Update label
   const label = connectBtn.querySelector('.nav-label');
   if (label) label.textContent = shortenAddress(currentUser.wallet).slice(0,6);
-  document.getElementById('nav-username').textContent = currentUser.username;
+  document.getElementById('nav-username').textContent = currentUser.nickname || currentUser.username;
   const navPfp = document.getElementById('nav-pfp');
   if (currentUser.pfp && navPfp) {
     navPfp.src = currentUser.pfp;
@@ -516,9 +520,11 @@ function loadProfile() {
   }
 
   document.getElementById('profile-pfp').src = currentUser.pfp || '';
-  document.getElementById('profile-username').textContent = currentUser.username;
+  document.getElementById('profile-nickname').textContent = currentUser.nickname || currentUser.username;
+  document.getElementById('profile-handle').textContent = '@' + (currentUser.handle || currentUser.username);
   document.getElementById('profile-wallet').textContent = shortenAddress(currentUser.wallet);
-  document.getElementById('edit-username').value = currentUser.username;
+  document.getElementById('edit-nickname').value = currentUser.nickname || currentUser.username;
+  document.getElementById('edit-handle-display').textContent = currentUser.handle || currentUser.username;
   document.getElementById('edit-bio').value = currentUser.bio || '';
   document.getElementById('stat-wins').textContent = currentUser.stats?.wins || 0;
   document.getElementById('stat-losses').textContent = currentUser.stats?.losses || 0;
@@ -539,7 +545,7 @@ function loadProfile() {
 async function saveProfile() {
   try {
     const body = {
-      username: document.getElementById('edit-username').value.trim(),
+      nickname: document.getElementById('edit-nickname').value.trim(),
       bio: document.getElementById('edit-bio').value.trim(),
     };
     const res = await fetch('/api/profile', {
@@ -552,6 +558,7 @@ async function saveProfile() {
     } else {
       currentUser = res.user;
       updateNav();
+      updateDashboardNickname();
       showProfileMsg('Profile saved!', 'green');
     }
   } catch (err) {
@@ -565,6 +572,95 @@ function showProfileMsg(msg, color) {
   el.className = `text-sm text-${color}-400`;
   el.classList.remove('hidden');
   setTimeout(() => el.classList.add('hidden'), 3000);
+}
+
+// ===========================================
+// NICKNAME / HANDLE
+// ===========================================
+
+function updateDashboardNickname() {
+  if (!currentUser) return;
+  const nicknameEl = document.getElementById('dash-nickname');
+  const handleEl = document.getElementById('dash-handle');
+  if (nicknameEl) nicknameEl.textContent = currentUser.nickname || currentUser.username;
+  if (handleEl) handleEl.textContent = '@' + (currentUser.handle || currentUser.username);
+}
+
+function openNicknameEdit() {
+  if (!requireWallet('change nickname')) return;
+  const input = document.getElementById('nickname-input');
+  input.value = currentUser.nickname || currentUser.username;
+  document.getElementById('nickname-error').classList.add('hidden');
+  document.getElementById('nickname-modal').classList.remove('hidden');
+  input.focus();
+}
+
+function closeNicknameEdit() {
+  document.getElementById('nickname-modal').classList.add('hidden');
+}
+
+async function saveNickname() {
+  const nickname = document.getElementById('nickname-input').value.trim();
+  if (!nickname || nickname.length < 1) {
+    const err = document.getElementById('nickname-error');
+    err.textContent = 'Nickname cannot be empty';
+    err.classList.remove('hidden');
+    return;
+  }
+  try {
+    const res = await fetch('/api/profile', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Authorization: getAuthHeader() },
+      body: JSON.stringify({ nickname })
+    }).then(r => r.json());
+    if (res.error) {
+      const err = document.getElementById('nickname-error');
+      err.textContent = res.error;
+      err.classList.remove('hidden');
+      return;
+    }
+    currentUser = res.user;
+    updateNav();
+    updateDashboardNickname();
+    loadProfile();
+    closeNicknameEdit();
+    showToast('Nickname updated!');
+  } catch (e) {
+    const err = document.getElementById('nickname-error');
+    err.textContent = 'Failed to save: ' + e.message;
+    err.classList.remove('hidden');
+  }
+}
+
+function openHandleChange() {
+  const newHandle = prompt('Enter new handle (3-20 chars, letters/numbers/underscores).\n\nThis costs $10 worth of $PONG.');
+  if (!newHandle) return;
+  if (newHandle.length < 3 || newHandle.length > 20 || !/^[a-zA-Z0-9_]+$/.test(newHandle)) {
+    showToast('Invalid handle format');
+    return;
+  }
+  changeHandle(newHandle);
+}
+
+async function changeHandle(newHandle) {
+  try {
+    const res = await fetch('/api/profile/handle', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Authorization: getAuthHeader() },
+      body: JSON.stringify({ handle: newHandle })
+    }).then(r => r.json());
+    if (res.error) {
+      showToast(res.error);
+      return;
+    }
+    currentUser = res.user;
+    updateNav();
+    updateDashboardNickname();
+    loadProfile();
+    showToast('Handle changed to @' + newHandle);
+  } catch (e) {
+    showToast('Handle change failed: ' + e.message);
+  }
 }
 
 // --- Toast Notification ---

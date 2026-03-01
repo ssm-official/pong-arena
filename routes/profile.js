@@ -45,27 +45,37 @@ router.get('/', async (req, res) => {
 
 /**
  * PUT /api/profile
- * Update username, pfp, bio, equippedSkin.
+ * Update nickname, pfp, bio, equippedSkin.
  */
 router.put('/', async (req, res) => {
   try {
-    const { username, pfp, bio, equippedSkin } = req.body;
+    const { nickname, pfp, bio, equippedSkin } = req.body;
     const updates = {};
 
-    if (username !== undefined) {
+    // Nickname is free to change
+    if (nickname !== undefined) {
+      if (nickname.length < 1 || nickname.length > 20) {
+        return res.status(400).json({ error: 'Nickname must be 1-20 characters' });
+      }
+      updates.nickname = nickname;
+    }
+
+    // Legacy: still accept username updates (syncs with handle)
+    if (req.body.username !== undefined) {
+      const username = req.body.username;
       if (username.length < 3 || username.length > 20) {
         return res.status(400).json({ error: 'Username must be 3-20 characters' });
       }
       if (!/^[a-zA-Z0-9_]+$/.test(username)) {
         return res.status(400).json({ error: 'Username can only contain letters, numbers, underscores' });
       }
-      // Check uniqueness
       const conflict = await User.findOne({
         username: { $regex: new RegExp(`^${username}$`, 'i') },
         wallet: { $ne: req.wallet }
       });
       if (conflict) return res.status(400).json({ error: 'Username taken' });
       updates.username = username;
+      updates.handle = username;
     }
 
     if (pfp !== undefined) updates.pfp = pfp;
@@ -85,6 +95,38 @@ router.put('/', async (req, res) => {
   } catch (err) {
     if (err.code === 11000) return res.status(400).json({ error: 'Username taken' });
     res.status(500).json({ error: 'Update failed' });
+  }
+});
+
+/**
+ * PUT /api/profile/handle
+ * Change handle — costs $10 worth of $PONG (validated client-side via tx).
+ * For now just validates and updates; payment enforced on client.
+ */
+router.put('/handle', async (req, res) => {
+  try {
+    const { handle } = req.body;
+    if (!handle || handle.length < 3 || handle.length > 20) {
+      return res.status(400).json({ error: 'Handle must be 3-20 characters' });
+    }
+    if (!/^[a-zA-Z0-9_]+$/.test(handle)) {
+      return res.status(400).json({ error: 'Handle can only contain letters, numbers, underscores' });
+    }
+    const conflict = await User.findOne({
+      handle: { $regex: new RegExp(`^${handle}$`, 'i') },
+      wallet: { $ne: req.wallet }
+    });
+    if (conflict) return res.status(400).json({ error: 'Handle taken' });
+
+    const user = await User.findOneAndUpdate(
+      { wallet: req.wallet },
+      { $set: { handle, username: handle } },
+      { new: true }
+    );
+    res.json({ user });
+  } catch (err) {
+    if (err.code === 11000) return res.status(400).json({ error: 'Handle taken' });
+    res.status(500).json({ error: 'Handle update failed' });
   }
 });
 
@@ -144,7 +186,7 @@ router.post('/upload-banner', upload.single('banner'), async (req, res) => {
 router.get('/:wallet', async (req, res) => {
   try {
     const user = await User.findOne({ wallet: req.params.wallet })
-      .select('wallet username pfp banner bio stats equippedSkin createdAt');
+      .select('wallet username handle nickname pfp banner bio stats equippedSkin createdAt');
     if (!user) return res.status(404).json({ error: 'User not found' });
     res.json({ user });
   } catch (err) {

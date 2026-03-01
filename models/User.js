@@ -2,8 +2,10 @@ const mongoose = require('mongoose');
 
 const userSchema = new mongoose.Schema({
   wallet: { type: String, required: true, unique: true, index: true },
-  username: { type: String, required: true, unique: true, minlength: 3, maxlength: 20 },
-  pfp: { type: String, default: '' },          // profile pic URL
+  username: { type: String, required: true, unique: true, minlength: 3, maxlength: 20 }, // legacy — same as handle
+  handle: { type: String, required: true, unique: true, minlength: 3, maxlength: 20 },   // permanent @handle ($10 to change)
+  nickname: { type: String, default: '' },      // free changeable display name
+  pfp: { type: String, default: '' },           // profile pic URL
   banner: { type: String, default: '' },        // profile banner URL
   bio: { type: String, default: '', maxlength: 160 },
   friends: [{ type: String }],                  // array of wallet addresses

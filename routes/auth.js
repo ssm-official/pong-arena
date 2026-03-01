@@ -82,10 +82,12 @@ router.post('/register', async (req, res) => {
     }
 
     // Support both flows: token-based and signature-based
-    const { signature, timestamp, username, pfp, bio } = req.body;
+    const { signature, timestamp, handle, nickname, pfp, bio } = req.body;
+    // Backwards compat: accept "username" as alias for "handle"
+    const handleVal = handle || req.body.username;
     wallet = req.body.wallet;
 
-    if (!wallet || !username) {
+    if (!wallet || !handleVal) {
       return res.status(400).json({ error: 'Missing required fields' });
     }
 
@@ -96,26 +98,28 @@ router.post('/register', async (req, res) => {
       }
     }
 
-    // Validate username
-    if (username.length < 3 || username.length > 20) {
-      return res.status(400).json({ error: 'Username must be 3-20 characters' });
+    // Validate handle
+    if (handleVal.length < 3 || handleVal.length > 20) {
+      return res.status(400).json({ error: 'Handle must be 3-20 characters' });
     }
-    if (!/^[a-zA-Z0-9_]+$/.test(username)) {
-      return res.status(400).json({ error: 'Username can only contain letters, numbers, underscores' });
+    if (!/^[a-zA-Z0-9_]+$/.test(handleVal)) {
+      return res.status(400).json({ error: 'Handle can only contain letters, numbers, underscores' });
     }
 
-    // Check duplicates
+    // Check duplicates (handle and username are synced)
     const existing = await User.findOne({
-      $or: [{ wallet }, { username: { $regex: new RegExp(`^${username}$`, 'i') } }]
+      $or: [{ wallet }, { handle: { $regex: new RegExp(`^${handleVal}$`, 'i') } }]
     });
     if (existing) {
       if (existing.wallet === wallet) return res.status(400).json({ error: 'Wallet already registered' });
-      return res.status(400).json({ error: 'Username taken' });
+      return res.status(400).json({ error: 'Handle taken' });
     }
 
     const user = await User.create({
       wallet,
-      username,
+      username: handleVal,
+      handle: handleVal,
+      nickname: nickname || handleVal,
       pfp: pfp || '',
       bio: bio || '',
     });

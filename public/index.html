@@ -411,8 +411,16 @@
       <h2 class="text-2xl font-bold mb-6 text-center">Set Up Your Profile</h2>
       <div class="bg-arena-card rounded-xl p-6 space-y-4 glow-border">
         <div>
-          <label class="block text-sm text-gray-400 mb-1">Username *</label>
-          <input id="reg-username" type="text" maxlength="20" placeholder="CryptoGamer42"
+          <label class="block text-sm text-gray-400 mb-1">Handle * <span class="text-gray-600">(your unique @tag — $10 to change later)</span></label>
+          <div class="relative">
+            <span class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">@</span>
+            <input id="reg-handle" type="text" maxlength="20" placeholder="CryptoGamer42"
+              class="w-full bg-gray-800 border border-gray-700 rounded-lg pl-7 pr-3 py-2 text-white focus:border-purple-500 focus:outline-none" />
+          </div>
+        </div>
+        <div>
+          <label class="block text-sm text-gray-400 mb-1">Nickname <span class="text-gray-600">(display name — free to change)</span></label>
+          <input id="reg-nickname" type="text" maxlength="20" placeholder="Same as handle if left empty"
             class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:border-purple-500 focus:outline-none" />
         </div>
         <div>
@@ -487,92 +495,32 @@
             </div>
           </div>
 
+          <!-- Nickname bar -->
+          <div id="card-nickname" class="bg-arena-card rounded-xl p-4 border border-gray-800 card-animate mb-5 flex items-center justify-between" style="animation-delay:0.25s">
+            <div class="flex items-center gap-3">
+              <div id="dash-paddle-preview" style="width:16px;height:56px;border-radius:4px;background:#a855f7;box-shadow:0 0 12px #a855f7;flex-shrink:0"></div>
+              <div>
+                <div class="flex items-center gap-2">
+                  <span id="dash-nickname" class="text-lg font-bold text-white">Player</span>
+                  <button onclick="openNicknameEdit()" class="text-gray-500 hover:text-purple-400 transition" title="Change Nickname">
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
+                  </button>
+                </div>
+                <span id="dash-handle" class="text-xs text-gray-500">@handle</span>
+              </div>
+            </div>
+            <div class="flex items-center gap-2">
+              <span id="dash-skin-name" class="text-xs text-gray-400">Default</span>
+              <span id="dash-skin-rarity" class="text-xs px-1.5 py-0.5 rounded hidden"></span>
+            </div>
+          </div>
+
           <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
 
             <!-- ===== LEFT COLUMN ===== -->
             <div class="space-y-5">
-              <!-- Play Button -->
-              <div class="bg-arena-card rounded-xl p-6 border border-gray-800 card-animate text-center">
-                <button onclick="openStakePicker()"
-                  class="w-full bg-gradient-to-r from-purple-600 via-purple-500 to-pink-500 hover:from-purple-500 hover:via-purple-400 hover:to-pink-400 py-5 rounded-xl text-2xl font-black tracking-wide transition-all duration-300 hover:scale-[1.02] hover:shadow-[0_0_30px_rgba(168,85,247,0.4)] active:scale-[0.98]">
-                  PLAY
-                </button>
-                <p class="text-gray-500 text-xs mt-3">Pick your stake and find an opponent instantly</p>
-                <a href="/practice.html" class="text-purple-400 hover:text-purple-300 text-xs mt-1 inline-block">or Practice Solo &rarr;</a>
-              </div>
-
-              <!-- Custom Lobbies (bigger) -->
-              <div class="bg-arena-card rounded-xl p-6 border border-gray-800 card-animate" style="animation-delay:0.1s">
-                <div class="flex items-center justify-between mb-4">
-                  <h3 class="text-lg font-bold">Custom Lobbies</h3>
-                  <span class="text-xs text-gray-500 bg-gray-800/80 px-2.5 py-1 rounded-lg">Any stake amount</span>
-                </div>
-
-                <!-- Create Lobby Form -->
-                <div id="lobby-create-section" class="mb-5">
-                  <div class="flex gap-3">
-                    <div class="flex-1">
-                      <input id="lobby-usd-input" type="number" min="0" step="0.01" placeholder="Enter stake in USD"
-                        class="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-white focus:border-purple-500 focus:outline-none transition"
-                        oninput="updateLobbyPongDisplay()" />
-                      <p id="lobby-pong-display" class="text-gray-500 text-xs mt-1.5 ml-1"></p>
-                    </div>
-                    <button id="btn-create-lobby" onclick="createLobby()"
-                      class="bg-purple-600 hover:bg-purple-700 px-6 py-3 rounded-xl font-bold transition whitespace-nowrap hover:shadow-[0_0_20px_rgba(168,85,247,0.3)]">
-                      Create
-                    </button>
-                  </div>
-                </div>
-
-                <!-- Cancel Lobby (shown when player has active lobby) -->
-                <div id="lobby-cancel-section" class="hidden mb-5">
-                  <div class="bg-purple-900/30 border border-purple-700/50 rounded-xl p-4 flex items-center justify-between">
-                    <div>
-                      <p class="text-sm text-purple-300 font-medium">Your lobby is open</p>
-                      <p id="lobby-my-stake" class="text-xs text-gray-400 mt-0.5"></p>
-                    </div>
-                    <button onclick="cancelLobby()" class="bg-red-600 hover:bg-red-700 px-4 py-2 rounded-lg text-sm font-medium transition">
-                      Cancel
-                    </button>
-                  </div>
-                </div>
-
-                <!-- Filter Bar -->
-                <div class="flex gap-2 mb-3">
-                  <input id="lobby-filter-min" type="number" min="0" step="0.01" placeholder="Min USD"
-                    class="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:border-purple-500 focus:outline-none"
-                    oninput="applyLobbyFilters()" />
-                  <input id="lobby-filter-max" type="number" min="0" step="0.01" placeholder="Max USD"
-                    class="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:border-purple-500 focus:outline-none"
-                    oninput="applyLobbyFilters()" />
-                </div>
-
-                <!-- Lobby List -->
-                <div id="lobby-list" class="space-y-2 max-h-96 overflow-y-auto">
-                  <p class="text-gray-500 text-sm text-center py-6">No open lobbies. Create one!</p>
-                </div>
-              </div>
-            </div>
-
-            <!-- ===== RIGHT COLUMN ===== -->
-            <div class="space-y-5">
-              <!-- My Paddle -->
-              <div id="card-paddle" class="bg-arena-card rounded-xl p-5 border border-gray-800 cursor-pointer hover:border-purple-700 transition card-animate" style="animation-delay:0.1s" onclick="openInventoryModal()">
-                <div class="flex items-center justify-between mb-3">
-                  <h3 class="text-sm font-bold text-gray-300">My Paddle</h3>
-                  <a href="#" onclick="event.stopPropagation();event.preventDefault();openInventoryModal()" class="text-purple-400 hover:text-purple-300 text-xs">Inventory &rarr;</a>
-                </div>
-                <div class="flex items-center gap-4">
-                  <div id="dash-paddle-preview" style="width:24px;height:80px;border-radius:5px;background:#a855f7;box-shadow:0 0 15px #a855f7;transition:all 0.3s ease;flex-shrink:0"></div>
-                  <div class="flex-1">
-                    <span id="dash-skin-name" class="text-sm text-gray-300 font-medium block">Default</span>
-                    <span id="dash-skin-rarity" class="text-xs px-1.5 py-0.5 rounded hidden mt-1 inline-block"></span>
-                  </div>
-                </div>
-              </div>
-
-              <!-- Leaderboard Preview Panel -->
-              <div class="bg-arena-card rounded-xl p-5 border border-gray-800 card-animate" style="animation-delay:0.15s">
+              <!-- Leaderboard Preview -->
+              <div class="bg-arena-card rounded-xl p-5 border border-gray-800 card-animate" style="animation-delay:0.1s">
                 <div class="flex items-center justify-between mb-3">
                   <h3 class="text-sm font-bold text-gray-300">Leaderboard</h3>
                   <a href="#" onclick="event.preventDefault();switchTab('leaderboard')" class="text-purple-400 hover:text-purple-300 text-xs">View All &rarr;</a>
@@ -589,9 +537,12 @@
                   <p class="text-gray-500 text-xs">Loading...</p>
                 </div>
               </div>
+            </div>
 
+            <!-- ===== RIGHT COLUMN ===== -->
+            <div class="space-y-5">
               <!-- Friends Mini Card -->
-              <div id="card-friends" class="bg-arena-card rounded-xl p-5 border border-gray-800 card-animate" style="animation-delay:0.2s">
+              <div id="card-friends" class="bg-arena-card rounded-xl p-5 border border-gray-800 card-animate" style="animation-delay:0.15s">
                 <div class="flex items-center justify-between mb-3">
                   <h3 class="text-sm font-bold text-gray-300">Friends</h3>
                   <a href="#" onclick="event.preventDefault();switchTab('friends')" class="text-purple-400 hover:text-purple-300 text-xs">View All &rarr;</a>
@@ -790,7 +741,8 @@
             <div class="flex items-center gap-4 mb-6 -mt-12 relative z-10">
               <img id="profile-pfp" src="" class="w-20 h-20 rounded-full bg-gray-700 border-4 border-arena-card" onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect fill=%22%23333%22 width=%22100%22 height=%22100%22/><text x=%2250%22 y=%2255%22 text-anchor=%22middle%22 fill=%22%23999%22 font-size=%2240%22>?</text></svg>'" />
               <div class="pt-8">
-                <h2 id="profile-username" class="text-xl font-bold"></h2>
+                <h2 id="profile-nickname" class="text-xl font-bold"></h2>
+                <p id="profile-handle" class="text-purple-400 text-sm">@handle</p>
                 <p id="profile-wallet" class="text-gray-500 text-xs font-mono"></p>
               </div>
             </div>
@@ -810,9 +762,20 @@
             </div>
             <div class="space-y-3">
               <div>
-                <label class="block text-sm text-gray-400 mb-1">Username</label>
-                <input id="edit-username" type="text" maxlength="20"
+                <label class="block text-sm text-gray-400 mb-1">Nickname <span class="text-gray-600">(free to change)</span></label>
+                <input id="edit-nickname" type="text" maxlength="20"
                   class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:border-purple-500 focus:outline-none" />
+              </div>
+              <div>
+                <label class="block text-sm text-gray-400 mb-1">Handle <span class="text-gray-600">($10 to change)</span></label>
+                <div class="flex gap-2">
+                  <div class="flex-1 bg-gray-800/50 border border-gray-700 rounded-lg px-3 py-2 text-gray-400">
+                    @<span id="edit-handle-display"></span>
+                  </div>
+                  <button onclick="openHandleChange()" class="bg-yellow-600/20 text-yellow-400 hover:bg-yellow-600/30 px-3 py-2 rounded-lg text-sm font-medium transition border border-yellow-600/30">
+                    Change ($10)
+                  </button>
+                </div>
               </div>
               <div>
                 <label class="block text-sm text-gray-400 mb-1">Profile Picture</label>
@@ -1080,15 +1043,16 @@
   </div>
 
   <!-- ============ SETTINGS MODAL ============ -->
-  <!-- ============ STAKE PICKER MODAL ============ -->
+  <!-- ============ PLAY MODAL (stake picker + custom lobbies) ============ -->
   <div id="stake-modal" class="hidden fixed inset-0 bg-black/70 z-50 flex items-center justify-center" onclick="if(event.target===this)closeStakePicker()">
-    <div class="bg-arena-card rounded-2xl max-w-lg w-full mx-4 glow-border overflow-hidden">
+    <div class="bg-arena-card rounded-2xl max-w-2xl w-full mx-4 glow-border overflow-hidden max-h-[90vh] overflow-y-auto">
       <div class="flex items-center justify-between p-5 border-b border-gray-800">
-        <h3 class="text-lg font-bold text-white">Choose Your Stake</h3>
+        <h3 class="text-lg font-bold text-white">Quick Play</h3>
         <button onclick="closeStakePicker()" class="text-gray-400 hover:text-white text-xl leading-none">&times;</button>
       </div>
       <div class="p-5">
-        <div class="grid grid-cols-4 gap-3 mb-4" id="tier-grid">
+        <!-- Tier Grid -->
+        <div class="grid grid-cols-4 gap-3 mb-3" id="tier-grid">
           <button onclick="joinQueue('t5')"
             class="tier-btn bg-gray-800 border border-green-800/60 hover:border-green-400 rounded-xl p-3 text-center">
             <div class="text-xl font-bold text-white">$5</div>
@@ -1130,7 +1094,57 @@
             <div id="tier-pong-t1000" class="text-gray-500 text-[10px] truncate mt-0.5">--</div>
           </button>
         </div>
-        <p class="text-gray-600 text-xs text-center">$PONG amounts auto-adjust to live token price</p>
+        <p class="text-gray-600 text-xs text-center mb-5">$PONG amounts auto-adjust to live token price</p>
+
+        <!-- Custom Lobbies inside Play modal -->
+        <div class="border-t border-gray-800 pt-5">
+          <div class="flex items-center justify-between mb-4">
+            <h4 class="text-sm font-bold text-gray-300">Custom Lobbies</h4>
+            <span class="text-[10px] text-gray-500 bg-gray-800/80 px-2 py-0.5 rounded">Any stake</span>
+          </div>
+
+          <!-- Create Lobby Form -->
+          <div id="lobby-create-section" class="mb-4">
+            <div class="flex gap-2">
+              <div class="flex-1">
+                <input id="lobby-usd-input" type="number" min="0" step="0.01" placeholder="Stake (USD)"
+                  class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2.5 text-white text-sm focus:border-purple-500 focus:outline-none transition"
+                  oninput="updateLobbyPongDisplay()" />
+                <p id="lobby-pong-display" class="text-gray-500 text-xs mt-1 ml-1"></p>
+              </div>
+              <button id="btn-create-lobby" onclick="createLobby()"
+                class="bg-purple-600 hover:bg-purple-700 px-5 py-2.5 rounded-lg text-sm font-bold transition whitespace-nowrap">
+                Create
+              </button>
+            </div>
+          </div>
+
+          <!-- Cancel Lobby -->
+          <div id="lobby-cancel-section" class="hidden mb-4">
+            <div class="bg-purple-900/30 border border-purple-700/50 rounded-lg p-3 flex items-center justify-between">
+              <div>
+                <p class="text-sm text-purple-300 font-medium">Your lobby is open</p>
+                <p id="lobby-my-stake" class="text-xs text-gray-400 mt-0.5"></p>
+              </div>
+              <button onclick="cancelLobby()" class="bg-red-600 hover:bg-red-700 px-3 py-1.5 rounded-lg text-xs font-medium transition">Cancel</button>
+            </div>
+          </div>
+
+          <!-- Filter -->
+          <div class="flex gap-2 mb-3">
+            <input id="lobby-filter-min" type="number" min="0" step="0.01" placeholder="Min USD"
+              class="flex-1 bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-xs text-white focus:border-purple-500 focus:outline-none"
+              oninput="applyLobbyFilters()" />
+            <input id="lobby-filter-max" type="number" min="0" step="0.01" placeholder="Max USD"
+              class="flex-1 bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-xs text-white focus:border-purple-500 focus:outline-none"
+              oninput="applyLobbyFilters()" />
+          </div>
+
+          <!-- Lobby List -->
+          <div id="lobby-list" class="space-y-2 max-h-60 overflow-y-auto">
+            <p class="text-gray-500 text-sm text-center py-4">No open lobbies. Create one!</p>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -1168,6 +1182,26 @@
     </div>
   </div>
 
+  <!-- ============ NICKNAME EDIT MODAL ============ -->
+  <div id="nickname-modal" class="hidden fixed inset-0 bg-black/70 z-50 flex items-center justify-center" onclick="if(event.target===this)closeNicknameEdit()">
+    <div class="bg-arena-card rounded-xl max-w-sm w-full mx-4 glow-border overflow-hidden">
+      <div class="flex items-center justify-between p-5 border-b border-gray-800">
+        <h3 class="text-lg font-bold">Change Nickname</h3>
+        <button onclick="closeNicknameEdit()" class="text-gray-400 hover:text-white transition text-xl">&times;</button>
+      </div>
+      <div class="p-5 space-y-4">
+        <div>
+          <label class="block text-sm text-gray-400 mb-1">Nickname <span class="text-gray-600">(what others see)</span></label>
+          <input id="nickname-input" type="text" maxlength="20" placeholder="Your display name"
+            class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:border-purple-500 focus:outline-none" />
+        </div>
+        <p class="text-gray-600 text-xs">This is free to change anytime. Your handle (@tag) stays the same.</p>
+        <button onclick="saveNickname()" class="w-full bg-purple-600 hover:bg-purple-700 py-2 rounded-lg font-medium transition">Save Nickname</button>
+        <p id="nickname-error" class="text-red-400 text-sm hidden"></p>
+      </div>
+    </div>
+  </div>
+
   <!-- ============ TOAST NOTIFICATION ============ -->
   <div id="toast-notification" class="toast-notification"></div>
 
@@ -1177,6 +1211,6 @@
   <script src="/js/wallet.js?v=33"></script>
   <script src="/js/pong-sim.js?v=34"></script>
   <script src="/js/game-client.js?v=38"></script>
-  <script src="/js/app.js?v=42"></script>
+  <script src="/js/app.js?v=43"></script>
 </body>
 </html>
