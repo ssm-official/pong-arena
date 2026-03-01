@@ -373,17 +373,21 @@ function removeWalletLocks() {
 
 function updateNav() {
   const connectBtn = document.getElementById('btn-connect');
-  connectBtn.title = shortenAddress(currentUser.wallet);
   connectBtn.onclick = null;
-  // Change wallet icon to connected state
-  connectBtn.style.background = 'rgba(22, 163, 74, 0.4)';
+  // Change wallet button to connected state
+  connectBtn.style.background = 'rgba(22, 163, 74, 0.3)';
   connectBtn.style.borderColor = '#22c55e';
+  // Update icon bg
+  const iconDiv = connectBtn.querySelector('.nav-icon');
+  if (iconDiv) iconDiv.style.background = 'rgba(22, 163, 74, 0.4)';
+  // Update label
+  const label = connectBtn.querySelector('.nav-label');
+  if (label) label.textContent = shortenAddress(currentUser.wallet).slice(0,6);
   document.getElementById('nav-username').textContent = currentUser.username;
   const navPfp = document.getElementById('nav-pfp');
   if (currentUser.pfp && navPfp) {
     navPfp.src = currentUser.pfp;
     navPfp.style.display = 'block';
-    // hide the fallback svg
     const fallbackSvg = navPfp.nextElementSibling;
     if (fallbackSvg) fallbackSvg.style.display = 'none';
   }
