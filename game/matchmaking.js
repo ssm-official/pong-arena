@@ -27,8 +27,12 @@ async function getPlayerSkin(wallet) {
 const SKIP_ESCROW = process.env.SKIP_ESCROW === 'true';
 if (SKIP_ESCROW) console.log('⚠ SKIP_ESCROW mode: games start without token escrow');
 
-// Queues per tier
-const queues = { low: [], medium: [], high: [] };
+// Valid tiers: USD-based tiers + legacy tiers
+const VALID_TIERS = ['t5', 't10', 't25', 't50', 't100', 't250', 't500', 't1000', 'low', 'medium', 'high', 'duel'];
+
+// Queues per tier (created dynamically)
+const queues = {};
+VALID_TIERS.forEach(t => { queues[t] = []; });
 
 // Pending matches waiting for escrow
 const pendingEscrow = new Map();
@@ -158,8 +162,8 @@ async function startCustomStakeMatch(io, p1, p2, stakeAmount, activeGames) {
 function setupMatchmaking(io, socket, onlineUsers, activeGames) {
 
   // Player joins a matchmaking queue
-  socket.on('queue-join', async ({ tier }) => {
-    if (!['low', 'medium', 'high'].includes(tier)) {
+  socket.on('queue-join', async ({ tier, pongAmount }) => {
+    if (!VALID_TIERS.includes(tier)) {
       return socket.emit('queue-error', { error: 'Invalid tier' });
     }
     if (!socket.wallet) {
@@ -181,21 +185,32 @@ function setupMatchmaking(io, socket, onlineUsers, activeGames) {
       }
     }
 
+    // Calculate stake: use pongAmount from client for USD tiers, or legacy STAKE_TIERS
+    let stakeAmount;
+    if (pongAmount && pongAmount > 0) {
+      // Client sends PONG display units, convert to base units
+      stakeAmount = pongAmount * (10 ** 6); // PONG has 6 decimals
+    } else {
+      stakeAmount = STAKE_TIERS[tier] || 0;
+    }
+
     const player = {
       wallet: socket.wallet,
       username: socket.username || 'Anon',
       socketId: socket.id,
-      tier
+      tier,
+      stakeAmount,
     };
 
     queues[tier].push(player);
     socket.emit('queue-joined', { tier, position: queues[tier].length });
-    console.log(`${player.username} joined ${tier} queue (${queues[tier].length} in queue)`);
+    console.log(`${player.username} joined ${tier} queue (${queues[tier].length} in queue, stake: ${stakeAmount})`);
 
     if (queues[tier].length >= 2) {
       const p1 = queues[tier].shift();
       const p2 = queues[tier].shift();
-      createMatch(io, p1, p2, tier, activeGames);
+      // Use the custom stake amount for USD-based tiers
+      createMatch(io, p1, p2, tier, activeGames, p1.stakeAmount);
     }
   });
 
@@ -534,8 +549,9 @@ function setupMatchmaking(io, socket, onlineUsers, activeGames) {
   });
 }
 
-async function createMatch(io, player1, player2, tier, activeGames) {
+async function createMatch(io, player1, player2, tier, activeGames, customStakeAmount) {
   const gameId = crypto.randomUUID();
+  const stakeAmount = customStakeAmount || STAKE_TIERS[tier] || 0;
 
   await Match.create({
     gameId,
@@ -544,7 +560,7 @@ async function createMatch(io, player1, player2, tier, activeGames) {
     player1Username: player1.username,
     player2Username: player2.username,
     tier,
-    stakeAmount: STAKE_TIERS[tier],
+    stakeAmount,
     status: SKIP_ESCROW ? 'in-progress' : 'pending-escrow'
   });
 
@@ -556,14 +572,14 @@ async function createMatch(io, player1, player2, tier, activeGames) {
     player1.skin = p1Skin;
     player2.skin = p2Skin;
 
-    const game = new PongEngine(gameId, player1, player2, tier, io, activeGames);
+    const game = new PongEngine(gameId, player1, player2, tier, io, activeGames, stakeAmount);
     activeGames.set(gameId, game);
 
     const countdownData = {
       gameId, seconds: 30, tier,
       player1: { wallet: player1.wallet, username: player1.username, skin: p1Skin },
       player2: { wallet: player2.wallet, username: player2.username, skin: p2Skin },
-      stakeAmount: STAKE_TIERS[tier],
+      stakeAmount,
       useReadySystem: true,
     };
     io.to(player1.socketId).emit('game-countdown', countdownData);
@@ -573,10 +589,10 @@ async function createMatch(io, player1, player2, tier, activeGames) {
     return;
   }
 
-  // PRODUCTION: build escrow transactions
+  // PRODUCTION: build escrow transactions using custom stake amount
   let p1Tx, p2Tx;
   try {
-    p1Tx = await buildEscrowTransaction(player1.wallet, tier);
+    p1Tx = await buildCustomEscrowTransaction(player1.wallet, stakeAmount);
   } catch (err) {
     console.error('P1 escrow build failed:', err.message);
     io.to(player1.socketId).emit('match-error', { error: err.message });
@@ -585,7 +601,7 @@ async function createMatch(io, player1, player2, tier, activeGames) {
     return;
   }
   try {
-    p2Tx = await buildEscrowTransaction(player2.wallet, tier);
+    p2Tx = await buildCustomEscrowTransaction(player2.wallet, stakeAmount);
   } catch (err) {
     console.error('P2 escrow build failed:', err.message);
     io.to(player2.socketId).emit('match-error', { error: err.message });
@@ -595,7 +611,7 @@ async function createMatch(io, player1, player2, tier, activeGames) {
   }
 
   pendingEscrow.set(gameId, {
-    player1, player2, tier,
+    player1, player2, tier, stakeAmount,
     p1Escrowed: false, p2Escrowed: false,
   });
 
@@ -603,7 +619,7 @@ async function createMatch(io, player1, player2, tier, activeGames) {
     gameId,
     opponent: { wallet: player2.wallet, username: player2.username },
     tier,
-    stake: STAKE_TIERS[tier],
+    stake: stakeAmount,
     escrowTransaction: p1Tx.transaction,
     yourSlot: 'p1',
   });
@@ -612,7 +628,7 @@ async function createMatch(io, player1, player2, tier, activeGames) {
     gameId,
     opponent: { wallet: player1.wallet, username: player1.username },
     tier,
-    stake: STAKE_TIERS[tier],
+    stake: stakeAmount,
     escrowTransaction: p2Tx.transaction,
     yourSlot: 'p2',
   });

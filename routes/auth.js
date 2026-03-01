@@ -68,30 +68,15 @@ router.post('/login', async (req, res) => {
  */
 router.post('/register', async (req, res) => {
   try {
-    // Can use either session token or signature
-    const authHeader = req.headers.authorization;
-    let wallet;
-
-    if (authHeader && authHeader.startsWith('Bearer ')) {
-      // Session-based (from the login step)
-      const { authMiddleware } = require('../middleware/auth');
-      // Inline check
-      const token = authHeader.slice(7);
-      const sessions = require('../middleware/auth');
-      // Just parse wallet from body since we gave them a token at login
-    }
-
-    // Support both flows: token-based and signature-based
     const { signature, timestamp, handle, nickname, pfp, bio } = req.body;
-    // Backwards compat: accept "username" as alias for "handle"
     const handleVal = handle || req.body.username;
-    wallet = req.body.wallet;
+    const wallet = req.body.wallet;
 
     if (!wallet || !handleVal) {
       return res.status(400).json({ error: 'Missing required fields' });
     }
 
-    // If signature provided, verify it (backwards compat)
+    // Verify via signature if provided, otherwise verify via session token
     if (signature && timestamp) {
       if (!verifyWalletSignature(wallet, signature, timestamp)) {
         return res.status(401).json({ error: 'Invalid signature' });

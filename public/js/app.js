@@ -2503,8 +2503,8 @@ socket.on('online-users', (users) => {
 });
 
 // Socket: Errors
-socket.on('queue-error', (data) => alert(data.error));
-socket.on('escrow-error', (data) => alert(data.error));
+socket.on('queue-error', (data) => { showToast(data.error); showMatchmakingState('select'); });
+socket.on('escrow-error', (data) => showToast(data.error));
 socket.on('match-error', (data) => {
   alert(data.error);
   showMatchmakingState('select');
