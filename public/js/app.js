@@ -640,6 +640,7 @@ async function unlinkDiscord() {
   } catch (err) {
     console.error('Discord unlink error:', err);
   }
+}
 
 async function saveProfile() {
   try {
