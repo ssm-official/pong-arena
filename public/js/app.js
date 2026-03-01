@@ -2836,8 +2836,11 @@ async function loadDashboardSkins() {
   try {
     const res = await fetch('/api/shop', { headers: { Authorization: getAuthHeader() } }).then(r => r.json());
     dashInventory = res.inventory || [];
-    // Find equipped aura from inventory
-    const equippedAuraSkin = dashInventory.find(s => s.type === 'aura' && s.equippedAura);
+    // Find equipped aura using the top-level equippedAura skinId from the API
+    const equippedAuraId = res.equippedAura || 'none';
+    const equippedAuraSkin = equippedAuraId !== 'none'
+      ? dashInventory.find(s => s.type === 'aura' && s.skinId === equippedAuraId)
+      : null;
     updatePaddlePreview(equippedAuraSkin || null);
   } catch (err) {
     console.error('Failed to load dashboard skins:', err);
@@ -2874,19 +2877,34 @@ function updatePaddlePreview(auraSkin) {
     rarityEl.classList.add('hidden');
   }
 
-  // Dashboard Customize card — aura preview
+  // Dashboard Customize card — sync skin + aura to the right paddle preview
   const dashPaddleRight = document.getElementById('dash-paddle-preview-right');
   const dashAuraName = document.getElementById('dash-aura-name');
-  if (dashPaddleRight && auraSkin) {
-    let auraColor = '#a855f7';
-    try { auraColor = JSON.parse(auraSkin.cssValue).color || '#a855f7'; } catch {}
-    dashPaddleRight.style.boxShadow = `0 0 18px ${auraColor}, 0 0 6px ${auraColor}`;
-    if (dashAuraName) dashAuraName.textContent = 'Aura: ' + auraSkin.name;
-  } else if (dashPaddleRight) {
-    // Reset to default paddle glow (no aura)
-    const equippedColor = equipped && equipped.type === 'color' ? equipped.cssValue : '#a855f7';
-    dashPaddleRight.style.boxShadow = '0 0 12px ' + equippedColor;
-    if (dashAuraName) dashAuraName.textContent = 'Aura: None';
+  if (dashPaddleRight) {
+    // Apply the same skin styling to the Customize card paddle
+    if (equipped) {
+      if (equipped.type === 'color') {
+        dashPaddleRight.style.background = esc(equipped.cssValue);
+        dashPaddleRight.style.backgroundImage = '';
+      } else {
+        dashPaddleRight.style.background = 'url(' + esc(equipped.imageUrl) + ') center/cover no-repeat';
+      }
+    } else {
+      dashPaddleRight.style.background = '#a855f7';
+      dashPaddleRight.style.backgroundImage = '';
+    }
+
+    // Apply aura glow
+    if (auraSkin) {
+      let auraColor = '#a855f7';
+      try { auraColor = JSON.parse(auraSkin.cssValue).color || '#a855f7'; } catch {}
+      dashPaddleRight.style.boxShadow = `0 0 18px ${auraColor}, 0 0 6px ${auraColor}`;
+      if (dashAuraName) dashAuraName.textContent = 'Aura: ' + auraSkin.name;
+    } else {
+      const glowColor = equipped && equipped.type === 'color' ? equipped.cssValue : '#a855f7';
+      dashPaddleRight.style.boxShadow = '0 0 12px ' + glowColor;
+      if (dashAuraName) dashAuraName.textContent = 'Aura: None';
+    }
   }
 }
 
