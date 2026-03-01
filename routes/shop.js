@@ -174,13 +174,9 @@ router.post('/open-crate', authMiddleware, async (req, res) => {
       return res.status(400).json({ error: 'You don\'t own this crate' });
     }
 
-    // Remove one instance of the crate from inventory
-    user.ownedCrates.splice(crateIndex, 1);
-
     // Roll from ALL skins in this crate
     const crateSkins = await Skin.find({ crateId });
     if (crateSkins.length === 0) {
-      await user.save();
       return res.status(400).json({ error: 'Crate has no skins' });
     }
 
@@ -195,13 +191,15 @@ router.post('/open-crate', authMiddleware, async (req, res) => {
     }
     const droppedSkin = weighted[Math.floor(Math.random() * weighted.length)];
 
-    // Grant skin only if not already owned
+    // Grant skin + remove crate atomically using findOneAndUpdate
     const alreadyOwned = ownedIds.includes(droppedSkin.skinId);
+    const updateOps = {
+      $pull: { ownedCrates: { _id: user.ownedCrates[crateIndex]._id } },
+    };
     if (!alreadyOwned) {
-      user.skins.push({ skinId: droppedSkin.skinId });
+      updateOps.$push = { skins: { skinId: droppedSkin.skinId } };
     }
-
-    await user.save();
+    await User.findOneAndUpdate({ wallet: req.wallet }, updateOps);
 
     res.json({
       status: 'opened',
@@ -226,7 +224,7 @@ router.post('/open-crate', authMiddleware, async (req, res) => {
     });
   } catch (err) {
     console.error('Open crate error:', err);
-    res.status(500).json({ error: 'Crate opening failed' });
+    res.status(500).json({ error: 'Crate opening failed: ' + err.message });
   }
 });
 
@@ -236,27 +234,20 @@ router.post('/open-crate', authMiddleware, async (req, res) => {
  */
 router.post('/equip', authMiddleware, async (req, res) => {
   try {
-    console.log('Equip request — wallet:', req.wallet, 'body:', JSON.stringify(req.body));
     const { skinId } = req.body;
     if (!skinId) return res.status(400).json({ error: 'Missing skinId' });
 
-    const user = await User.findOne({ wallet: req.wallet });
-    console.log('Equip user lookup:', user ? user.username : 'NOT FOUND', 'skins:', user?.skins?.length);
+    const user = await User.findOne({ wallet: req.wallet }).select('skins equippedSkin');
     if (!user) return res.status(404).json({ error: 'User not found. Please reconnect wallet.' });
 
-    // Allow 'default' or any owned skin
     if (skinId !== 'default' && !user.skins.some(s => s.skinId === skinId)) {
-      console.log('Skin not owned:', skinId, 'owned:', user.skins.map(s => s.skinId));
       return res.status(400).json({ error: 'You don\'t own this skin' });
     }
 
-    user.equippedSkin = skinId;
-    await user.save();
-    console.log('Equip success:', skinId);
-
+    await User.findOneAndUpdate({ wallet: req.wallet }, { equippedSkin: skinId });
     res.json({ status: 'equipped', skinId });
   } catch (err) {
-    console.error('Equip error:', err.message, err.stack);
+    console.error('Equip error:', err.message);
     res.status(500).json({ error: 'Failed to equip skin: ' + err.message });
   }
 });
