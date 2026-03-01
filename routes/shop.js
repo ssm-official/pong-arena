@@ -236,24 +236,28 @@ router.post('/open-crate', authMiddleware, async (req, res) => {
  */
 router.post('/equip', authMiddleware, async (req, res) => {
   try {
+    console.log('Equip request — wallet:', req.wallet, 'body:', JSON.stringify(req.body));
     const { skinId } = req.body;
     if (!skinId) return res.status(400).json({ error: 'Missing skinId' });
 
     const user = await User.findOne({ wallet: req.wallet });
-    if (!user) return res.status(404).json({ error: 'User not found' });
+    console.log('Equip user lookup:', user ? user.username : 'NOT FOUND', 'skins:', user?.skins?.length);
+    if (!user) return res.status(404).json({ error: 'User not found. Please reconnect wallet.' });
 
     // Allow 'default' or any owned skin
     if (skinId !== 'default' && !user.skins.some(s => s.skinId === skinId)) {
-      return res.status(400).json({ error: 'Skin not owned' });
+      console.log('Skin not owned:', skinId, 'owned:', user.skins.map(s => s.skinId));
+      return res.status(400).json({ error: 'You don\'t own this skin' });
     }
 
     user.equippedSkin = skinId;
     await user.save();
+    console.log('Equip success:', skinId);
 
     res.json({ status: 'equipped', skinId });
   } catch (err) {
-    console.error('Equip error:', err);
-    res.status(500).json({ error: 'Failed to equip skin' });
+    console.error('Equip error:', err.message, err.stack);
+    res.status(500).json({ error: 'Failed to equip skin: ' + err.message });
   }
 });
 
