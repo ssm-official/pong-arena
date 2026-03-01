@@ -82,48 +82,68 @@
     .bg-arena-card { transition: box-shadow 0.3s ease; }
     .bg-arena-card:hover { box-shadow: 0 0 20px rgba(168, 85, 247, 0.15); }
 
-    /* Side nav — full-height left sidebar */
+    /* Side nav — floating right */
     #side-nav {
-      position: fixed; left: 0; top: 0; bottom: 0; z-index: 40;
-      width: 72px;
-      background: linear-gradient(180deg, rgba(17,17,40,0.97) 0%, rgba(10,10,26,0.98) 100%);
-      backdrop-filter: blur(20px);
-      border-right: 1px solid rgba(168, 85, 247, 0.15);
-      display: flex; flex-direction: column; align-items: center;
-      padding: 16px 0 12px;
-      box-shadow: 4px 0 30px rgba(0,0,0,0.5), 1px 0 0 rgba(168,85,247,0.1);
+      position: fixed; right: 16px; top: 50%; transform: translateY(-50%); z-index: 40;
+      background: rgba(17, 17, 40, 0.92);
+      backdrop-filter: blur(24px);
+      border: 1px solid rgba(168, 85, 247, 0.25);
+      border-radius: 20px;
+      padding: 10px;
+      display: flex; flex-direction: column; align-items: center; gap: 4px;
+      box-shadow: 0 0 40px rgba(168, 85, 247, 0.15), 0 0 80px rgba(168, 85, 247, 0.05), 0 8px 32px rgba(0,0,0,0.6);
     }
+    @keyframes nav-glow {
+      0%, 100% { box-shadow: 0 0 40px rgba(168,85,247,0.15), 0 0 80px rgba(168,85,247,0.05), 0 8px 32px rgba(0,0,0,0.6); }
+      50% { box-shadow: 0 0 50px rgba(168,85,247,0.25), 0 0 100px rgba(168,85,247,0.08), 0 8px 32px rgba(0,0,0,0.6); }
+    }
+    #side-nav { animation: nav-glow 4s ease-in-out infinite; }
     .side-nav-btn {
-      width: 48px; height: 48px; border-radius: 14px;
+      width: 44px; height: 44px; border-radius: 12px;
       background: transparent;
       border: 1px solid transparent; display: flex; align-items: center;
       justify-content: center; transition: all 0.25s ease; cursor: pointer;
-      color: #6b7280; position: relative; flex-shrink: 0;
+      color: #9ca3af; position: relative; flex-shrink: 0;
     }
     .side-nav-btn:hover {
-      background: rgba(168, 85, 247, 0.18); border-color: rgba(168, 85, 247, 0.4);
-      color: #e9d5ff; transform: scale(1.1);
+      background: rgba(168, 85, 247, 0.2); border-color: rgba(168, 85, 247, 0.5);
+      color: #e9d5ff; transform: scale(1.12);
     }
     .side-nav-btn.active {
-      background: rgba(126, 58, 237, 0.45); border-color: #a855f7;
-      color: #fff; box-shadow: 0 0 16px rgba(168, 85, 247, 0.35);
+      background: rgba(126, 58, 237, 0.5); border-color: #a855f7;
+      color: #fff; box-shadow: 0 0 16px rgba(168, 85, 247, 0.4);
     }
     .side-nav-btn .nav-badge {
       position: absolute; top: -4px; right: -4px; min-width: 16px; height: 16px;
       font-size: 10px; line-height: 16px; text-align: center; border-radius: 99px;
       background: #ef4444; color: white; padding: 0 4px;
     }
-    /* Tooltip labels — appear to the right */
+    /* Tooltip labels — appear to the left */
     .side-nav-btn::after {
-      content: attr(title); position: absolute; left: 60px; top: 50%; transform: translateY(-50%);
+      content: attr(title); position: absolute; right: 56px; top: 50%; transform: translateY(-50%);
       background: rgba(17, 17, 40, 0.97); color: #e5e7eb; padding: 5px 12px; border-radius: 8px;
       font-size: 12px; white-space: nowrap; pointer-events: none;
       opacity: 0; transition: opacity 0.2s ease; border: 1px solid rgba(168,85,247,0.3);
       box-shadow: 0 4px 12px rgba(0,0,0,0.4);
     }
     .side-nav-btn:hover::after { opacity: 1; }
-    .nav-separator { width: 36px; border-top: 1px solid rgba(107,114,128,0.3); margin: 4px 0; flex-shrink: 0; }
-    .nav-spacer { flex: 1; }
+    .nav-separator { width: 30px; border-top: 1px solid rgba(107,114,128,0.25); margin: 2px 0; flex-shrink: 0; }
+
+    /* Wallet-locked card blur */
+    .wallet-locked {
+      position: relative; overflow: hidden;
+    }
+    .wallet-locked > *:not(.wallet-lock-overlay) { filter: blur(4px); pointer-events: none; user-select: none; }
+    .wallet-lock-overlay {
+      position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+      z-index: 5; background: rgba(10, 10, 26, 0.4); border-radius: inherit; cursor: pointer;
+    }
+    .wallet-lock-overlay:hover .lock-btn { background: rgba(126, 58, 237, 0.7); border-color: #c084fc; }
+    .lock-btn {
+      background: rgba(126, 58, 237, 0.5); border: 1px solid #a855f7; color: white;
+      padding: 8px 18px; border-radius: 10px; font-size: 13px; font-weight: 600;
+      transition: all 0.25s ease; backdrop-filter: blur(4px);
+    }
 
     /* Tier button animations */
     .tier-btn { transition: all 0.25s ease; }
@@ -261,43 +281,29 @@
   <div class="ambient-particle w-1.5 h-1.5 bg-pink-500" style="top:60%;left:80%;animation:drift-2 10s ease-in-out infinite"></div>
   <div class="ambient-particle w-1 h-1 bg-purple-400" style="top:75%;left:40%;animation:drift-3 12s ease-in-out infinite"></div>
 
-  <!-- ============ SIDE NAV (full-height left) ============ -->
+  <!-- ============ SIDE NAV (floating right) ============ -->
   <div id="side-nav">
-    <!-- Logo -->
-    <div class="mb-2 flex-shrink-0">
-      <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center shadow-lg shadow-purple-500/30">
-        <span class="text-white font-black text-sm">CP</span>
-      </div>
-    </div>
-
-    <div class="nav-separator"></div>
-
     <!-- Dashboard -->
     <button class="side-nav-btn active" data-nav="play" onclick="switchTab('play')" title="Dashboard">
       <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0h4"/></svg>
     </button>
-
     <!-- Leaderboard -->
     <button class="side-nav-btn" data-nav="leaderboard" onclick="switchTab('leaderboard')" title="Leaderboard">
       <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
     </button>
-
     <!-- Friends -->
     <button class="side-nav-btn" data-nav="friends" onclick="switchTab('friends')" title="Friends">
       <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
       <span id="nav-friends-badge" class="nav-badge hidden">0</span>
     </button>
-
     <!-- Shop -->
     <button class="side-nav-btn" data-nav="shop" onclick="switchTab('shop')" title="Shop">
       <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 100 4 2 2 0 000-4z"/></svg>
     </button>
-
     <!-- History -->
     <button class="side-nav-btn" data-nav="history" onclick="switchTab('history')" title="History">
       <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
     </button>
-
     <!-- Profile -->
     <button class="side-nav-btn" data-nav="profile" onclick="switchTab('profile')" title="Profile">
       <img id="nav-pfp" src="" class="w-7 h-7 rounded-full" onerror="this.style.display='none';this.nextElementSibling.style.display='block'" />
@@ -310,15 +316,10 @@
     <a href="/practice.html" class="side-nav-btn" title="Practice">
       <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
     </a>
-
-    <!-- Spacer pushes bottom items down -->
-    <div class="nav-spacer"></div>
-
     <!-- Settings -->
     <button class="side-nav-btn" onclick="openSettings()" title="Settings">
       <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
     </button>
-
     <!-- Music toggle -->
     <button id="btn-music-toggle" class="side-nav-btn" onclick="toggleMusic()" title="Toggle Music">
       <svg id="music-icon-on" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2z"/></svg>
@@ -351,7 +352,7 @@
   </div>
 
   <!-- ============ MAIN CONTENT ============ -->
-  <div class="max-w-7xl mx-auto px-4 py-6" style="margin-left: 72px;">
+  <div class="max-w-7xl mx-auto px-4 py-6 pr-20">
 
     <!-- Connect Prompt (hidden by default — dashboard shows first) -->
     <div id="view-connect" class="hidden text-center py-20">
@@ -425,7 +426,7 @@
 
           <!-- Stats Bar (full width above grid) -->
           <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
-            <div class="bg-arena-card rounded-xl p-4 border border-gray-800 card-animate text-center" style="animation-delay:0.05s">
+            <div id="card-balance" class="bg-arena-card rounded-xl p-4 border border-gray-800 card-animate text-center" style="animation-delay:0.05s">
               <div class="text-xs text-gray-500 mb-1">Balance</div>
               <div id="dash-balance-usd" class="text-xl font-bold text-white">--</div>
               <div class="flex items-center justify-center gap-1 mt-0.5">
@@ -433,7 +434,7 @@
                 <span class="text-[10px] text-gray-600">$PONG</span>
               </div>
             </div>
-            <div class="bg-arena-card rounded-xl p-4 border border-gray-800 card-animate text-center" style="animation-delay:0.1s">
+            <div id="card-record" class="bg-arena-card rounded-xl p-4 border border-gray-800 card-animate text-center" style="animation-delay:0.1s">
               <div class="text-xs text-gray-500 mb-1">Record</div>
               <div id="dash-your-record" class="text-xl font-bold text-white">0-0</div>
             </div>
@@ -453,88 +454,47 @@
 
             <!-- ===== LEFT COLUMN ===== -->
             <div class="space-y-5">
-              <!-- Quick Play -->
-              <div class="bg-arena-card rounded-xl p-6 border border-gray-800 card-animate">
-                <div class="flex items-center justify-between mb-4">
-                  <h3 class="text-lg font-bold">Quick Play</h3>
-                  <a href="/practice.html" class="text-purple-400 hover:text-purple-300 text-xs">Practice &rarr;</a>
-                </div>
-                <div class="grid grid-cols-4 gap-2 mb-2" id="tier-grid">
-                  <button onclick="joinQueue('t5')"
-                    class="tier-btn bg-gray-800 border border-green-800/60 hover:border-green-500 rounded-lg p-2.5 text-center">
-                    <div class="text-lg font-bold text-white">$5</div>
-                    <div id="tier-pong-t5" class="text-gray-500 text-[10px] truncate">--</div>
-                  </button>
-                  <button onclick="joinQueue('t10')"
-                    class="tier-btn bg-gray-800 border border-green-800/60 hover:border-green-500 rounded-lg p-2.5 text-center">
-                    <div class="text-lg font-bold text-white">$10</div>
-                    <div id="tier-pong-t10" class="text-gray-500 text-[10px] truncate">--</div>
-                  </button>
-                  <button onclick="joinQueue('t25')"
-                    class="tier-btn bg-gray-800 border border-yellow-800/60 hover:border-yellow-500 rounded-lg p-2.5 text-center">
-                    <div class="text-lg font-bold text-white">$25</div>
-                    <div id="tier-pong-t25" class="text-gray-500 text-[10px] truncate">--</div>
-                  </button>
-                  <button onclick="joinQueue('t50')"
-                    class="tier-btn bg-gray-800 border border-yellow-800/60 hover:border-yellow-500 rounded-lg p-2.5 text-center">
-                    <div class="text-lg font-bold text-white">$50</div>
-                    <div id="tier-pong-t50" class="text-gray-500 text-[10px] truncate">--</div>
-                  </button>
-                  <button onclick="joinQueue('t100')"
-                    class="tier-btn bg-gray-800 border border-orange-800/60 hover:border-orange-500 rounded-lg p-2.5 text-center">
-                    <div class="text-lg font-bold text-white">$100</div>
-                    <div id="tier-pong-t100" class="text-gray-500 text-[10px] truncate">--</div>
-                  </button>
-                  <button onclick="joinQueue('t250')"
-                    class="tier-btn bg-gray-800 border border-red-800/60 hover:border-red-500 rounded-lg p-2.5 text-center">
-                    <div class="text-lg font-bold text-white">$250</div>
-                    <div id="tier-pong-t250" class="text-gray-500 text-[10px] truncate">--</div>
-                  </button>
-                  <button onclick="joinQueue('t500')"
-                    class="tier-btn bg-gray-800 border border-red-800/60 hover:border-red-500 rounded-lg p-2.5 text-center">
-                    <div class="text-lg font-bold text-white">$500</div>
-                    <div id="tier-pong-t500" class="text-gray-500 text-[10px] truncate">--</div>
-                  </button>
-                  <button onclick="joinQueue('t1000')"
-                    class="tier-btn bg-gray-800 border border-purple-800/60 hover:border-purple-500 rounded-lg p-2.5 text-center">
-                    <div class="text-lg font-bold text-white">$1K</div>
-                    <div id="tier-pong-t1000" class="text-gray-500 text-[10px] truncate">--</div>
-                  </button>
-                </div>
-                <p class="text-gray-600 text-[10px]">$PONG amounts auto-adjust to live price. Stakes &gt;$1K use Custom Lobbies below.</p>
+              <!-- Play Button -->
+              <div class="bg-arena-card rounded-xl p-6 border border-gray-800 card-animate text-center">
+                <button onclick="openStakePicker()"
+                  class="w-full bg-gradient-to-r from-purple-600 via-purple-500 to-pink-500 hover:from-purple-500 hover:via-purple-400 hover:to-pink-400 py-5 rounded-xl text-2xl font-black tracking-wide transition-all duration-300 hover:scale-[1.02] hover:shadow-[0_0_30px_rgba(168,85,247,0.4)] active:scale-[0.98]">
+                  PLAY
+                </button>
+                <p class="text-gray-500 text-xs mt-3">Pick your stake and find an opponent instantly</p>
+                <a href="/practice.html" class="text-purple-400 hover:text-purple-300 text-xs mt-1 inline-block">or Practice Solo &rarr;</a>
               </div>
 
-              <!-- Custom Lobbies -->
-              <div class="bg-arena-card rounded-xl p-6 border border-gray-800 card-animate" style="animation-delay:0.15s">
-                <div class="flex items-center justify-between mb-3">
+              <!-- Custom Lobbies (bigger) -->
+              <div class="bg-arena-card rounded-xl p-6 border border-gray-800 card-animate" style="animation-delay:0.1s">
+                <div class="flex items-center justify-between mb-4">
                   <h3 class="text-lg font-bold">Custom Lobbies</h3>
-                  <span class="text-[10px] text-gray-600 bg-gray-800 px-2 py-0.5 rounded">Any stake amount</span>
+                  <span class="text-xs text-gray-500 bg-gray-800/80 px-2.5 py-1 rounded-lg">Any stake amount</span>
                 </div>
 
                 <!-- Create Lobby Form -->
-                <div id="lobby-create-section" class="mb-4">
-                  <div class="flex gap-2">
+                <div id="lobby-create-section" class="mb-5">
+                  <div class="flex gap-3">
                     <div class="flex-1">
-                      <input id="lobby-usd-input" type="number" min="0" step="0.01" placeholder="Stake (USD)"
-                        class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:border-purple-500 focus:outline-none"
+                      <input id="lobby-usd-input" type="number" min="0" step="0.01" placeholder="Enter stake in USD"
+                        class="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-white focus:border-purple-500 focus:outline-none transition"
                         oninput="updateLobbyPongDisplay()" />
-                      <p id="lobby-pong-display" class="text-gray-500 text-xs mt-1"></p>
+                      <p id="lobby-pong-display" class="text-gray-500 text-xs mt-1.5 ml-1"></p>
                     </div>
                     <button id="btn-create-lobby" onclick="createLobby()"
-                      class="bg-purple-600 hover:bg-purple-700 px-4 py-2 rounded-lg text-sm font-medium transition whitespace-nowrap">
-                      Create Lobby
+                      class="bg-purple-600 hover:bg-purple-700 px-6 py-3 rounded-xl font-bold transition whitespace-nowrap hover:shadow-[0_0_20px_rgba(168,85,247,0.3)]">
+                      Create
                     </button>
                   </div>
                 </div>
 
                 <!-- Cancel Lobby (shown when player has active lobby) -->
-                <div id="lobby-cancel-section" class="hidden mb-4">
-                  <div class="bg-purple-900/30 border border-purple-700/50 rounded-lg p-3 flex items-center justify-between">
+                <div id="lobby-cancel-section" class="hidden mb-5">
+                  <div class="bg-purple-900/30 border border-purple-700/50 rounded-xl p-4 flex items-center justify-between">
                     <div>
                       <p class="text-sm text-purple-300 font-medium">Your lobby is open</p>
-                      <p id="lobby-my-stake" class="text-xs text-gray-400"></p>
+                      <p id="lobby-my-stake" class="text-xs text-gray-400 mt-0.5"></p>
                     </div>
-                    <button onclick="cancelLobby()" class="bg-red-600 hover:bg-red-700 px-3 py-1.5 rounded-lg text-xs font-medium transition">
+                    <button onclick="cancelLobby()" class="bg-red-600 hover:bg-red-700 px-4 py-2 rounded-lg text-sm font-medium transition">
                       Cancel
                     </button>
                   </div>
@@ -543,16 +503,16 @@
                 <!-- Filter Bar -->
                 <div class="flex gap-2 mb-3">
                   <input id="lobby-filter-min" type="number" min="0" step="0.01" placeholder="Min USD"
-                    class="flex-1 bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-xs text-white focus:border-purple-500 focus:outline-none"
+                    class="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:border-purple-500 focus:outline-none"
                     oninput="applyLobbyFilters()" />
                   <input id="lobby-filter-max" type="number" min="0" step="0.01" placeholder="Max USD"
-                    class="flex-1 bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-xs text-white focus:border-purple-500 focus:outline-none"
+                    class="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:border-purple-500 focus:outline-none"
                     oninput="applyLobbyFilters()" />
                 </div>
 
                 <!-- Lobby List -->
-                <div id="lobby-list" class="space-y-2 max-h-80 overflow-y-auto">
-                  <p class="text-gray-500 text-sm text-center py-4">No open lobbies. Create one!</p>
+                <div id="lobby-list" class="space-y-2 max-h-96 overflow-y-auto">
+                  <p class="text-gray-500 text-sm text-center py-6">No open lobbies. Create one!</p>
                 </div>
               </div>
             </div>
@@ -560,7 +520,7 @@
             <!-- ===== RIGHT COLUMN ===== -->
             <div class="space-y-5">
               <!-- My Paddle -->
-              <div class="bg-arena-card rounded-xl p-5 border border-gray-800 cursor-pointer hover:border-purple-700 transition card-animate" style="animation-delay:0.1s" onclick="openInventoryModal()">
+              <div id="card-paddle" class="bg-arena-card rounded-xl p-5 border border-gray-800 cursor-pointer hover:border-purple-700 transition card-animate" style="animation-delay:0.1s" onclick="openInventoryModal()">
                 <div class="flex items-center justify-between mb-3">
                   <h3 class="text-sm font-bold text-gray-300">My Paddle</h3>
                   <a href="#" onclick="event.stopPropagation();event.preventDefault();openInventoryModal()" class="text-purple-400 hover:text-purple-300 text-xs">Inventory &rarr;</a>
@@ -594,7 +554,7 @@
               </div>
 
               <!-- Friends Mini Card -->
-              <div class="bg-arena-card rounded-xl p-5 border border-gray-800 card-animate" style="animation-delay:0.2s">
+              <div id="card-friends" class="bg-arena-card rounded-xl p-5 border border-gray-800 card-animate" style="animation-delay:0.2s">
                 <div class="flex items-center justify-between mb-3">
                   <h3 class="text-sm font-bold text-gray-300">Friends</h3>
                   <a href="#" onclick="event.preventDefault();switchTab('friends')" class="text-purple-400 hover:text-purple-300 text-xs">View All &rarr;</a>
@@ -930,7 +890,7 @@
   </div><!-- /container -->
 
   <!-- ============ ONLINE COUNT (bottom-left, always visible) ============ -->
-  <div id="online-count" class="fixed bottom-5 bg-arena-card/90 backdrop-blur-md border border-purple-900/40 rounded-xl px-4 py-2.5 text-sm text-gray-300 flex items-center gap-3 z-30 hidden shadow-lg shadow-purple-900/20" style="left: 84px;">
+  <div id="online-count" class="fixed bottom-5 left-5 bg-arena-card/90 backdrop-blur-md border border-purple-900/40 rounded-xl px-4 py-2.5 text-sm text-gray-300 flex items-center gap-3 z-30 hidden shadow-lg shadow-purple-900/20">
     <span class="relative flex h-3 w-3">
       <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
       <span class="relative inline-flex rounded-full h-3 w-3 bg-green-400"></span>
@@ -1083,6 +1043,61 @@
   </div>
 
   <!-- ============ SETTINGS MODAL ============ -->
+  <!-- ============ STAKE PICKER MODAL ============ -->
+  <div id="stake-modal" class="hidden fixed inset-0 bg-black/70 z-50 flex items-center justify-center" onclick="if(event.target===this)closeStakePicker()">
+    <div class="bg-arena-card rounded-2xl max-w-lg w-full mx-4 glow-border overflow-hidden">
+      <div class="flex items-center justify-between p-5 border-b border-gray-800">
+        <h3 class="text-lg font-bold text-white">Choose Your Stake</h3>
+        <button onclick="closeStakePicker()" class="text-gray-400 hover:text-white text-xl leading-none">&times;</button>
+      </div>
+      <div class="p-5">
+        <div class="grid grid-cols-4 gap-3 mb-4" id="tier-grid">
+          <button onclick="joinQueue('t5')"
+            class="tier-btn bg-gray-800 border border-green-800/60 hover:border-green-400 rounded-xl p-3 text-center">
+            <div class="text-xl font-bold text-white">$5</div>
+            <div id="tier-pong-t5" class="text-gray-500 text-[10px] truncate mt-0.5">--</div>
+          </button>
+          <button onclick="joinQueue('t10')"
+            class="tier-btn bg-gray-800 border border-green-800/60 hover:border-green-400 rounded-xl p-3 text-center">
+            <div class="text-xl font-bold text-white">$10</div>
+            <div id="tier-pong-t10" class="text-gray-500 text-[10px] truncate mt-0.5">--</div>
+          </button>
+          <button onclick="joinQueue('t25')"
+            class="tier-btn bg-gray-800 border border-yellow-800/60 hover:border-yellow-400 rounded-xl p-3 text-center">
+            <div class="text-xl font-bold text-white">$25</div>
+            <div id="tier-pong-t25" class="text-gray-500 text-[10px] truncate mt-0.5">--</div>
+          </button>
+          <button onclick="joinQueue('t50')"
+            class="tier-btn bg-gray-800 border border-yellow-800/60 hover:border-yellow-400 rounded-xl p-3 text-center">
+            <div class="text-xl font-bold text-white">$50</div>
+            <div id="tier-pong-t50" class="text-gray-500 text-[10px] truncate mt-0.5">--</div>
+          </button>
+          <button onclick="joinQueue('t100')"
+            class="tier-btn bg-gray-800 border border-orange-800/60 hover:border-orange-400 rounded-xl p-3 text-center">
+            <div class="text-xl font-bold text-white">$100</div>
+            <div id="tier-pong-t100" class="text-gray-500 text-[10px] truncate mt-0.5">--</div>
+          </button>
+          <button onclick="joinQueue('t250')"
+            class="tier-btn bg-gray-800 border border-red-800/60 hover:border-red-400 rounded-xl p-3 text-center">
+            <div class="text-xl font-bold text-white">$250</div>
+            <div id="tier-pong-t250" class="text-gray-500 text-[10px] truncate mt-0.5">--</div>
+          </button>
+          <button onclick="joinQueue('t500')"
+            class="tier-btn bg-gray-800 border border-red-800/60 hover:border-red-400 rounded-xl p-3 text-center">
+            <div class="text-xl font-bold text-white">$500</div>
+            <div id="tier-pong-t500" class="text-gray-500 text-[10px] truncate mt-0.5">--</div>
+          </button>
+          <button onclick="joinQueue('t1000')"
+            class="tier-btn bg-gray-800 border border-purple-800/60 hover:border-purple-400 rounded-xl p-3 text-center">
+            <div class="text-xl font-bold text-white">$1K</div>
+            <div id="tier-pong-t1000" class="text-gray-500 text-[10px] truncate mt-0.5">--</div>
+          </button>
+        </div>
+        <p class="text-gray-600 text-xs text-center">$PONG amounts auto-adjust to live token price</p>
+      </div>
+    </div>
+  </div>
+
   <div id="settings-modal" class="hidden fixed inset-0 bg-black/70 z-50 flex items-center justify-center" onclick="if(event.target===this)closeSettings()">
     <div class="bg-arena-card rounded-xl max-w-md w-full mx-4 glow-border overflow-hidden">
       <div class="flex items-center justify-between p-5 border-b border-gray-800">
@@ -1125,6 +1140,6 @@
   <script src="/js/wallet.js?v=33"></script>
   <script src="/js/pong-sim.js?v=34"></script>
   <script src="/js/game-client.js?v=38"></script>
-  <script src="/js/app.js?v=40"></script>
+  <script src="/js/app.js?v=41"></script>
 </body>
 </html>

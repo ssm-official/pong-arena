@@ -296,6 +296,7 @@ function showView(view) {
 function showApp() {
   showView('app');
   updateNav();
+  removeWalletLocks();
   // Route to the tab matching the current URL, or default to play
   const initialTab = getTabFromPath();
   switchTab(initialTab, false);
@@ -305,6 +306,7 @@ function showApp() {
   socket.emit('lobby-list-request');
   const canvas = document.getElementById('game-canvas');
   GameClient.init(canvas, currentUser.wallet);
+  startPriceRefresh();
   // Show online count
   document.getElementById('online-count').classList.remove('hidden');
   // Fetch unread DM counts
@@ -319,13 +321,54 @@ function initDashboard() {
   startPriceRefresh();
   document.getElementById('online-count').classList.remove('hidden');
   socket.emit('lobby-list-request');
+  applyWalletLocks();
 }
 
 // Check wallet before actions that require it
 function requireWallet(action) {
   if (currentUser) return true;
-  alert('Connect your wallet first to ' + action + '!');
+  connectWallet();
   return false;
+}
+
+// Stake Picker Modal
+function openStakePicker() {
+  if (!requireWallet('play')) return;
+  document.getElementById('stake-modal').classList.remove('hidden');
+}
+function closeStakePicker() {
+  document.getElementById('stake-modal').classList.add('hidden');
+}
+
+// Wallet lock blur — blur cards that need wallet, show overlay
+function applyWalletLocks() {
+  if (currentUser) {
+    removeWalletLocks();
+    return;
+  }
+  const lockConfigs = [
+    { id: 'card-balance', label: 'Connect wallet to view balance' },
+    { id: 'card-record', label: 'Connect wallet to view record' },
+    { id: 'card-paddle', label: 'Connect wallet to view paddle' },
+    { id: 'card-friends', label: 'Connect wallet to see friends' },
+  ];
+  lockConfigs.forEach(({ id, label }) => {
+    const el = document.getElementById(id);
+    if (!el || el.classList.contains('wallet-locked')) return;
+    el.classList.add('wallet-locked');
+    const overlay = document.createElement('div');
+    overlay.className = 'wallet-lock-overlay';
+    overlay.onclick = (e) => { e.stopPropagation(); connectWallet(); };
+    overlay.innerHTML = `<div class="lock-btn">${label}</div>`;
+    el.appendChild(overlay);
+  });
+}
+function removeWalletLocks() {
+  document.querySelectorAll('.wallet-locked').forEach(el => {
+    el.classList.remove('wallet-locked');
+    const overlay = el.querySelector('.wallet-lock-overlay');
+    if (overlay) overlay.remove();
+  });
 }
 
 function updateNav() {
@@ -1802,6 +1845,7 @@ async function loadHistory() {
 
 function joinQueue(tier) {
   if (!requireWallet('join a match')) return;
+  closeStakePicker();
   // Auto-cancel any open lobby when joining queue
   if (myLobbyId) {
     socket.emit('lobby-cancel', { lobbyId: myLobbyId });
