@@ -1727,44 +1727,42 @@ function closeCratePreview() {
 }
 
 async function buyCrate(crateId) {
+  if (!requireWallet('buy crate')) return;
   try {
     const auth = getAuthHeader();
     const buyRes = await apiPostAuth('/api/shop/buy-crate', { crateId }, auth);
-    if (buyRes.error) return alert(buyRes.error);
     const txSignature = await WalletManager.signAndSendTransaction(buyRes.transaction);
-    const confirmRes = await apiPostAuth('/api/shop/confirm-crate', { crateId, txSignature }, auth);
-    if (confirmRes.error) return alert(confirmRes.error);
+    await apiPostAuth('/api/shop/confirm-crate', { crateId, txSignature }, auth);
+    showToast('Crate purchased!');
     loadShop();
   } catch (err) {
-    alert('Purchase failed: ' + err.message);
+    showToast('Purchase failed: ' + err.message);
   }
 }
 
 async function buyAndOpenCrate(crateId) {
+  if (!requireWallet('buy crate')) return;
   try {
     const auth = getAuthHeader();
     const buyRes = await apiPostAuth('/api/shop/buy-crate', { crateId }, auth);
-    if (buyRes.error) return alert(buyRes.error);
     const txSignature = await WalletManager.signAndSendTransaction(buyRes.transaction);
-    const confirmRes = await apiPostAuth('/api/shop/confirm-crate', { crateId, txSignature }, auth);
-    if (confirmRes.error) return alert(confirmRes.error);
+    await apiPostAuth('/api/shop/confirm-crate', { crateId, txSignature }, auth);
     // Now immediately open it from inventory
     const openRes = await apiPostAuth('/api/shop/open-crate', { crateId }, auth);
-    if (openRes.error) return alert(openRes.error);
     showCrateRoller(openRes.skin, openRes.crateSkins || [], openRes.duplicate);
   } catch (err) {
-    alert('Purchase failed: ' + err.message);
+    showToast('Purchase failed: ' + err.message);
   }
 }
 
 async function openOwnedCrate(crateId) {
+  if (!requireWallet('open crate')) return;
   try {
     const auth = getAuthHeader();
     const openRes = await apiPostAuth('/api/shop/open-crate', { crateId }, auth);
-    if (openRes.error) return alert(openRes.error);
     showCrateRoller(openRes.skin, openRes.crateSkins || [], openRes.duplicate);
   } catch (err) {
-    alert('Failed to open crate: ' + err.message);
+    showToast('Failed to open crate: ' + err.message);
   }
 }
 
@@ -1924,11 +1922,13 @@ function closeRoller() {
 }
 
 async function equipSkin(skinId) {
+  if (!requireWallet('equip')) return;
   try {
     await apiPostAuth('/api/shop/equip', { skinId }, getAuthHeader());
     loadShop();
+    showToast('Skin equipped!');
   } catch (err) {
-    alert('Failed to equip: ' + err.message);
+    showToast('Failed to equip: ' + err.message);
   }
 }
 
@@ -2638,7 +2638,11 @@ async function apiPostAuth(url, body, authHeader) {
     headers: { 'Content-Type': 'application/json', Authorization: authHeader },
     body: JSON.stringify(body)
   });
-  return res.json();
+  const data = await res.json();
+  if (!res.ok && data.error) {
+    throw new Error(data.error);
+  }
+  return data;
 }
 
 async function refreshUserData() {
@@ -2830,13 +2834,15 @@ function renderInventoryGrid() {
 }
 
 async function equipSkinFromModal(skinId) {
+  if (!requireWallet('equip')) return;
   try {
     await apiPostAuth('/api/shop/equip', { skinId }, getAuthHeader());
     dashInventory.forEach(s => { s.equipped = s.skinId === skinId; });
     renderInventoryGrid();
     updatePaddlePreview();
+    showToast('Skin equipped!');
   } catch (err) {
-    alert('Failed to equip: ' + err.message);
+    showToast('Failed to equip: ' + err.message);
   }
 }
 
@@ -2926,13 +2932,15 @@ async function loadCosmetics() {
 }
 
 async function equipFromCosmetics(skinId) {
+  if (!requireWallet('equip')) return;
   try {
     await apiPostAuth('/api/shop/equip', { skinId }, getAuthHeader());
     dashInventory.forEach(s => { s.equipped = s.skinId === skinId; });
     loadCosmetics();
     updatePaddlePreview();
+    showToast('Skin equipped!');
   } catch (err) {
-    alert('Failed to equip: ' + err.message);
+    showToast('Failed to equip: ' + err.message);
   }
 }
 
