@@ -7,18 +7,25 @@ const router = express.Router();
 const User = require('../models/User');
 const Skin = require('../models/Skin');
 const Crate = require('../models/Crate');
+const { authMiddleware, optionalAuth } = require('../middleware/auth');
 const { buildSkinPurchaseTransaction, verifyEscrowTx, burnSkinRevenue, PONG_DECIMALS } = require('../solana/utils');
 
 /**
  * GET /api/shop
  * Returns active crates grouped as { limited: [...], standard: [...] } + user inventory.
+ * Works without auth (shows crates only), with auth also shows user inventory.
  */
-router.get('/', async (req, res) => {
+router.get('/', optionalAuth, async (req, res) => {
   try {
     const crates = await Crate.find({ active: true });
     const skins = await Skin.find({});
     console.log(`Shop: ${crates.length} active crates, ${skins.length} total skins`);
-    const user = await User.findOne({ wallet: req.wallet }).select('skins equippedSkin ownedCrates');
+
+    // Try to get user data if wallet is available (auth succeeded)
+    let user = null;
+    if (req.wallet) {
+      user = await User.findOne({ wallet: req.wallet }).select('skins equippedSkin ownedCrates');
+    }
     const ownedIds = user ? user.skins.map(s => s.skinId) : [];
 
     const cratesWithSkins = crates.map(c => {
@@ -90,7 +97,7 @@ router.get('/crate/:crateId/skins', async (req, res) => {
  * POST /api/shop/buy-crate
  * Step 1: Build Solana tx for crate price. Body: { crateId }
  */
-router.post('/buy-crate', async (req, res) => {
+router.post('/buy-crate', authMiddleware, async (req, res) => {
   try {
     const { crateId } = req.body;
     if (!crateId) return res.status(400).json({ error: 'Missing crateId' });
@@ -113,7 +120,7 @@ router.post('/buy-crate', async (req, res) => {
  * Step 2: Verify tx, add crate to user's inventory.
  * Body: { crateId, txSignature }
  */
-router.post('/confirm-crate', async (req, res) => {
+router.post('/confirm-crate', authMiddleware, async (req, res) => {
   try {
     const { crateId, txSignature } = req.body;
     if (!crateId || !txSignature) {
@@ -153,7 +160,7 @@ router.post('/confirm-crate', async (req, res) => {
  * Open a crate from user's inventory. Rolls random skin, removes crate.
  * Body: { crateId }
  */
-router.post('/open-crate', async (req, res) => {
+router.post('/open-crate', authMiddleware, async (req, res) => {
   try {
     const { crateId } = req.body;
     if (!crateId) return res.status(400).json({ error: 'Missing crateId' });
@@ -227,7 +234,7 @@ router.post('/open-crate', async (req, res) => {
  * POST /api/shop/equip
  * Equip an owned skin. Body: { skinId }
  */
-router.post('/equip', async (req, res) => {
+router.post('/equip', authMiddleware, async (req, res) => {
   try {
     const { skinId } = req.body;
     const user = await User.findOne({ wallet: req.wallet });

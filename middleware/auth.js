@@ -59,4 +59,19 @@ setInterval(() => {
   }
 }, 10 * 60 * 1000);
 
-module.exports = { authMiddleware, createSession };
+/**
+ * Optional auth — sets req.wallet if valid token, but never rejects the request.
+ */
+function optionalAuth(req, res, next) {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) return next();
+
+  const token = authHeader.slice(7);
+  const session = sessions.get(token);
+  if (session && (Date.now() - session.createdAt <= SESSION_TTL)) {
+    req.wallet = session.wallet;
+  }
+  next();
+}
+
+module.exports = { authMiddleware, optionalAuth, createSession };
