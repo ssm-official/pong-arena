@@ -269,9 +269,6 @@
     </div>
   </div>
 
-  <!-- ============ BACKGROUND MUSIC ============ -->
-  <audio id="bg-music" loop preload="auto" autoplay src="/audio/Mistcheif.wav"></audio>
-
   <!-- ============ AMBIENT PARTICLES ============ -->
   <div class="ambient-particle w-2 h-2 bg-purple-500" style="top:20%;left:15%;animation:drift-1 8s ease-in-out infinite"></div>
   <div class="ambient-particle w-1.5 h-1.5 bg-pink-500" style="top:60%;left:80%;animation:drift-2 10s ease-in-out infinite"></div>
@@ -332,24 +329,8 @@
       <span id="nav-friends-badge" class="nav-badge hidden">0</span>
     </button>
 
-    <!-- History -->
-    <button class="side-nav-btn" data-nav="history" onclick="switchTab('history')">
-      <div class="nav-icon">
-        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-      </div>
-      <span class="nav-label">History</span>
-    </button>
-
     <!-- Spacer pushes bottom items down -->
     <div class="nav-spacer"></div>
-
-    <!-- Practice -->
-    <a href="/practice.html" class="side-nav-btn">
-      <div class="nav-icon">
-        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-      </div>
-      <span class="nav-label">Practice</span>
-    </a>
 
     <!-- Settings -->
     <button class="side-nav-btn" data-nav="settings" onclick="switchTab('settings')">
@@ -361,17 +342,10 @@
 
     <!-- Tokenomics -->
     <button class="side-nav-btn" data-nav="tokenomics" onclick="switchTab('tokenomics')">
-      <div class="nav-icon">💰</div>
-      <span class="nav-label">Tokenomics</span>
-    </button>
-
-    <!-- Music toggle -->
-    <button id="btn-music-toggle" class="side-nav-btn" onclick="toggleMusic()">
       <div class="nav-icon">
-        <svg id="music-icon-on" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2z"/></svg>
-        <svg id="music-icon-off" class="w-5 h-5 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2"/></svg>
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 3.055A9.001 9.001 0 1020.945 13H11V3.055z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.488 9H15V3.512A9.025 9.025 0 0120.488 9z"/></svg>
       </div>
-      <span class="nav-label">Music</span>
+      <span class="nav-label">Tokenomics</span>
     </button>
 
     <div class="nav-separator"></div>
@@ -1038,27 +1012,6 @@
         <div class="max-w-2xl mx-auto">
           <h2 class="text-2xl font-black text-white mb-6">Settings</h2>
 
-          <!-- Game Settings -->
-          <div class="bg-arena-card rounded-2xl border border-purple-900/20 p-5 mb-4">
-            <h3 class="text-sm font-bold text-gray-300 uppercase tracking-wider mb-4">Game Settings</h3>
-            <div class="space-y-4">
-              <div class="flex items-center justify-between">
-                <span class="text-sm text-gray-400">Background Music</span>
-                <label class="toggle-switch">
-                  <input type="checkbox" id="settings-page-music-toggle" onchange="toggleMusicSetting(this.checked)" checked />
-                  <span class="toggle-slider"></span>
-                </label>
-              </div>
-              <div class="flex items-center justify-between">
-                <span class="text-sm text-gray-400">Volume</span>
-                <div class="flex items-center gap-3 flex-1 ml-4">
-                  <input type="range" id="settings-page-volume-slider" class="volume-slider flex-1" min="0" max="100" value="30" oninput="setMusicVolume(this.value);document.getElementById('settings-page-volume-label').textContent=this.value+'%'" />
-                  <span id="settings-page-volume-label" class="text-xs text-gray-500 w-8 text-right">30%</span>
-                </div>
-              </div>
-            </div>
-          </div>
-
           <!-- Legal & Info -->
           <div class="bg-arena-card rounded-2xl border border-purple-900/20 p-5">
             <h3 class="text-sm font-bold text-gray-300 uppercase tracking-wider mb-4">Legal & Info</h3>
@@ -1384,27 +1337,6 @@
         <h3 class="text-lg font-bold text-white">Settings</h3>
         <button onclick="closeSettings()" class="text-gray-400 hover:text-white text-xl leading-none">&times;</button>
       </div>
-      <div class="p-5 space-y-5">
-        <!-- Music Section -->
-        <div>
-          <h4 class="text-sm font-bold text-gray-300 mb-3">Music</h4>
-          <div class="flex items-center justify-between mb-3">
-            <span class="text-sm text-gray-400">Background Music</span>
-            <label class="toggle-switch">
-              <input type="checkbox" id="settings-music-toggle" onchange="toggleMusicSetting(this.checked)" checked />
-              <span class="toggle-slider"></span>
-            </label>
-          </div>
-          <div class="flex items-center justify-between">
-            <span class="text-sm text-gray-400">Volume</span>
-            <div class="flex items-center gap-3 flex-1 ml-4">
-              <input type="range" id="settings-volume-slider" class="volume-slider flex-1" min="0" max="100" value="30"
-                oninput="setMusicVolume(this.value)" />
-              <span id="settings-volume-label" class="text-xs text-gray-500 w-8 text-right">30%</span>
-            </div>
-          </div>
-        </div>
-      </div>
       <div class="p-5 border-t border-gray-800">
         <button onclick="closeSettings()" class="w-full bg-gray-700 hover:bg-gray-600 py-2 rounded-lg text-sm font-medium transition">Close</button>
       </div>
@@ -1527,6 +1459,6 @@
   <script src="/js/wallet.js?v=33"></script>
   <script src="/js/pong-sim.js?v=34"></script>
   <script src="/js/game-client.js?v=40"></script>
-  <script src="/js/app.js?v=63"></script>
+  <script src="/js/app.js?v=64"></script>
 </body>
 </html>
