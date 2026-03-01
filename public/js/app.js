@@ -550,7 +550,96 @@ function loadProfile() {
     editPreview.classList.add('hidden');
     editLabel.textContent = 'Drag & drop or click to upload';
   }
+
+  loadDiscordStatus();
 }
+
+// ===========================================
+// DISCORD LINKING
+// ===========================================
+
+let discordCodeTimerInterval = null;
+
+async function loadDiscordStatus() {
+  try {
+    const res = await fetch('/api/profile/discord', {
+      headers: { Authorization: getAuthHeader() }
+    });
+    const data = await res.json();
+
+    const unlinkedEl = document.getElementById('discord-unlinked');
+    const codeEl = document.getElementById('discord-code-state');
+    const linkedEl = document.getElementById('discord-linked');
+
+    unlinkedEl.classList.add('hidden');
+    codeEl.classList.add('hidden');
+    linkedEl.classList.add('hidden');
+
+    if (data.linked) {
+      linkedEl.classList.remove('hidden');
+      document.getElementById('discord-linked-id').textContent = data.discordId;
+    } else {
+      unlinkedEl.classList.remove('hidden');
+    }
+  } catch (err) {
+    console.error('Discord status error:', err);
+  }
+}
+
+async function generateDiscordCode() {
+  try {
+    const res = await fetch('/api/profile/discord/generate-code', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: getAuthHeader() }
+    });
+    const data = await res.json();
+    if (data.code) {
+      document.getElementById('discord-unlinked').classList.add('hidden');
+      document.getElementById('discord-code-state').classList.remove('hidden');
+      document.getElementById('discord-code-display').textContent = data.code;
+      startDiscordCodeTimer(new Date(data.expiresAt));
+    }
+  } catch (err) {
+    console.error('Discord code error:', err);
+  }
+}
+
+function startDiscordCodeTimer(expiresAt) {
+  if (discordCodeTimerInterval) clearInterval(discordCodeTimerInterval);
+  const timerEl = document.getElementById('discord-code-timer');
+
+  discordCodeTimerInterval = setInterval(() => {
+    const remaining = Math.max(0, Math.floor((expiresAt - Date.now()) / 1000));
+    if (remaining <= 0) {
+      clearInterval(discordCodeTimerInterval);
+      discordCodeTimerInterval = null;
+      timerEl.textContent = 'Code expired';
+      // Reset to unlinked state after a moment
+      setTimeout(() => loadDiscordStatus(), 1500);
+      return;
+    }
+    const mins = Math.floor(remaining / 60);
+    const secs = remaining % 60;
+    timerEl.textContent = `Expires in ${mins}:${secs.toString().padStart(2, '0')}`;
+  }, 1000);
+}
+
+function copyDiscordCode() {
+  const code = document.getElementById('discord-code-display').textContent;
+  navigator.clipboard.writeText(code);
+}
+
+async function unlinkDiscord() {
+  if (!confirm('Unlink your Discord account?')) return;
+  try {
+    await fetch('/api/profile/discord', {
+      method: 'DELETE',
+      headers: { Authorization: getAuthHeader() }
+    });
+    loadDiscordStatus();
+  } catch (err) {
+    console.error('Discord unlink error:', err);
+  }
 
 async function saveProfile() {
   try {

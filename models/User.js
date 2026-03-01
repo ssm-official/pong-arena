@@ -8,6 +8,7 @@ const userSchema = new mongoose.Schema({
   pfp: { type: String, default: '' },           // profile pic URL
   banner: { type: String, default: '' },        // profile banner URL
   bio: { type: String, default: '', maxlength: 160 },
+  discordId: { type: String, default: null, sparse: true, unique: true, index: true },
   friends: [{ type: String }],                  // array of wallet addresses
   friendRequests: [{                             // pending incoming requests
     from: String,                                // wallet address

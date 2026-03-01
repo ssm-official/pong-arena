@@ -20,6 +20,7 @@ const friendRoutes = require('./routes/friends');
 const shopRoutes = require('./routes/shop');
 const adminRoutes = require('./routes/admin');
 const leaderboardRoutes = require('./routes/leaderboard');
+const publicApiRoutes = require('./routes/public-api');
 const { authMiddleware } = require('./middleware/auth');
 const { setupMatchmaking } = require('./game/matchmaking');
 const { PongEngine } = require('./game/PongEngine');
@@ -52,6 +53,14 @@ const apiLimiter = rateLimit({
   message: { error: 'Too many requests, slow down.' }
 });
 app.use('/api/', apiLimiter);
+
+// Stricter rate limit for public API
+const publicApiLimiter = rateLimit({
+  windowMs: 60000,
+  max: 30,
+  message: { error: 'Rate limit exceeded. Max 30 requests per minute.' }
+});
+app.use('/api/v1/', publicApiLimiter);
 
 // --------------- API Routes ---------------
 app.use('/api/auth', authRoutes);
@@ -99,6 +108,13 @@ app.get('/practice', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'practice.html'));
 });
 
+// --------------- In-Memory State ---------------
+const onlineUsers = new Map();    // wallet -> { socketId, username }
+const activeGames = new Map();    // gameId -> PongEngine instance
+
+// Mount public API (needs access to in-memory state)
+app.use('/api/v1', publicApiRoutes(io, onlineUsers, activeGames));
+
 // Catch-all: serve index.html for SPA
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
@@ -111,10 +127,6 @@ app.use((err, req, res, next) => {
     res.status(500).json({ error: 'Internal server error' });
   }
 });
-
-// --------------- In-Memory State ---------------
-const onlineUsers = new Map();    // wallet -> { socketId, username }
-const activeGames = new Map();    // gameId -> PongEngine instance
 
 // --------------- Socket.io ---------------
 io.on('connection', (socket) => {

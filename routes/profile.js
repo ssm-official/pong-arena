@@ -6,8 +6,10 @@ const express = require('express');
 const router = express.Router();
 const multer = require('multer');
 const path = require('path');
+const crypto = require('crypto');
 const User = require('../models/User');
 const Match = require('../models/Match');
+const DiscordLinkCode = require('../models/DiscordLinkCode');
 
 // Multer config — use memory storage so it works on serverless (Vercel).
 // Uploaded images are converted to base64 data URLs and stored in MongoDB.
@@ -176,6 +178,66 @@ router.post('/upload-banner', upload.single('banner'), async (req, res) => {
     res.json({ banner: bannerUrl });
   } catch (err) {
     res.status(500).json({ error: err.message || 'Upload failed' });
+  }
+});
+
+// ===========================================
+// Discord Linking
+// ===========================================
+
+/**
+ * GET /api/profile/discord
+ * Check if the authenticated user has a linked Discord account.
+ */
+router.get('/discord', async (req, res) => {
+  try {
+    const user = await User.findOne({ wallet: req.wallet }).select('discordId');
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    res.json({ linked: !!user.discordId, discordId: user.discordId || undefined });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to check Discord status' });
+  }
+});
+
+/**
+ * POST /api/profile/discord/generate-code
+ * Generate a 6-character link code for Discord account linking.
+ */
+router.post('/discord/generate-code', async (req, res) => {
+  try {
+    // Delete any existing code for this wallet
+    await DiscordLinkCode.deleteMany({ wallet: req.wallet });
+
+    // Generate 6-char code from safe alphabet (no ambiguous chars)
+    const alphabet = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+    const bytes = crypto.randomBytes(6);
+    let code = '';
+    for (let i = 0; i < 6; i++) {
+      code += alphabet[bytes[i] % alphabet.length];
+    }
+
+    const doc = await DiscordLinkCode.create({ code, wallet: req.wallet });
+    const expiresAt = new Date(doc.createdAt.getTime() + 300000); // 5 minutes
+
+    res.json({ code, expiresAt });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to generate link code' });
+  }
+});
+
+/**
+ * DELETE /api/profile/discord
+ * Unlink Discord account from the authenticated user.
+ */
+router.delete('/discord', async (req, res) => {
+  try {
+    await User.findOneAndUpdate(
+      { wallet: req.wallet },
+      { $set: { discordId: null } }
+    );
+    res.json({ unlinked: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to unlink Discord' });
   }
 });
 
