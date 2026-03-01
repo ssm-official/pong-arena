@@ -210,7 +210,13 @@ function setupMatchmaking(io, socket, onlineUsers, activeGames) {
       const p1 = queues[tier].shift();
       const p2 = queues[tier].shift();
       // Use the custom stake amount for USD-based tiers
-      createMatch(io, p1, p2, tier, activeGames, p1.stakeAmount);
+      try {
+        await createMatch(io, p1, p2, tier, activeGames, p1.stakeAmount);
+      } catch (err) {
+        console.error('createMatch failed:', err.message);
+        io.to(p1.socketId).emit('match-error', { error: 'Match creation failed. Please try again.' });
+        io.to(p2.socketId).emit('match-error', { error: 'Match creation failed. Please try again.' });
+      }
     }
   });
 

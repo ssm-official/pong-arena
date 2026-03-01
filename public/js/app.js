@@ -1555,7 +1555,7 @@ socket.on('lobby-list', (data) => {
 
 // Socket: Lobby error
 socket.on('lobby-error', (data) => {
-  alert(data.error);
+  showToast(data.error || 'Lobby error', 'error');
 });
 
 // ===========================================
