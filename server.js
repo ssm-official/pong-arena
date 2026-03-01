@@ -104,6 +104,14 @@ app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
+// Express error handler — catches async middleware errors
+app.use((err, req, res, next) => {
+  console.error('Unhandled error:', err);
+  if (!res.headersSent) {
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // --------------- In-Memory State ---------------
 const onlineUsers = new Map();    // wallet -> { socketId, username }
 const activeGames = new Map();    // gameId -> PongEngine instance

@@ -10,30 +10,65 @@ const mongoose = require('mongoose');
 
 const SESSION_TTL = 24 * 60 * 60 * 1000; // 24 hours
 
-// MongoDB session model
-const sessionSchema = new mongoose.Schema({
-  token: { type: String, required: true, unique: true, index: true },
-  wallet: { type: String, required: true, index: true },
-  createdAt: { type: Date, default: Date.now, expires: 86400 } // TTL index: auto-delete after 24h
-});
-const Session = mongoose.model('Session', sessionSchema);
+// Lazy model — only created once, avoids duplicate model errors
+let Session;
+function getSessionModel() {
+  if (Session) return Session;
+  const schema = new mongoose.Schema({
+    token: { type: String, required: true, unique: true },
+    wallet: { type: String, required: true },
+    createdAt: { type: Date, default: Date.now }
+  });
+  schema.index({ token: 1 });
+  schema.index({ wallet: 1 });
+  schema.index({ createdAt: 1 }, { expireAfterSeconds: 86400 });
+  try {
+    Session = mongoose.model('Session');
+  } catch {
+    Session = mongoose.model('Session', schema);
+  }
+  return Session;
+}
 
 /**
  * Create a session for a verified wallet. Returns the token.
  */
 async function createSession(wallet) {
-  // Remove any existing sessions for this wallet
-  await Session.deleteMany({ wallet });
+  const S = getSessionModel();
+  await S.deleteMany({ wallet });
   const token = crypto.randomBytes(32).toString('hex');
-  await Session.create({ token, wallet });
+  await S.create({ token, wallet });
   return token;
 }
 
 /**
- * Middleware: verify session token from Authorization header.
- * Expects: Authorization: Bearer <token>
+ * Find session by token. Returns { wallet, createdAt } or null.
  */
-async function authMiddleware(req, res, next) {
+async function findSession(token) {
+  const S = getSessionModel();
+  const session = await S.findOne({ token });
+  if (!session) return null;
+  if (Date.now() - session.createdAt.getTime() > SESSION_TTL) {
+    await S.deleteOne({ token });
+    return null;
+  }
+  return session;
+}
+
+/**
+ * Express 4-safe async middleware wrapper.
+ * Catches promise rejections and forwards them to next(err).
+ */
+function asyncMw(fn) {
+  return (req, res, next) => {
+    Promise.resolve(fn(req, res, next)).catch(next);
+  };
+}
+
+/**
+ * Middleware: verify session token from Authorization header.
+ */
+const authMiddleware = asyncMw(async (req, res, next) => {
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     return res.status(401).json({ error: 'Missing or invalid Authorization header' });
@@ -44,30 +79,19 @@ async function authMiddleware(req, res, next) {
     return res.status(401).json({ error: 'Invalid session token' });
   }
 
-  try {
-    const session = await Session.findOne({ token });
-    if (!session) {
-      return res.status(401).json({ error: 'Invalid session. Please reconnect wallet.' });
-    }
-
-    // Check expiry
-    if (Date.now() - session.createdAt.getTime() > SESSION_TTL) {
-      await Session.deleteOne({ token });
-      return res.status(401).json({ error: 'Session expired. Please reconnect wallet.' });
-    }
-
-    req.wallet = session.wallet;
-    next();
-  } catch (err) {
-    console.error('Auth middleware error:', err);
-    return res.status(500).json({ error: 'Auth check failed' });
+  const session = await findSession(token);
+  if (!session) {
+    return res.status(401).json({ error: 'Invalid session. Please reconnect wallet.' });
   }
-}
+
+  req.wallet = session.wallet;
+  next();
+});
 
 /**
- * Optional auth — sets req.wallet if valid token, but never rejects the request.
+ * Optional auth — sets req.wallet if valid token, but never rejects.
  */
-async function optionalAuth(req, res, next) {
+const optionalAuth = asyncMw(async (req, res, next) => {
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) return next();
 
@@ -75,14 +99,12 @@ async function optionalAuth(req, res, next) {
   if (!token || token === 'null' || token === 'undefined') return next();
 
   try {
-    const session = await Session.findOne({ token });
-    if (session && (Date.now() - session.createdAt.getTime() <= SESSION_TTL)) {
-      req.wallet = session.wallet;
-    }
-  } catch (err) {
-    // Silently continue without auth
+    const session = await findSession(token);
+    if (session) req.wallet = session.wallet;
+  } catch {
+    // Silently continue
   }
   next();
-}
+});
 
 module.exports = { authMiddleware, optionalAuth, createSession };

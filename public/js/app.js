@@ -1926,11 +1926,14 @@ function closeRoller() {
 async function equipSkin(skinId) {
   if (!requireWallet('equip')) return;
   try {
-    await apiPostAuth('/api/shop/equip', { skinId }, getAuthHeader());
-    loadShop();
-    showToast('Skin equipped!');
+    const result = await apiPostAuth('/api/shop/equip', { skinId }, getAuthHeader());
+    if (result.status === 'equipped') {
+      loadShop();
+      showToast('Skin equipped!');
+    }
   } catch (err) {
-    showToast('Failed to equip: ' + err.message);
+    console.error('Equip failed:', err);
+    showToast(err.message || 'Failed to equip skin');
   }
 }
 
@@ -2633,15 +2636,24 @@ async function apiPostAuth(url, body, authHeader) {
   if (!authHeader) {
     throw new Error('Not authenticated. Please connect wallet.');
   }
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: authHeader },
-    body: JSON.stringify(body)
-  });
-  const data = await res.json();
+  let res;
+  try {
+    res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: authHeader },
+      body: JSON.stringify(body)
+    });
+  } catch (netErr) {
+    throw new Error('Network error — check your connection.');
+  }
+  let data;
+  try {
+    data = await res.json();
+  } catch {
+    throw new Error('Server error (status ' + res.status + ')');
+  }
   if (!res.ok) {
     if (res.status === 401) {
-      // Session expired — clear local session so user re-authenticates
       sessionToken = null;
       currentUser = null;
       localStorage.removeItem('pong_session');
@@ -2847,13 +2859,16 @@ function renderInventoryGrid() {
 async function equipSkinFromModal(skinId) {
   if (!requireWallet('equip')) return;
   try {
-    await apiPostAuth('/api/shop/equip', { skinId }, getAuthHeader());
-    dashInventory.forEach(s => { s.equipped = s.skinId === skinId; });
-    renderInventoryGrid();
-    updatePaddlePreview();
-    showToast('Skin equipped!');
+    const result = await apiPostAuth('/api/shop/equip', { skinId }, getAuthHeader());
+    if (result.status === 'equipped') {
+      dashInventory.forEach(s => { s.equipped = s.skinId === skinId; });
+      renderInventoryGrid();
+      updatePaddlePreview();
+      showToast('Skin equipped!');
+    }
   } catch (err) {
-    showToast('Failed to equip: ' + err.message);
+    console.error('Equip failed:', err);
+    showToast(err.message || 'Failed to equip skin');
   }
 }
 
@@ -2945,13 +2960,16 @@ async function loadCosmetics() {
 async function equipFromCosmetics(skinId) {
   if (!requireWallet('equip')) return;
   try {
-    await apiPostAuth('/api/shop/equip', { skinId }, getAuthHeader());
-    dashInventory.forEach(s => { s.equipped = s.skinId === skinId; });
-    loadCosmetics();
-    updatePaddlePreview();
-    showToast('Skin equipped!');
+    const result = await apiPostAuth('/api/shop/equip', { skinId }, getAuthHeader());
+    if (result.status === 'equipped') {
+      dashInventory.forEach(s => { s.equipped = s.skinId === skinId; });
+      loadCosmetics();
+      updatePaddlePreview();
+      showToast('Skin equipped!');
+    }
   } catch (err) {
-    showToast('Failed to equip: ' + err.message);
+    console.error('Equip failed:', err);
+    showToast(err.message || 'Failed to equip skin');
   }
 }
 
