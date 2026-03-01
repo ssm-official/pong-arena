@@ -203,7 +203,11 @@ socket.on('connect', () => {
 
 (async function tryAutoLogin() {
   const saved = localStorage.getItem('pong_session');
-  if (!saved) return;
+  if (!saved) {
+    // No session — show dashboard without wallet
+    initDashboard();
+    return;
+  }
   try {
     const { token } = JSON.parse(saved);
     const res = await fetch('/api/profile', {
@@ -216,9 +220,11 @@ socket.on('connect', () => {
       showApp();
     } else {
       localStorage.removeItem('pong_session');
+      initDashboard();
     }
   } catch {
     localStorage.removeItem('pong_session');
+    initDashboard();
   }
 })();
 
@@ -290,9 +296,6 @@ function showView(view) {
 function showApp() {
   showView('app');
   updateNav();
-  // Show side nav
-  const sideNav = document.getElementById('side-nav');
-  if (sideNav) { sideNav.classList.remove('hidden'); sideNav.style.display = 'flex'; }
   // Route to the tab matching the current URL, or default to play
   const initialTab = getTabFromPath();
   switchTab(initialTab, false);
@@ -302,11 +305,27 @@ function showApp() {
   socket.emit('lobby-list-request');
   const canvas = document.getElementById('game-canvas');
   GameClient.init(canvas, currentUser.wallet);
-  startPriceRefresh();
   // Show online count
   document.getElementById('online-count').classList.remove('hidden');
   // Fetch unread DM counts
   fetchUnreadCounts();
+}
+
+// Show dashboard immediately on load (no wallet gate)
+function initDashboard() {
+  const initialTab = getTabFromPath();
+  switchTab(initialTab, false);
+  history.replaceState({ tab: initialTab }, '', ROUTE_PATHS[initialTab] || '/play');
+  startPriceRefresh();
+  document.getElementById('online-count').classList.remove('hidden');
+  socket.emit('lobby-list-request');
+}
+
+// Check wallet before actions that require it
+function requireWallet(action) {
+  if (currentUser) return true;
+  alert('Connect your wallet first to ' + action + '!');
+  return false;
 }
 
 function updateNav() {
@@ -1246,6 +1265,7 @@ function updateLobbyPongDisplay() {
 }
 
 function createLobby() {
+  if (!requireWallet('create a lobby')) return;
   const usdInput = parseFloat(document.getElementById('lobby-usd-input').value);
   if (!usdInput || usdInput <= 0) return alert('Enter a valid USD amount');
   if (pongPriceUsd <= 0) return alert('Price unavailable. Try again later.');
@@ -1781,6 +1801,7 @@ async function loadHistory() {
 // ===========================================
 
 function joinQueue(tier) {
+  if (!requireWallet('join a match')) return;
   // Auto-cancel any open lobby when joining queue
   if (myLobbyId) {
     socket.emit('lobby-cancel', { lobbyId: myLobbyId });
@@ -2726,7 +2747,7 @@ function updateMusicIcon() {
 
 function initMusic() {
   const audio = document.getElementById('bg-music');
-  if (!audio || musicStarted) return;
+  if (!audio) return;
   audio.volume = musicVolume / 100;
   if (musicEnabled) {
     audio.play().then(() => {
@@ -2740,7 +2761,7 @@ function initMusic() {
 }
 
 // ===========================================
-// LOADING SCREEN
+// LOADING SCREEN & MUSIC AUTO-START
 // ===========================================
 
 function dismissLoadingScreen() {
@@ -2752,14 +2773,16 @@ function dismissLoadingScreen() {
   }, 600);
 }
 
-// Start music IMMEDIATELY on first user interaction (before loading screen ends)
 function tryStartMusic() {
   if (!musicStarted) initMusic();
 }
 
+// Immediately attempt to play music (works if user has interacted with domain before)
+tryStartMusic();
+
 (function initLoadingScreen() {
-  // Auto-dismiss after 2s
-  const autoDismiss = setTimeout(dismissLoadingScreen, 2000);
+  // Auto-dismiss after 1.5s
+  const autoDismiss = setTimeout(dismissLoadingScreen, 1500);
 
   function earlyDismiss() {
     clearTimeout(autoDismiss);
@@ -2770,19 +2793,15 @@ function tryStartMusic() {
   }
   document.addEventListener('click', earlyDismiss);
   document.addEventListener('keydown', earlyDismiss);
-
-  // Also try to play music as soon as page loads (works if user already interacted)
-  if (document.readyState === 'complete') {
-    tryStartMusic();
-  } else {
-    window.addEventListener('load', tryStartMusic);
-  }
 })();
 
-// Fallback: ensure music starts on first user click
-document.addEventListener('click', function startMusicOnClick() {
-  tryStartMusic();
-}, { once: true });
+// Fallback: catch ANY user interaction to start music
+['click', 'keydown', 'touchstart', 'mousedown'].forEach(evt => {
+  document.addEventListener(evt, function startMusicHandler() {
+    tryStartMusic();
+    document.removeEventListener(evt, startMusicHandler);
+  }, { once: true });
+});
 
 // Initialize music icon state on load
 if (document.readyState === 'loading') {
