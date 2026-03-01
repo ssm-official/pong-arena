@@ -1730,7 +1730,9 @@ async function openCratePreview(crateId) {
       if (s.type === 'aura') {
         let aC = '#a855f7';
         try { aC = JSON.parse(s.cssValue).color || '#a855f7'; } catch {}
-        preview = `<span style="font-size:28px;color:${esc(aC)}">&#10024;</span>`;
+        preview = s.imageUrl
+          ? `<img src="${esc(s.imageUrl)}" class="h-10 w-10 object-contain" />`
+          : `<span style="font-size:28px;color:${esc(aC)}">&#10024;</span>`;
         bgColor = esc(aC) + '15';
       } else if (s.type === 'color') {
         preview = `<div class="w-8 h-8 rounded-full" style="background:${esc(s.cssValue)};box-shadow:0 0 12px ${esc(s.cssValue)}"></div>`;
@@ -1865,7 +1867,10 @@ function buildRollerStrip(wonSkin, crateSkins) {
     if (skin.type === 'aura') {
       let aColor = '#a855f7';
       try { aColor = JSON.parse(skin.cssValue).color || '#a855f7'; } catch {}
-      card.innerHTML = `<div style="font-size:32px;color:${esc(aColor)}">&#10024;</div><div style="font-size:10px;color:#ccc;margin-top:4px;text-align:center;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;max-width:90px">${esc(skin.name)}</div>`;
+      const auraVisual = skin.imageUrl
+        ? `<img src="${esc(skin.imageUrl)}" style="height:36px;width:36px;object-fit:contain;" />`
+        : `<div style="font-size:32px;color:${esc(aColor)}">&#10024;</div>`;
+      card.innerHTML = `${auraVisual}<div style="font-size:10px;color:#ccc;margin-top:4px;text-align:center;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;max-width:90px">${esc(skin.name)}</div>`;
     } else if (skin.type === 'color') {
       card.innerHTML = `<div style="width:36px;height:36px;border-radius:50%;background:${esc(skin.cssValue)};box-shadow:0 0 10px ${esc(skin.cssValue)}"></div><div style="font-size:10px;color:#ccc;margin-top:4px;text-align:center;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;max-width:90px">${esc(skin.name)}</div>`;
     } else {
@@ -1917,7 +1922,9 @@ function showFinalReveal(skin, isDuplicate) {
   if (skin.type === 'aura') {
     let aColor = '#a855f7';
     try { aColor = JSON.parse(skin.cssValue).color || '#a855f7'; } catch {}
-    preview.innerHTML = `<div style="font-size:48px;color:${esc(aColor)}">&#10024;</div>`;
+    preview.innerHTML = skin.imageUrl
+      ? `<img src="${esc(skin.imageUrl)}" style="height:56px;width:56px;object-fit:contain;" />`
+      : `<div style="font-size:48px;color:${esc(aColor)}">&#10024;</div>`;
     preview.style.background = aColor + '15';
   } else if (skin.type === 'color') {
     preview.innerHTML = `<div class="w-16 h-16 rounded-full" style="background:${esc(skin.cssValue)};box-shadow:0 0 20px ${esc(skin.cssValue)}"></div>`;
@@ -2829,13 +2836,15 @@ async function loadDashboardSkins() {
   try {
     const res = await fetch('/api/shop', { headers: { Authorization: getAuthHeader() } }).then(r => r.json());
     dashInventory = res.inventory || [];
-    updatePaddlePreview();
+    // Find equipped aura from inventory
+    const equippedAuraSkin = dashInventory.find(s => s.type === 'aura' && s.equippedAura);
+    updatePaddlePreview(equippedAuraSkin || null);
   } catch (err) {
     console.error('Failed to load dashboard skins:', err);
   }
 }
 
-function updatePaddlePreview() {
+function updatePaddlePreview(auraSkin) {
   const paddle = document.getElementById('dash-paddle-preview');
   const nameEl = document.getElementById('dash-skin-name');
   const rarityEl = document.getElementById('dash-skin-rarity');
@@ -2864,6 +2873,21 @@ function updatePaddlePreview() {
     nameEl.textContent = 'Default';
     rarityEl.classList.add('hidden');
   }
+
+  // Dashboard Customize card — aura preview
+  const dashPaddleRight = document.getElementById('dash-paddle-preview-right');
+  const dashAuraName = document.getElementById('dash-aura-name');
+  if (dashPaddleRight && auraSkin) {
+    let auraColor = '#a855f7';
+    try { auraColor = JSON.parse(auraSkin.cssValue).color || '#a855f7'; } catch {}
+    dashPaddleRight.style.boxShadow = `0 0 18px ${auraColor}, 0 0 6px ${auraColor}`;
+    if (dashAuraName) dashAuraName.textContent = 'Aura: ' + auraSkin.name;
+  } else if (dashPaddleRight) {
+    // Reset to default paddle glow (no aura)
+    const equippedColor = equipped && equipped.type === 'color' ? equipped.cssValue : '#a855f7';
+    dashPaddleRight.style.boxShadow = '0 0 12px ' + equippedColor;
+    if (dashAuraName) dashAuraName.textContent = 'Aura: None';
+  }
 }
 
 function openInventoryModal() {
@@ -2889,7 +2913,9 @@ function renderInventoryGrid() {
     if (s.type === 'aura') {
       let aC = '#a855f7';
       try { aC = JSON.parse(s.cssValue).color || '#a855f7'; } catch {}
-      preview = `<span style="font-size:24px;color:${esc(aC)}">&#10024;</span>`;
+      preview = s.imageUrl
+        ? `<img src="${esc(s.imageUrl)}" class="h-10 w-10 object-contain" />`
+        : `<span style="font-size:24px;color:${esc(aC)}">&#10024;</span>`;
       bgStyle = `background:${esc(aC)}15`;
     } else if (s.type === 'color') {
       preview = `<div class="w-8 h-8 rounded-full" style="background:${esc(s.cssValue)};box-shadow:0 0 12px ${esc(s.cssValue)}"></div>`;
@@ -3000,8 +3026,13 @@ async function loadCosmetics() {
     if (equippedAura && auraPreview) {
       let auraColor = '#a855f7';
       try { auraColor = JSON.parse(equippedAura.cssValue).color || '#a855f7'; } catch {}
-      auraPreview.innerHTML = '&#10024;';
-      auraPreview.style.color = auraColor;
+      if (equippedAura.imageUrl) {
+        auraPreview.innerHTML = `<img src="${esc(equippedAura.imageUrl)}" class="h-8 w-8 object-contain" />`;
+        auraPreview.style.color = '';
+      } else {
+        auraPreview.innerHTML = '&#10024;';
+        auraPreview.style.color = auraColor;
+      }
       if (equippedAuraName) equippedAuraName.textContent = equippedAura.name;
       if (equippedAuraRarity) {
         const rc = equippedAura.rarity === 'legendary' ? 'bg-yellow-900 text-yellow-300'
@@ -3070,7 +3101,9 @@ async function loadCosmetics() {
           return `
             <div class="skin-card bg-arena-card rounded-xl p-3 border ${borderClass} transition-all">
               <div class="w-full h-20 rounded-lg mb-2 flex items-center justify-center" style="background:${esc(auraColor)}15">
-                <span style="color:${esc(auraColor)};font-size:28px">&#10024;</span>
+                ${a.imageUrl
+                  ? `<img src="${esc(a.imageUrl)}" class="h-12 w-12 object-contain" />`
+                  : `<span style="color:${esc(auraColor)};font-size:28px">&#10024;</span>`}
               </div>
               <div class="flex items-center gap-1.5 mb-0.5">
                 <h4 class="font-bold text-sm truncate">${esc(a.name)}</h4>

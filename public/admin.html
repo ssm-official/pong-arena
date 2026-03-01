@@ -129,6 +129,10 @@
           <label class="block text-sm text-gray-400 mb-1">SVG or PNG file (120x400, transparent bg)</label>
           <input id="skin-file" type="file" accept=".svg,.png" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white" />
         </div>
+        <div id="skin-aura-img-input" class="mt-3" style="display:none">
+          <label class="block text-sm text-gray-400 mb-1">Display Image (optional — shown in shop/inventory)</label>
+          <input id="skin-aura-img" type="file" accept=".svg,.png,.jpg,.jpeg,.webp" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white" />
+        </div>
         <div id="skin-aura-input" class="mt-3" style="display:none">
           <label class="block text-sm text-gray-400 mb-2">Aura Configuration</label>
           <div class="grid grid-cols-2 gap-3">
@@ -255,6 +259,11 @@
           <label class="block text-sm text-gray-400 mb-1">Replace image (SVG/PNG) — leave empty to keep current</label>
           <input id="edit-skin-file" type="file" accept=".svg,.png" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white" />
           <div id="edit-skin-current-img" class="mt-2 text-xs text-gray-500"></div>
+        </div>
+        <div id="edit-skin-aura-img-row" style="display:none">
+          <label class="block text-sm text-gray-400 mb-1">Display Image (optional)</label>
+          <input id="edit-skin-aura-img" type="file" accept=".svg,.png,.jpg,.jpeg,.webp" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white" />
+          <div id="edit-skin-aura-current-img" class="mt-1 text-xs text-gray-500"></div>
         </div>
         <div id="edit-skin-aura-row" style="display:none">
           <label class="block text-sm text-gray-400 mb-2">Aura Configuration</label>
@@ -409,6 +418,7 @@
       document.getElementById('skin-file-input').style.display = type === 'image' ? '' : 'none';
       document.getElementById('skin-color-input').style.display = type === 'color' ? '' : 'none';
       document.getElementById('skin-aura-input').style.display = type === 'aura' ? '' : 'none';
+      document.getElementById('skin-aura-img-input').style.display = type === 'aura' ? '' : 'none';
     }
 
     // ============================
@@ -535,6 +545,13 @@
           speed: parseFloat(document.getElementById('aura-speed').value),
         };
         formData.append('cssValue', JSON.stringify(config));
+        // Optional display image for aura
+        const auraImgFile = document.getElementById('skin-aura-img').files[0];
+        if (auraImgFile) {
+          const ext = auraImgFile.name.match(/\.\w+$/)?.[0] || '.png';
+          formData.append('image', auraImgFile);
+          formData.append('fileName', name.toLowerCase().replace(/[^a-z0-9]+/g, '-') + ext);
+        }
       } else {
         const css = document.getElementById('skin-css').value;
         if (!css) return alert('Enter a CSS color value');
@@ -599,6 +616,15 @@
         currentImg.innerHTML = '';
       }
 
+      // Show aura image if exists
+      const auraCurrentImg = document.getElementById('edit-skin-aura-current-img');
+      document.getElementById('edit-skin-aura-img').value = '';
+      if (skin.type === 'aura' && skin.imageUrl) {
+        auraCurrentImg.innerHTML = `Current: <img src="${esc(skin.imageUrl)}" class="inline h-8 rounded mt-1" /> <a href="${esc(skin.imageUrl)}" target="_blank" class="text-purple-400 underline ml-1">view</a>`;
+      } else {
+        auraCurrentImg.innerHTML = '';
+      }
+
       // Populate aura fields if type is aura
       if (skin.type === 'aura' && skin.cssValue) {
         try {
@@ -626,6 +652,7 @@
       document.getElementById('edit-skin-file-row').style.display = type === 'image' ? '' : 'none';
       document.getElementById('edit-skin-color-row').style.display = type === 'color' ? '' : 'none';
       document.getElementById('edit-skin-aura-row').style.display = type === 'aura' ? '' : 'none';
+      document.getElementById('edit-skin-aura-img-row').style.display = type === 'aura' ? '' : 'none';
     }
 
     async function saveEditSkin() {
@@ -652,6 +679,13 @@
           speed: parseFloat(document.getElementById('edit-aura-speed').value),
         };
         formData.append('cssValue', JSON.stringify(config));
+        // Optional display image for aura
+        const auraImgFile = document.getElementById('edit-skin-aura-img').files[0];
+        if (auraImgFile) {
+          const ext = auraImgFile.name.match(/\.\w+$/)?.[0] || '.png';
+          formData.append('image', auraImgFile);
+          formData.append('fileName', document.getElementById('edit-skin-name').value.toLowerCase().replace(/[^a-z0-9]+/g, '-') + ext);
+        }
       }
 
       if (type === 'image') {
