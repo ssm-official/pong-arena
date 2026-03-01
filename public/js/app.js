@@ -158,9 +158,20 @@ function formatPongShort(pong) {
 }
 
 function updateAllUsdDisplays() {
-  // Update all USD-based tier buttons
+  // Update all USD-based tier buttons (in stake-modal)
   Object.keys(TIER_USD_AMOUNTS).forEach(tier => {
     const el = document.getElementById(`tier-pong-${tier}`);
+    if (!el) return;
+    if (priceFetchFailed || pongPriceUsd <= 0) {
+      el.textContent = 'Price N/A';
+    } else {
+      const pongAmt = getTierPongAmount(tier);
+      el.textContent = formatPongShort(pongAmt) + ' $PONG';
+    }
+  });
+  // Update dashboard quick-tier buttons
+  ['t5', 't10', 't25'].forEach(tier => {
+    const el = document.getElementById(`dash-tier-pong-${tier}`);
     if (!el) return;
     if (priceFetchFailed || pongPriceUsd <= 0) {
       el.textContent = 'Price N/A';
@@ -376,24 +387,23 @@ function removeWalletLocks() {
 }
 
 function updateNav() {
+  // Update connect button to show connected state
   const connectBtn = document.getElementById('btn-connect');
-  connectBtn.onclick = null;
-  // Change wallet button to connected state
-  connectBtn.style.background = 'rgba(22, 163, 74, 0.3)';
-  connectBtn.style.borderColor = '#22c55e';
-  // Update icon bg
-  const iconDiv = connectBtn.querySelector('.nav-icon');
-  if (iconDiv) iconDiv.style.background = 'rgba(22, 163, 74, 0.4)';
-  // Update label
-  const label = connectBtn.querySelector('.nav-label');
-  if (label) label.textContent = shortenAddress(currentUser.wallet).slice(0,6);
-  document.getElementById('nav-username').textContent = currentUser.nickname || currentUser.username;
-  const navPfp = document.getElementById('nav-pfp');
-  if (currentUser.pfp && navPfp) {
-    navPfp.src = currentUser.pfp;
-    navPfp.style.display = 'block';
-    const fallbackSvg = navPfp.nextElementSibling;
-    if (fallbackSvg) fallbackSvg.style.display = 'none';
+  if (connectBtn) {
+    connectBtn.textContent = shortenAddress(currentUser.wallet);
+    connectBtn.className = 'w-full mt-3 bg-green-600/30 border border-green-500/50 py-2.5 rounded-lg font-medium text-sm text-green-300 cursor-default';
+    connectBtn.onclick = null;
+  }
+  // Update hidden nav-username for compatibility
+  const navUsernameEl = document.getElementById('nav-username');
+  if (navUsernameEl) navUsernameEl.textContent = currentUser.nickname || currentUser.username;
+  // Update top bar nickname + pfp
+  const topbarNickname = document.getElementById('topbar-nickname');
+  if (topbarNickname) topbarNickname.textContent = currentUser.nickname || currentUser.username;
+  const topbarPfp = document.getElementById('topbar-pfp');
+  if (topbarPfp && currentUser.pfp) {
+    topbarPfp.src = currentUser.pfp;
+    topbarPfp.style.display = 'block';
   }
 }
 
@@ -426,11 +436,6 @@ function switchTab(tab, pushState) {
   document.getElementById(`tab-${tab}`).classList.remove('hidden');
   const tabBtn = document.querySelector(`[data-tab="${tab}"]`);
   if (tabBtn) tabBtn.classList.add('tab-active');
-
-  // Update side nav active state
-  document.querySelectorAll('#side-nav [data-nav]').forEach(btn => {
-    btn.classList.toggle('active', btn.getAttribute('data-nav') === tab);
-  });
 
   // Update URL (don't push on popstate or initial load)
   if (pushState !== false) {
@@ -584,6 +589,9 @@ function updateDashboardNickname() {
   const handleEl = document.getElementById('dash-handle');
   if (nicknameEl) nicknameEl.textContent = currentUser.nickname || currentUser.username;
   if (handleEl) handleEl.textContent = '@' + (currentUser.handle || currentUser.username);
+  // Update top bar nickname
+  const topbarNickname = document.getElementById('topbar-nickname');
+  if (topbarNickname) topbarNickname.textContent = currentUser.nickname || currentUser.username;
 }
 
 function openNicknameEdit() {
@@ -633,12 +641,32 @@ async function saveNickname() {
 }
 
 function openHandleChange() {
-  const newHandle = prompt('Enter new handle (3-20 chars, letters/numbers/underscores).\n\nThis costs $10 worth of $PONG.');
-  if (!newHandle) return;
-  if (newHandle.length < 3 || newHandle.length > 20 || !/^[a-zA-Z0-9_]+$/.test(newHandle)) {
-    showToast('Invalid handle format');
+  if (!requireWallet('change handle')) return;
+  const input = document.getElementById('handle-change-input');
+  if (input) input.value = '';
+  const errEl = document.getElementById('handle-change-error');
+  if (errEl) errEl.classList.add('hidden');
+  document.getElementById('handle-change-modal').classList.remove('hidden');
+  if (input) input.focus();
+}
+
+function closeHandleChange() {
+  document.getElementById('handle-change-modal').classList.add('hidden');
+}
+
+function submitHandleChange() {
+  const input = document.getElementById('handle-change-input');
+  const newHandle = input ? input.value.trim() : '';
+  const errEl = document.getElementById('handle-change-error');
+  if (!newHandle) {
+    if (errEl) { errEl.textContent = 'Handle cannot be empty'; errEl.classList.remove('hidden'); }
     return;
   }
+  if (newHandle.length < 3 || newHandle.length > 20 || !/^[a-zA-Z0-9_]+$/.test(newHandle)) {
+    if (errEl) { errEl.textContent = 'Invalid handle: 3-20 chars, letters/numbers/underscores only'; errEl.classList.remove('hidden'); }
+    return;
+  }
+  closeHandleChange();
   changeHandle(newHandle);
 }
 
@@ -2694,6 +2722,12 @@ async function loadDashboardFriends() {
   try {
     const res = await fetch('/api/friends', { headers: { Authorization: getAuthHeader() } }).then(r => r.json());
     const friends = res.friends || [];
+    // Update playing badge
+    const playingBadge = document.getElementById('dash-friends-playing');
+    if (playingBadge) {
+      const onlineCount = friends.filter(f => onlineUsers.includes(f.wallet)).length;
+      playingBadge.textContent = onlineCount + ' playing';
+    }
     if (friends.length === 0) {
       container.innerHTML = '<p class="text-gray-500 text-xs">No friends yet. Add players from the Friends tab!</p>';
       return;
@@ -2759,6 +2793,39 @@ function updatePaddlePreview() {
     paddle.style.backgroundImage = '';
     nameEl.textContent = 'Default';
     rarityEl.classList.add('hidden');
+  }
+  // Also update right-column customize card
+  const paddleRight = document.getElementById('dash-paddle-preview-right');
+  const nameRight = document.getElementById('dash-skin-name-right');
+  const rarityRight = document.getElementById('dash-skin-rarity-right');
+  if (paddleRight) {
+    if (equipped) {
+      if (equipped.type === 'color') {
+        paddleRight.style.background = esc(equipped.cssValue);
+        paddleRight.style.boxShadow = '0 0 10px ' + esc(equipped.cssValue);
+        paddleRight.style.backgroundImage = '';
+      } else {
+        paddleRight.style.background = 'url(' + esc(equipped.imageUrl) + ') center/cover no-repeat';
+        paddleRight.style.boxShadow = 'none';
+      }
+    } else {
+      paddleRight.style.background = '#a855f7';
+      paddleRight.style.boxShadow = '0 0 10px #a855f7';
+      paddleRight.style.backgroundImage = '';
+    }
+  }
+  if (nameRight) nameRight.textContent = equipped ? equipped.name : 'Default';
+  if (rarityRight) {
+    if (equipped) {
+      const rc = equipped.rarity === 'legendary' ? 'bg-yellow-900 text-yellow-300'
+        : equipped.rarity === 'rare' ? 'bg-purple-900 text-purple-300'
+        : 'bg-gray-800 text-gray-400';
+      rarityRight.className = 'text-xs px-1.5 py-0.5 rounded ml-1 ' + rc;
+      rarityRight.textContent = equipped.rarity;
+      rarityRight.classList.remove('hidden');
+    } else {
+      rarityRight.classList.add('hidden');
+    }
   }
 }
 
@@ -2874,18 +2941,17 @@ function setMusicVolume(val) {
 }
 
 function updateMusicIcon() {
-  const onIcon = document.getElementById('music-icon-on');
-  const offIcon = document.getElementById('music-icon-off');
-  const btn = document.getElementById('btn-music-toggle');
-  if (!onIcon || !offIcon) return;
-  if (musicEnabled) {
-    onIcon.classList.remove('hidden');
-    offIcon.classList.add('hidden');
-    if (btn) { btn.style.color = '#c084fc'; }
-  } else {
-    onIcon.classList.add('hidden');
-    offIcon.classList.remove('hidden');
-    if (btn) { btn.style.color = ''; }
+  // Update topbar music icons
+  const topbarOn = document.getElementById('topbar-music-on');
+  const topbarOff = document.getElementById('topbar-music-off');
+  if (topbarOn && topbarOff) {
+    if (musicEnabled) {
+      topbarOn.classList.remove('hidden');
+      topbarOff.classList.add('hidden');
+    } else {
+      topbarOn.classList.add('hidden');
+      topbarOff.classList.remove('hidden');
+    }
   }
 }
 
