@@ -3220,8 +3220,46 @@ async function equipFromCosmetics(skinId) {
 // SETTINGS PAGE
 // ===========================================
 
+// --- Music state ---
+let musicEnabled = localStorage.getItem('pong-music-enabled') !== 'false';
+let musicVolume = parseInt(localStorage.getItem('pong-music-volume') || '30', 10);
+let musicStarted = false;
+
+function toggleMusic(enabled) {
+  musicEnabled = enabled;
+  localStorage.setItem('pong-music-enabled', enabled ? 'true' : 'false');
+  const audio = document.getElementById('bg-music');
+  if (!audio) return;
+  if (enabled) {
+    if (!musicStarted) { startMusic(); } else { audio.play().catch(() => {}); }
+  } else {
+    audio.pause();
+  }
+}
+
+function setMusicVolume(val) {
+  musicVolume = parseInt(val, 10);
+  localStorage.setItem('pong-music-volume', String(musicVolume));
+  const audio = document.getElementById('bg-music');
+  if (audio) audio.volume = musicVolume / 100;
+  const label = document.getElementById('settings-volume-label');
+  if (label) label.textContent = musicVolume + '%';
+}
+
+function startMusic() {
+  const audio = document.getElementById('bg-music');
+  if (!audio || !audio.src || audio.src === window.location.href) return;
+  audio.volume = musicVolume / 100;
+  audio.play().then(() => { musicStarted = true; }).catch(() => {});
+}
+
 function loadSettings() {
-  // Settings page loaded — nothing to sync for now
+  const toggle = document.getElementById('settings-music-toggle');
+  if (toggle) toggle.checked = musicEnabled;
+  const slider = document.getElementById('settings-volume-slider');
+  if (slider) slider.value = musicVolume;
+  const label = document.getElementById('settings-volume-label');
+  if (label) label.textContent = musicVolume + '%';
 }
 
 function showLegalModal(title) {

@@ -1012,6 +1012,27 @@
         <div class="max-w-2xl mx-auto">
           <h2 class="text-2xl font-black text-white mb-6">Settings</h2>
 
+          <!-- Music -->
+          <div class="bg-arena-card rounded-2xl border border-purple-900/20 p-5 mb-4">
+            <h3 class="text-sm font-bold text-gray-300 uppercase tracking-wider mb-4">Music</h3>
+            <div class="space-y-4">
+              <div class="flex items-center justify-between">
+                <span class="text-sm text-gray-400">Background Music</span>
+                <label class="toggle-switch">
+                  <input type="checkbox" id="settings-music-toggle" onchange="toggleMusic(this.checked)" checked />
+                  <span class="toggle-slider"></span>
+                </label>
+              </div>
+              <div class="flex items-center justify-between">
+                <span class="text-sm text-gray-400">Volume</span>
+                <div class="flex items-center gap-3 flex-1 ml-4">
+                  <input type="range" id="settings-volume-slider" class="volume-slider flex-1" min="0" max="100" value="30" oninput="setMusicVolume(this.value)" />
+                  <span id="settings-volume-label" class="text-xs text-gray-500 w-8 text-right">30%</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
           <!-- Legal & Info -->
           <div class="bg-arena-card rounded-2xl border border-purple-900/20 p-5">
             <h3 class="text-sm font-bold text-gray-300 uppercase tracking-wider mb-4">Legal & Info</h3>
@@ -1450,6 +1471,15 @@
     </div>
   </div>
 
+  <!-- ============ PRACTICE BUTTON (bottom-right) ============ -->
+  <a href="/practice.html" id="practice-fab" class="fixed bottom-5 right-5 z-40 bg-purple-600 hover:bg-purple-700 text-white rounded-xl px-4 py-2.5 flex items-center gap-2 shadow-lg shadow-purple-900/40 transition hover:scale-105" style="text-decoration:none;">
+    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+    <span class="text-sm font-semibold">Practice</span>
+  </a>
+
+  <!-- ============ BACKGROUND MUSIC ============ -->
+  <audio id="bg-music" loop preload="auto"></audio>
+
   <!-- ============ TOAST NOTIFICATION ============ -->
   <div id="toast-notification" class="toast-notification"></div>
 
@@ -1459,6 +1489,6 @@
   <script src="/js/wallet.js?v=33"></script>
   <script src="/js/pong-sim.js?v=34"></script>
   <script src="/js/game-client.js?v=40"></script>
-  <script src="/js/app.js?v=64"></script>
+  <script src="/js/app.js?v=65"></script>
 </body>
 </html>
