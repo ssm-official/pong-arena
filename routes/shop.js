@@ -32,8 +32,8 @@ router.get('/', optionalAuth, async (req, res) => {
     const cratesWithSkins = crates.map(c => {
       const crateSkins = skins.filter(s => s.crateId === c.crateId);
       const unownedCount = crateSkins.filter(s => !ownedIds.includes(s.skinId)).length;
-      const rarityBreakdown = { common: 0, rare: 0, legendary: 0 };
-      crateSkins.forEach(s => { rarityBreakdown[s.rarity]++; });
+      const rarityBreakdown = { common: 0, uncommon: 0, rare: 0, super_rare: 0, legendary: 0, mythic: 0 };
+      crateSkins.forEach(s => { if (rarityBreakdown[s.rarity] !== undefined) rarityBreakdown[s.rarity]++; });
 
       return {
         ...c.toObject(),

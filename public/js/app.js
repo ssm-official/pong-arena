@@ -10,6 +10,25 @@ let pendingEscrowTx = null;
 let isMirrored = false;
 let chosenSide = 'left';
 
+// --- Rarity config ---
+const RARITY_COLORS = {
+  mythic:     { hex: '#ef4444', tw: 'text-red-400',    border: 'border-red-600/50',    bg: 'bg-red-900/50',    bgRgba: 'rgba(239,68,68,0.15)' },
+  legendary:  { hex: '#eab308', tw: 'text-yellow-400', border: 'border-yellow-600/50', bg: 'bg-yellow-900/50', bgRgba: 'rgba(234,179,8,0.15)' },
+  super_rare: { hex: '#ec4899', tw: 'text-pink-400',   border: 'border-pink-600/50',   bg: 'bg-pink-900/50',   bgRgba: 'rgba(236,72,153,0.15)' },
+  rare:       { hex: '#a855f7', tw: 'text-purple-400', border: 'border-purple-600/50', bg: 'bg-purple-900/50', bgRgba: 'rgba(168,85,247,0.15)' },
+  uncommon:   { hex: '#22c55e', tw: 'text-green-400',  border: 'border-green-600/50',  bg: 'bg-green-900/50',  bgRgba: 'rgba(34,197,94,0.15)' },
+  common:     { hex: '#6b7280', tw: 'text-gray-400',   border: 'border-gray-700/50',   bg: 'bg-gray-800',      bgRgba: 'rgba(107,114,128,0.1)' },
+};
+function rc(rarity) { return RARITY_COLORS[rarity] || RARITY_COLORS.common; }
+function rarityBadge(rarity) {
+  const map = {
+    mythic: 'bg-red-900 text-red-300', legendary: 'bg-yellow-900 text-yellow-300',
+    super_rare: 'bg-pink-900 text-pink-300', rare: 'bg-purple-900 text-purple-300',
+    uncommon: 'bg-green-900 text-green-300', common: 'bg-gray-800 text-gray-400',
+  };
+  return map[rarity] || map.common;
+}
+
 // --- $PONG Price in USD ---
 const PONG_TOKEN_MINT = 'GVLfSudckNc8L1MGWUJP5vXUgFNtYJqjytLR7xm3pump';
 let pongPriceUsd = 0;
@@ -1739,12 +1758,53 @@ async function loadShop() {
       const standardGrid = document.getElementById('shop-standard-grid');
       standardGrid.innerHTML = (res.standard || []).map(c => renderCrateCard(c, 'standard', ownedCrates[c.crateId] || 0)).join('');
     }
+    startShopCountdowns();
   } catch (err) {
     console.error('Failed to load shop:', err);
   }
 }
 
+// --- Live countdown timers for shop sections ---
+let shopCountdownInterval = null;
+function startShopCountdowns() {
+  if (shopCountdownInterval) clearInterval(shopCountdownInterval);
+  shopCountdownInterval = setInterval(updateShopCountdowns, 1000);
+  updateShopCountdowns();
+}
+function updateShopCountdowns() {
+  const els = document.querySelectorAll('.shop-countdown[data-expires]');
+  const now = Date.now();
+  for (const el of els) {
+    const exp = new Date(el.dataset.expires).getTime();
+    const diff = exp - now;
+    if (diff <= 0) {
+      el.textContent = 'Expired';
+      el.classList.remove('text-yellow-400');
+      el.classList.add('text-red-400');
+      continue;
+    }
+    const d = Math.floor(diff / 86400000);
+    const h = Math.floor((diff % 86400000) / 3600000);
+    const m = Math.floor((diff % 3600000) / 60000);
+    const s = Math.floor((diff % 60000) / 1000);
+    let text = '';
+    if (d > 0) text += d + 'd ';
+    if (d > 0 || h > 0) text += h + 'h ';
+    text += m + 'm ' + s + 's';
+    el.textContent = text;
+  }
+  // Auto-hide expired sections
+  const sections = document.querySelectorAll('[data-section-expires]');
+  for (const sec of sections) {
+    const exp = new Date(sec.dataset.sectionExpires).getTime();
+    if (exp <= now) sec.style.display = 'none';
+  }
+}
+
 function renderShopSection(section, allSkins, allCrates, ownedCrates) {
+  // Skip expired sections
+  if (section.expiresAt && new Date(section.expiresAt) <= new Date()) return '';
+
   if (section.type === 'banner') {
     if (!section.bannerImage) return '';
     return `<div class="mb-6 rounded-2xl overflow-hidden"><img src="${esc(section.bannerImage)}" class="w-full" /></div>`;
@@ -1760,16 +1820,25 @@ function renderShopSection(section, allSkins, allCrates, ownedCrates) {
   for (const item of items) {
     if (item.itemType === 'crate') {
       const crate = allCrates.find(c => c.crateId === item.itemId);
-      if (crate) tilesHtml += renderShopTile({ ...crate, _tileType: 'crate' }, item.size, isFeatured, ownedCrates[crate.crateId] || 0);
+      if (crate) tilesHtml += renderShopTile({ ...crate, _tileType: 'crate', _customIcon: item.customIcon, _animation: item.animation }, item.size, isFeatured, ownedCrates[crate.crateId] || 0);
     } else {
       const skin = allSkins.find(s => s.skinId === item.itemId);
-      if (skin) tilesHtml += renderShopTile({ ...skin, _tileType: 'skin' }, item.size, isFeatured, 0);
+      if (skin) tilesHtml += renderShopTile({ ...skin, _tileType: 'skin', _customIcon: item.customIcon, _animation: item.animation }, item.size, isFeatured, 0);
     }
   }
 
+  // Countdown HTML
+  let countdownHtml = '';
+  if (section.expiresAt) {
+    countdownHtml = `<span class="shop-countdown text-xs text-yellow-400 ml-2" data-expires="${esc(section.expiresAt)}"></span>`;
+  }
+
   return `
-    <div class="mb-6">
-      ${section.title ? `<h3 class="text-lg font-bold text-white mb-3 ${isFeatured ? 'text-xl bg-gradient-to-r from-yellow-400 to-purple-400 bg-clip-text text-transparent' : ''}">${esc(section.title)}</h3>` : ''}
+    <div class="mb-6" ${section.expiresAt ? `data-section-expires="${esc(section.expiresAt)}"` : ''}>
+      <div class="flex items-center mb-3">
+        ${section.title ? `<h3 class="text-lg font-bold text-white ${isFeatured ? 'text-xl bg-gradient-to-r from-yellow-400 to-purple-400 bg-clip-text text-transparent' : ''}">${esc(section.title)}</h3>` : ''}
+        ${countdownHtml}
+      </div>
       <div class="grid ${gridCols} gap-3">${tilesHtml}</div>
     </div>`;
 }
@@ -1799,8 +1868,8 @@ function renderCanvasShop(layout, allSkins, allCrates, ownedSkinIds, ownedCrates
       const skin = allSkins.find(s => s.skinId === el.itemId);
       if (!skin) { elHtml += `<div style="${base}"></div>`; continue; }
       const owned = ownedSkinIds.includes(skin.skinId);
-      const rarityColor = skin.rarity === 'legendary' ? '#eab308' : skin.rarity === 'rare' ? '#a855f7' : '#6b7280';
-      const rarityBg = skin.rarity === 'legendary' ? 'rgba(234,179,8,0.15)' : skin.rarity === 'rare' ? 'rgba(168,85,247,0.15)' : 'rgba(107,114,128,0.1)';
+      const rarityColor = rc(skin.rarity).hex;
+      const rarityBg = rc(skin.rarity).bgRgba;
       let preview;
       if (skin.type === 'color') {
         preview = `<div style="width:40px;height:40px;border-radius:50%;background:${esc(skin.cssValue)};box-shadow:0 0 12px ${esc(skin.cssValue)}"></div>`;
@@ -1863,18 +1932,33 @@ function renderCanvasShop(layout, allSkins, allCrates, ownedSkinIds, ownedCrates
   return `<div style="position:relative;width:100%;aspect-ratio:1200/${ch};overflow:hidden">${elHtml}</div>`;
 }
 
+function shopAnimClass(anim) {
+  const map = { glow: 'shop-anim-glow', float: 'shop-anim-float', pulse: 'shop-anim-pulse', shimmer: 'shop-anim-shimmer', fire: 'shop-anim-fire' };
+  return map[anim] || '';
+}
+
+function shopAnimUnderline(anim) {
+  if (!anim || anim === 'none') return '';
+  return `<div class="shop-anim-underline shop-ul-${esc(anim)}"></div>`;
+}
+
 function renderShopTile(item, size, isFeatured, ownedCount) {
   const sizeClass = size === 'large' ? 'col-span-2 row-span-2' : size === 'small' ? '' : '';
   const height = isFeatured ? 'h-48' : (size === 'large' ? 'h-48' : 'h-32');
-  const rarityColors = { legendary: 'text-yellow-400 border-yellow-600/50', rare: 'text-purple-400 border-purple-600/50', common: 'text-gray-400 border-gray-700/50' };
-  const rColor = rarityColors[item.rarity] || rarityColors.common;
+  const r = rc(item.rarity);
+  const anim = item._animation || 'none';
+  const ac = shopAnimClass(anim);
 
   if (item._tileType === 'crate') {
     const usdPrice = pongPriceUsd > 0 ? formatUsd(item.price * pongPriceUsd) + ' / ' : '';
+    const iconHtml = item._customIcon
+      ? `<img src="${esc(item._customIcon)}" class="w-16 h-16 object-contain ${ac}" />`
+      : `<div class="w-16 h-16 ${ac}">${getCrateIllustration(item.imageColor)}</div>`;
     return `
-      <div class="${sizeClass} group bg-arena-card rounded-xl border ${rColor.split(' ')[1] || 'border-gray-700/50'} cursor-pointer hover:border-purple-500 transition-all hover:shadow-[0_0_20px_rgba(168,85,247,0.15)] overflow-hidden" onclick="openCratePreview('${item.crateId}')">
-        <div class="${height} flex items-center justify-center bg-gray-900/50 p-4">
-          <div class="w-16 h-16">${getCrateIllustration(item.imageColor)}</div>
+      <div class="${sizeClass} group bg-arena-card rounded-xl border ${r.border} cursor-pointer hover:border-purple-500 transition-all hover:shadow-[0_0_20px_rgba(168,85,247,0.15)] overflow-hidden" onclick="openCratePreview('${item.crateId}')">
+        <div class="${height} flex flex-col items-center justify-center bg-gray-900/50 p-4">
+          ${iconHtml}
+          ${shopAnimUnderline(anim)}
         </div>
         <div class="p-3">
           <h4 class="font-bold text-sm text-white truncate">${esc(item.name)}</h4>
@@ -1890,20 +1974,26 @@ function renderShopTile(item, size, isFeatured, ownedCount) {
   // Skin tile
   const owned = item.owned;
   let preview;
-  if (item.type === 'color') {
-    preview = `<div class="w-12 h-12 rounded-full" style="background:${esc(item.cssValue)};box-shadow:0 0 15px ${esc(item.cssValue)}"></div>`;
+  if (item._customIcon) {
+    preview = `<img src="${esc(item._customIcon)}" class="w-16 h-16 object-contain ${ac}" />`;
+  } else if (item.type === 'color') {
+    preview = `<div class="w-12 h-12 rounded-full ${ac}" style="background:${esc(item.cssValue)};box-shadow:0 0 15px ${esc(item.cssValue)}"></div>`;
   } else {
-    preview = `<img src="${esc(item.imageUrl)}" class="h-20 object-contain" />`;
+    preview = `<img src="${esc(item.imageUrl)}" class="h-20 object-contain ${ac}" />`;
   }
   const priceDisplay = item.price != null ? (pongPriceUsd > 0 ? formatUsd(item.price * pongPriceUsd) + ' / ' : '') + Number(item.price).toLocaleString() + ' $PONG' : '';
+  const rarityLabel = (item.rarity || 'common').replace('_', ' ');
 
   return `
-    <div class="${sizeClass} group bg-arena-card rounded-xl border ${rColor.split(' ')[1] || 'border-gray-700/50'} transition-all hover:border-purple-500 hover:shadow-[0_0_20px_rgba(168,85,247,0.15)] overflow-hidden">
-      <div class="${height} flex items-center justify-center bg-gray-900/50">${preview}</div>
+    <div class="${sizeClass} group bg-arena-card rounded-xl border ${r.border} transition-all hover:border-purple-500 hover:shadow-[0_0_20px_rgba(168,85,247,0.15)] overflow-hidden">
+      <div class="${height} flex flex-col items-center justify-center bg-gray-900/50">
+        ${preview}
+        ${shopAnimUnderline(anim)}
+      </div>
       <div class="p-3">
         <div class="flex items-center gap-1.5 mb-1">
           <h4 class="font-bold text-sm text-white truncate">${esc(item.name)}</h4>
-          <span class="text-[10px] px-1 py-0.5 rounded ${item.rarity === 'legendary' ? 'bg-yellow-900/50 text-yellow-400' : item.rarity === 'rare' ? 'bg-purple-900/50 text-purple-400' : 'bg-gray-800 text-gray-400'} uppercase">${item.rarity}</span>
+          <span class="text-[10px] px-1 py-0.5 rounded ${r.bg} ${r.tw} uppercase">${rarityLabel}</span>
         </div>
         ${owned
           ? '<span class="text-xs text-green-400 font-medium">Owned</span>'
@@ -1954,10 +2044,13 @@ function renderCrateCard(c, section, ownedCount) {
             ${typeBadge}
           </div>
           <p class="text-gray-500 text-xs truncate mb-1.5">${esc(c.description || '')}</p>
-          <div class="flex items-center gap-2 text-[10px] text-gray-500">
-            <span>${c.rarityBreakdown.common}C</span>
-            <span class="text-purple-400">${c.rarityBreakdown.rare}R</span>
-            <span class="text-yellow-400">${c.rarityBreakdown.legendary}L</span>
+          <div class="flex items-center gap-2 text-[10px] text-gray-500 flex-wrap">
+            ${c.rarityBreakdown.common ? `<span>${c.rarityBreakdown.common}C</span>` : ''}
+            ${c.rarityBreakdown.uncommon ? `<span class="text-green-400">${c.rarityBreakdown.uncommon}U</span>` : ''}
+            ${c.rarityBreakdown.rare ? `<span class="text-purple-400">${c.rarityBreakdown.rare}R</span>` : ''}
+            ${c.rarityBreakdown.super_rare ? `<span class="text-pink-400">${c.rarityBreakdown.super_rare}SR</span>` : ''}
+            ${c.rarityBreakdown.legendary ? `<span class="text-yellow-400">${c.rarityBreakdown.legendary}L</span>` : ''}
+            ${c.rarityBreakdown.mythic ? `<span class="text-red-400">${c.rarityBreakdown.mythic}M</span>` : ''}
             <span class="text-gray-600">|</span>
             <span class="text-white font-semibold">${usdPrice}${c.price.toLocaleString()} $PONG</span>
           </div>
@@ -1990,11 +2083,9 @@ async function openCratePreview(crateId) {
       return;
     }
     grid.innerHTML = res.skins.map(s => {
-      const rarityClass = s.rarity === 'legendary' ? 'bg-yellow-900 text-yellow-300'
-        : s.rarity === 'rare' ? 'bg-purple-900 text-purple-300'
-        : 'bg-gray-800 text-gray-400';
+      const rarityClass = rarityBadge(s.rarity);
       const chancePct = s.chance >= 1 ? s.chance.toFixed(0) + '%' : s.chance.toFixed(1) + '%';
-      const chanceColor = s.rarity === 'legendary' ? 'text-yellow-400' : s.rarity === 'rare' ? 'text-purple-400' : 'text-gray-400';
+      const chanceColor = rc(s.rarity).tw;
       let preview, bgColor;
       if (s.type === 'color') {
         preview = `<div class="w-8 h-8 rounded-full" style="background:${esc(s.cssValue)};box-shadow:0 0 12px ${esc(s.cssValue)}"></div>`;
@@ -2107,10 +2198,11 @@ function playTickSound(progress) {
 function playRevealSound(rarity) {
   try {
     const ctx = getRollerAudioCtx();
-    const freqs = rarity === 'legendary' ? [523, 659, 784, 1047]
-                : rarity === 'rare' ? [523, 659, 784] : [523, 659];
-    const duration = rarity === 'legendary' ? 1.2 : rarity === 'rare' ? 0.8 : 0.5;
-    const volume = rarity === 'legendary' ? 0.15 : rarity === 'rare' ? 0.12 : 0.08;
+    const isHigh = ['mythic', 'legendary'].includes(rarity);
+    const isMid = ['super_rare', 'rare'].includes(rarity);
+    const freqs = isHigh ? [523, 659, 784, 1047] : isMid ? [523, 659, 784] : [523, 659];
+    const duration = isHigh ? 1.2 : isMid ? 0.8 : 0.5;
+    const volume = isHigh ? 0.15 : isMid ? 0.12 : 0.08;
     freqs.forEach((freq, i) => {
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
@@ -2196,15 +2288,16 @@ function showFinalReveal(skin, isDuplicate) {
     preview.style.background = '#1a1a3a';
   }
   nameEl.textContent = skin.name;
-  const rarityColors = { common: 'text-gray-400', rare: 'text-purple-400', legendary: 'text-yellow-400' };
-  rarityEl.textContent = isDuplicate ? skin.rarity.toUpperCase() + ' (DUPLICATE)' : skin.rarity.toUpperCase();
-  rarityEl.className = `text-sm mb-4 font-bold ${isDuplicate ? 'text-gray-500' : (rarityColors[skin.rarity] || 'text-gray-400')}`;
-  if (skin.rarity === 'legendary') {
+  // uses global rc() for rarity colors
+  const rarityLabel = (skin.rarity || 'common').replace('_', ' ').toUpperCase();
+  rarityEl.textContent = isDuplicate ? rarityLabel + ' (DUPLICATE)' : rarityLabel;
+  rarityEl.className = `text-sm mb-4 font-bold ${isDuplicate ? 'text-gray-500' : rc(skin.rarity).tw}`;
+  if (['mythic', 'legendary'].includes(skin.rarity)) {
     const flash = document.getElementById('roller-flash');
     flash.style.opacity = '0.6';
     setTimeout(() => { flash.style.opacity = '0'; }, 300);
     preview.classList.add('reveal-glow');
-  } else if (skin.rarity === 'rare') {
+  } else if (['super_rare', 'rare'].includes(skin.rarity)) {
     preview.classList.add('reveal-glow');
   }
   playRevealSound(skin.rarity);
@@ -3111,9 +3204,7 @@ function updatePaddlePreview() {
       paddle.style.background = 'url(' + esc(equipped.imageUrl) + ') center/cover no-repeat';
     }
     nameEl.textContent = equipped.name;
-    const rarityClass = equipped.rarity === 'legendary' ? 'bg-yellow-900 text-yellow-300'
-      : equipped.rarity === 'rare' ? 'bg-purple-900 text-purple-300'
-      : 'bg-gray-800 text-gray-400';
+    const rarityClass = rarityBadge(equipped.rarity);
     rarityEl.className = 'text-xs px-1.5 py-0.5 rounded ' + rarityClass;
     rarityEl.textContent = equipped.rarity;
     rarityEl.classList.remove('hidden');
@@ -3163,9 +3254,7 @@ function renderInventoryGrid() {
     return;
   }
   grid.innerHTML = dashInventory.map(s => {
-    const rarityClass = s.rarity === 'legendary' ? 'bg-yellow-900 text-yellow-300'
-      : s.rarity === 'rare' ? 'bg-purple-900 text-purple-300'
-      : 'bg-gray-800 text-gray-400';
+    const rarityClass = rarityBadge(s.rarity);
     let preview, bgStyle;
     if (s.type === 'color') {
       preview = `<div class="w-8 h-8 rounded-full" style="background:${esc(s.cssValue)};box-shadow:0 0 12px ${esc(s.cssValue)}"></div>`;
@@ -3242,10 +3331,8 @@ async function loadCosmetics() {
       }
       if (equippedName) equippedName.textContent = equipped.name;
       if (equippedRarity) {
-        const rc = equipped.rarity === 'legendary' ? 'bg-yellow-900 text-yellow-300'
-          : equipped.rarity === 'rare' ? 'bg-purple-900 text-purple-300'
-          : 'bg-gray-800 text-gray-400';
-        equippedRarity.className = 'text-xs px-2 py-0.5 rounded ' + rc;
+        const erc = rarityBadge(equipped.rarity);
+        equippedRarity.className = 'text-xs px-2 py-0.5 rounded ' + erc;
         equippedRarity.textContent = equipped.rarity;
         equippedRarity.classList.remove('hidden');
       }
@@ -3268,9 +3355,7 @@ async function loadCosmetics() {
         </div>`;
     } else {
       grid.innerHTML = skins.map(s => {
-        const rarityClass = s.rarity === 'legendary' ? 'bg-yellow-900 text-yellow-300'
-          : s.rarity === 'rare' ? 'bg-purple-900 text-purple-300'
-          : 'bg-gray-800 text-gray-400';
+        const rarityClass = rarityBadge(s.rarity);
         const borderClass = s.equipped ? 'border-purple-500 shadow-[0_0_12px_rgba(168,85,247,0.3)]' : 'border-gray-800 hover:border-gray-600';
         const preview = s.type === 'color'
           ? `<div class="w-10 h-10 rounded-full" style="background:${esc(s.cssValue)};box-shadow:0 0 12px ${esc(s.cssValue)}"></div>`

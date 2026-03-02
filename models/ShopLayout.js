@@ -12,8 +12,11 @@ const shopLayoutSchema = new mongoose.Schema({
       itemId: String,
       size: { type: String, enum: ['small', 'medium', 'large'], default: 'medium' },
       order: { type: Number, default: 0 },
+      customIcon: { type: String, default: null },
+      animation: { type: String, enum: ['none', 'glow', 'float', 'pulse', 'shimmer', 'fire'], default: 'none' },
     }],
     order: { type: Number, default: 0 },
+    expiresAt: { type: Date, default: null },
   }],
   canvasHeight: { type: Number, default: 800 },
   elements: [{

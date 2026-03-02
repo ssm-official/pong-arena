@@ -14,6 +14,22 @@
   <style>
     body { background: #0a0a1a; font-family: 'Segoe UI', system-ui, sans-serif; }
     .glow-border { box-shadow: 0 0 15px rgba(168, 85, 247, 0.3); }
+    @keyframes k-glow { 0%, 100% { filter: drop-shadow(0 0 6px rgba(168,85,247,0.6)); } 50% { filter: drop-shadow(0 0 16px rgba(168,85,247,1)); } }
+    @keyframes k-float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
+    @keyframes k-pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.08); } }
+    @keyframes k-shimmer { 0% { filter: brightness(1); } 50% { filter: brightness(1.4) saturate(1.3); } 100% { filter: brightness(1); } }
+    @keyframes k-fire { 0%, 100% { filter: drop-shadow(0 2px 4px rgba(255,100,0,0.7)); } 50% { filter: drop-shadow(0 4px 12px rgba(255,60,0,1)); } }
+    .anim-glow { animation: k-glow 2s ease-in-out infinite; }
+    .anim-float { animation: k-float 2.5s ease-in-out infinite; }
+    .anim-pulse { animation: k-pulse 1.5s ease-in-out infinite; }
+    .anim-shimmer { animation: k-shimmer 2s ease-in-out infinite; }
+    .anim-fire { animation: k-fire 1.2s ease-in-out infinite; }
+    .anim-underline { width: 40px; height: 4px; border-radius: 2px; margin-top: 2px; }
+    .anim-underline.anim-glow { background: rgba(168,85,247,0.5); animation: k-glow 2s ease-in-out infinite; }
+    .anim-underline.anim-float { background: rgba(96,165,250,0.5); animation: k-pulse 2s ease-in-out infinite; }
+    .anim-underline.anim-pulse { background: rgba(168,85,247,0.5); animation: k-pulse 1.5s ease-in-out infinite; }
+    .anim-underline.anim-shimmer { background: linear-gradient(90deg, #7c3aed, #f59e0b, #7c3aed); background-size: 200% 100%; animation: k-shimmer 2s ease-in-out infinite; }
+    .anim-underline.anim-fire { background: linear-gradient(90deg, #ff4500, #ff8c00, #ff4500); animation: k-fire 1.2s ease-in-out infinite; }
   </style>
 </head>
 <body class="text-gray-100 min-h-screen">
@@ -114,8 +130,11 @@
           <input id="skin-desc" type="text" placeholder="Description" class="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:border-purple-500 focus:outline-none" />
           <select id="skin-rarity" class="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:border-purple-500 focus:outline-none">
             <option value="common">Common</option>
+            <option value="uncommon">Uncommon</option>
             <option value="rare">Rare</option>
+            <option value="super_rare">Super Rare</option>
             <option value="legendary">Legendary</option>
+            <option value="mythic">Mythic</option>
           </select>
         </div>
         <div class="mt-3 grid grid-cols-2 gap-3">
@@ -272,8 +291,11 @@
             <label class="block text-sm text-gray-400 mb-1">Rarity</label>
             <select id="edit-skin-rarity" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:border-purple-500 focus:outline-none">
               <option value="common">Common</option>
+              <option value="uncommon">Uncommon</option>
               <option value="rare">Rare</option>
+              <option value="super_rare">Super Rare</option>
               <option value="legendary">Legendary</option>
+              <option value="mythic">Mythic</option>
             </select>
           </div>
           <div>
@@ -474,7 +496,7 @@
                     }
                     <div>
                       <span class="text-sm font-medium">${esc(s.name)}</span>
-                      <span class="text-xs ml-1 ${s.rarity === 'legendary' ? 'text-yellow-400' : s.rarity === 'rare' ? 'text-purple-400' : 'text-gray-500'}">${s.rarity}</span>
+                      <span class="text-xs ml-1 ${s.rarity === 'mythic' ? 'text-red-400' : s.rarity === 'legendary' ? 'text-yellow-400' : s.rarity === 'super_rare' ? 'text-pink-400' : s.rarity === 'rare' ? 'text-purple-400' : s.rarity === 'uncommon' ? 'text-green-400' : 'text-gray-500'}">${s.rarity}</span>
                     </div>
                   </div>
                   <div class="flex gap-1">
@@ -823,6 +845,8 @@
         itemId,
         size: 'medium',
         order: s.items.length,
+        customIcon: null,
+        animation: 'none',
       };
       s.items.push(item);
       selectItem(s.id, item.id);
@@ -896,6 +920,23 @@
       if (url) { s.bannerImage = url; renderAll(); }
     }
 
+    async function uploadItemIcon(input) {
+      if (!input.files[0] || !selectedItemId) return;
+      const s = getSelectedSection();
+      if (!s) return;
+      const item = s.items.find(i => i.id === selectedItemId);
+      if (!item) return;
+      const url = await uploadToServer(input.files[0]);
+      if (url) { item.customIcon = url; renderAll(); }
+    }
+
+    function removeItemIcon() {
+      const s = getSelectedSection();
+      if (!s || !selectedItemId) return;
+      const item = s.items.find(i => i.id === selectedItemId);
+      if (item) { item.customIcon = null; renderAll(); }
+    }
+
     // ---- Preview rendering ----
     function renderPreview() {
       const container = document.getElementById('layout-preview');
@@ -927,7 +968,8 @@
         html += `<div class="rounded-xl border-2 ${sectionBorder} p-3 transition-all">`;
         html += `<div class="cursor-pointer mb-2" onclick="selectSection('${section.id}')">`;
         html += `<h3 class="font-bold ${titleClass}">${esc(section.title || 'Untitled')}</h3>`;
-        html += `<span class="text-[10px] uppercase text-gray-500">${section.type} &middot; ${section.items.length} items</span>`;
+        const expiry = section.expiresAt ? `&middot; <span class="text-yellow-400">expires ${new Date(section.expiresAt).toLocaleDateString()}</span>` : '';
+        html += `<span class="text-[10px] uppercase text-gray-500">${section.type} &middot; ${section.items.length} items ${expiry}</span>`;
         html += '</div>';
 
         if (section.items.length > 0) {
@@ -950,13 +992,22 @@
       container.innerHTML = html;
     }
 
+    function animClass(anim) {
+      const map = { glow: 'anim-glow', float: 'anim-float', pulse: 'anim-pulse', shimmer: 'anim-shimmer', fire: 'anim-fire' };
+      return map[anim] || '';
+    }
+
     function renderItemCard(item, isFeatured) {
       const height = isFeatured ? 'h-40' : (item.size === 'large' ? 'h-40' : 'h-28');
+      const ac = animClass(item.animation);
+      const iconImg = item.customIcon ? `<img src="${esc(item.customIcon)}" class="w-12 h-12 object-contain ${ac}" />` : null;
       if (item.itemType === 'crate') {
         const crate = allPickerCrates.find(c => c.crateId === item.itemId);
         if (!crate) return `<div class="${height} flex items-center justify-center text-gray-500 text-xs">Crate not found</div>`;
-        return `<div class="${height} flex flex-col items-center justify-center gap-1 p-2">
-          <div class="w-10 h-10">${crateSvg(crate.imageColor)}</div>
+        const icon = iconImg || `<div class="w-10 h-10 ${ac}">${crateSvg(crate.imageColor)}</div>`;
+        return `<div class="${height} flex flex-col items-center justify-center gap-1 p-2 relative">
+          ${icon}
+          ${ac ? `<div class="anim-underline ${ac}"></div>` : ''}
           <span class="text-xs font-bold text-white truncate max-w-full">${esc(crate.name)}</span>
           <span class="text-[10px] text-gray-400">${crate.skins ? crate.skins.length : '?'} skins</span>
           <span class="text-[10px] text-purple-400 font-medium">${Number(crate.price).toLocaleString()} $PONG</span>
@@ -964,12 +1015,18 @@
       } else {
         const skin = allPickerSkins.find(s => s.skinId === item.itemId);
         if (!skin) return `<div class="${height} flex items-center justify-center text-gray-500 text-xs">Skin not found</div>`;
-        const rarityColor = skin.rarity === 'legendary' ? 'text-yellow-400' : skin.rarity === 'rare' ? 'text-purple-400' : 'text-gray-400';
-        const preview = skin.type === 'color'
-          ? `<div class="w-8 h-8 rounded-full" style="background:${esc(skin.cssValue)};box-shadow:0 0 8px ${esc(skin.cssValue)}"></div>`
-          : `<img src="${esc(skin.imageUrl)}" class="h-12 object-contain" />`;
-        return `<div class="${height} flex flex-col items-center justify-center gap-1 p-2">
+        const rarityColor = { mythic: 'text-red-400', legendary: 'text-yellow-400', super_rare: 'text-pink-400', rare: 'text-purple-400', uncommon: 'text-green-400', common: 'text-gray-400' }[skin.rarity] || 'text-gray-400';
+        let preview;
+        if (iconImg) {
+          preview = iconImg;
+        } else if (skin.type === 'color') {
+          preview = `<div class="w-8 h-8 rounded-full ${ac}" style="background:${esc(skin.cssValue)};box-shadow:0 0 8px ${esc(skin.cssValue)}"></div>`;
+        } else {
+          preview = `<img src="${esc(skin.imageUrl)}" class="h-12 object-contain ${ac}" />`;
+        }
+        return `<div class="${height} flex flex-col items-center justify-center gap-1 p-2 relative">
           ${preview}
+          ${ac ? `<div class="anim-underline ${ac}"></div>` : ''}
           <span class="text-xs font-bold text-white truncate max-w-full">${esc(skin.name)}</span>
           <span class="text-[10px] ${rarityColor} uppercase">${skin.rarity}</span>
         </div>`;
@@ -1023,6 +1080,7 @@
         const itemName = item.itemType === 'crate'
           ? (allPickerCrates.find(c => c.crateId === item.itemId)?.name || 'Unknown')
           : (allPickerSkins.find(s => s.skinId === item.itemId)?.name || 'Unknown');
+        const anim = item.animation || 'none';
         content.innerHTML = `
           <div class="text-center py-1 rounded bg-purple-900/50 text-purple-400 font-bold uppercase">${item.itemType} Item</div>
           <div class="text-gray-300 text-center">${esc(itemName)}</div>
@@ -1032,6 +1090,26 @@
               <option value="small" ${item.size==='small'?'selected':''}>Small</option>
               <option value="medium" ${item.size==='medium'?'selected':''}>Medium</option>
               <option value="large" ${item.size==='large'?'selected':''}>Large (2 cols)</option>
+            </select>
+          </div>
+          <div>
+            <label class="text-gray-500">Custom Icon</label>
+            <div class="border border-dashed border-gray-700 rounded-lg p-2 text-center cursor-pointer hover:border-purple-500 transition" onclick="document.getElementById('item-icon-file').click()">
+              <input id="item-icon-file" type="file" class="hidden" accept="image/*" onchange="uploadItemIcon(this)" />
+              ${item.customIcon ? `<img src="${esc(item.customIcon)}" class="max-h-12 mx-auto rounded mb-1" />` : ''}
+              <p class="text-gray-500 text-[10px]">${item.customIcon ? 'Click to replace' : 'Upload chest/icon PNG'}</p>
+            </div>
+            ${item.customIcon ? `<button onclick="removeItemIcon()" class="text-red-400 text-[10px] mt-1 hover:underline">Remove icon</button>` : ''}
+          </div>
+          <div>
+            <label class="text-gray-500">Animation</label>
+            <select onchange="updateItemProp('animation',this.value)" class="w-full bg-gray-800 border border-gray-700 rounded px-1.5 py-1 text-white">
+              <option value="none" ${anim==='none'?'selected':''}>None</option>
+              <option value="glow" ${anim==='glow'?'selected':''}>Glow</option>
+              <option value="float" ${anim==='float'?'selected':''}>Float</option>
+              <option value="pulse" ${anim==='pulse'?'selected':''}>Pulse</option>
+              <option value="shimmer" ${anim==='shimmer'?'selected':''}>Shimmer</option>
+              <option value="fire" ${anim==='fire'?'selected':''}>Fire</option>
             </select>
           </div>
           <button onclick="openItemPickerForChange()" class="w-full bg-gray-700 hover:bg-gray-600 text-white px-3 py-2 rounded-lg font-medium">Change Item</button>
@@ -1070,6 +1148,13 @@
         </div>`;
       }
 
+      const expVal = section.expiresAt ? new Date(section.expiresAt).toISOString().slice(0,16) : '';
+      html += `<div>
+        <label class="text-gray-500">Expires At</label>
+        <input type="datetime-local" value="${expVal}" onchange="updateSectionProp('expiresAt',this.value?new Date(this.value).toISOString():null)" class="w-full bg-gray-800 border border-gray-700 rounded px-1.5 py-1 text-white text-xs" />
+        <p class="text-gray-600 text-[10px] mt-0.5">Leave empty for no expiry. Live countdown shows on shop.</p>
+        ${section.expiresAt ? `<button onclick="updateSectionProp('expiresAt',null)" class="text-red-400 text-[10px] mt-1 hover:underline">Clear expiry</button>` : ''}
+      </div>`;
       html += `<div class="flex gap-1 pt-1">
         <button onclick="moveSection(-1)" class="flex-1 bg-gray-700 hover:bg-gray-600 px-2 py-1.5 rounded text-gray-300 text-xs">Move Up</button>
         <button onclick="moveSection(1)" class="flex-1 bg-gray-700 hover:bg-gray-600 px-2 py-1.5 rounded text-gray-300 text-xs">Move Down</button>
@@ -1147,9 +1232,12 @@
         const cleaned = layoutSections.map(s => ({
           id: s.id, title: s.title, type: s.type, order: s.order,
           bannerImage: s.bannerImage || null,
+          expiresAt: s.expiresAt || null,
           items: (s.items || []).map(i => ({
             id: i.id, itemType: i.itemType, itemId: i.itemId,
             size: i.size, order: i.order,
+            customIcon: i.customIcon || null,
+            animation: i.animation || 'none',
           })),
         }));
         const res = await fetch('/api/admin/shop-layout', {

@@ -4,7 +4,7 @@ const skinSchema = new mongoose.Schema({
   skinId: { type: String, required: true, unique: true },
   name: { type: String, required: true },
   description: String,
-  rarity: { type: String, enum: ['common', 'rare', 'legendary'], default: 'common' },
+  rarity: { type: String, enum: ['common', 'uncommon', 'rare', 'super_rare', 'legendary', 'mythic'], default: 'common' },
   type: { type: String, enum: ['color', 'image'], default: 'color' },
   cssValue: String,       // hex color for type:'color'
   imageUrl: String,       // path like /skins/golden-warrior.png for type:'image'
