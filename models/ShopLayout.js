@@ -13,6 +13,7 @@ const shopLayoutSchema = new mongoose.Schema({
       size: { type: String, enum: ['small', 'medium', 'large'], default: 'medium' },
       order: { type: Number, default: 0 },
       customIcon: { type: String, default: null },
+      iconSize: { type: Number, default: 64 },
       animation: { type: String, enum: ['none', 'glow', 'float', 'pulse', 'shimmer', 'fire'], default: 'none' },
     }],
     order: { type: Number, default: 0 },

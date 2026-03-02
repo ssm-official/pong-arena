@@ -846,6 +846,7 @@
         size: 'medium',
         order: s.items.length,
         customIcon: null,
+        iconSize: 64,
         animation: 'none',
       };
       s.items.push(item);
@@ -1000,11 +1001,12 @@
     function renderItemCard(item, isFeatured) {
       const height = isFeatured ? 'h-40' : (item.size === 'large' ? 'h-40' : 'h-28');
       const ac = animClass(item.animation);
-      const iconImg = item.customIcon ? `<img src="${esc(item.customIcon)}" class="w-12 h-12 object-contain ${ac}" />` : null;
+      const sz = item.iconSize || 64;
+      const iconImg = item.customIcon ? `<img src="${esc(item.customIcon)}" style="width:${sz}px;height:${sz}px" class="object-contain ${ac}" />` : null;
       if (item.itemType === 'crate') {
         const crate = allPickerCrates.find(c => c.crateId === item.itemId);
         if (!crate) return `<div class="${height} flex items-center justify-center text-gray-500 text-xs">Crate not found</div>`;
-        const icon = iconImg || `<div class="w-10 h-10 ${ac}">${crateSvg(crate.imageColor)}</div>`;
+        const icon = iconImg || `<div style="width:${sz}px;height:${sz}px" class="${ac}">${crateSvg(crate.imageColor)}</div>`;
         return `<div class="${height} flex flex-col items-center justify-center gap-1 p-2 relative">
           ${icon}
           ${ac ? `<div class="anim-underline ${ac}"></div>` : ''}
@@ -1020,9 +1022,9 @@
         if (iconImg) {
           preview = iconImg;
         } else if (skin.type === 'color') {
-          preview = `<div class="w-8 h-8 rounded-full ${ac}" style="background:${esc(skin.cssValue)};box-shadow:0 0 8px ${esc(skin.cssValue)}"></div>`;
+          preview = `<div class="rounded-full ${ac}" style="width:${sz}px;height:${sz}px;background:${esc(skin.cssValue)};box-shadow:0 0 8px ${esc(skin.cssValue)}"></div>`;
         } else {
-          preview = `<img src="${esc(skin.imageUrl)}" class="h-12 object-contain ${ac}" />`;
+          preview = `<img src="${esc(skin.imageUrl)}" style="height:${sz}px" class="object-contain ${ac}" />`;
         }
         return `<div class="${height} flex flex-col items-center justify-center gap-1 p-2 relative">
           ${preview}
@@ -1100,6 +1102,10 @@
               <p class="text-gray-500 text-[10px]">${item.customIcon ? 'Click to replace' : 'Upload chest/icon PNG'}</p>
             </div>
             ${item.customIcon ? `<button onclick="removeItemIcon()" class="text-red-400 text-[10px] mt-1 hover:underline">Remove icon</button>` : ''}
+          </div>
+          <div>
+            <label class="text-gray-500">Icon Size <span id="icon-size-val" class="text-white">${item.iconSize || 64}px</span></label>
+            <input type="range" min="24" max="160" step="4" value="${item.iconSize || 64}" oninput="document.getElementById('icon-size-val').textContent=this.value+'px'; updateItemProp('iconSize',Number(this.value))" class="w-full accent-purple-500" />
           </div>
           <div>
             <label class="text-gray-500">Animation</label>
@@ -1237,6 +1243,7 @@
             id: i.id, itemType: i.itemType, itemId: i.itemId,
             size: i.size, order: i.order,
             customIcon: i.customIcon || null,
+            iconSize: i.iconSize || 64,
             animation: i.animation || 'none',
           })),
         }));

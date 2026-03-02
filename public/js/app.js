@@ -1820,10 +1820,10 @@ function renderShopSection(section, allSkins, allCrates, ownedCrates) {
   for (const item of items) {
     if (item.itemType === 'crate') {
       const crate = allCrates.find(c => c.crateId === item.itemId);
-      if (crate) tilesHtml += renderShopTile({ ...crate, _tileType: 'crate', _customIcon: item.customIcon, _animation: item.animation }, item.size, isFeatured, ownedCrates[crate.crateId] || 0);
+      if (crate) tilesHtml += renderShopTile({ ...crate, _tileType: 'crate', _customIcon: item.customIcon, _iconSize: item.iconSize, _animation: item.animation }, item.size, isFeatured, ownedCrates[crate.crateId] || 0);
     } else {
       const skin = allSkins.find(s => s.skinId === item.itemId);
-      if (skin) tilesHtml += renderShopTile({ ...skin, _tileType: 'skin', _customIcon: item.customIcon, _animation: item.animation }, item.size, isFeatured, 0);
+      if (skin) tilesHtml += renderShopTile({ ...skin, _tileType: 'skin', _customIcon: item.customIcon, _iconSize: item.iconSize, _animation: item.animation }, item.size, isFeatured, 0);
     }
   }
 
@@ -1948,12 +1948,13 @@ function renderShopTile(item, size, isFeatured, ownedCount) {
   const r = rc(item.rarity);
   const anim = item._animation || 'none';
   const ac = shopAnimClass(anim);
+  const isz = item._iconSize || 64;
 
   if (item._tileType === 'crate') {
     const usdPrice = pongPriceUsd > 0 ? formatUsd(item.price * pongPriceUsd) + ' / ' : '';
     const iconHtml = item._customIcon
-      ? `<img src="${esc(item._customIcon)}" class="w-16 h-16 object-contain ${ac}" />`
-      : `<div class="w-16 h-16 ${ac}">${getCrateIllustration(item.imageColor)}</div>`;
+      ? `<img src="${esc(item._customIcon)}" style="width:${isz}px;height:${isz}px" class="object-contain ${ac}" />`
+      : `<div style="width:${isz}px;height:${isz}px" class="${ac}">${getCrateIllustration(item.imageColor)}</div>`;
     return `
       <div class="${sizeClass} group bg-arena-card rounded-xl border ${r.border} cursor-pointer hover:border-purple-500 transition-all hover:shadow-[0_0_20px_rgba(168,85,247,0.15)] overflow-hidden" onclick="openCratePreview('${item.crateId}')">
         <div class="${height} flex flex-col items-center justify-center bg-gray-900/50 p-4">
@@ -1975,11 +1976,11 @@ function renderShopTile(item, size, isFeatured, ownedCount) {
   const owned = item.owned;
   let preview;
   if (item._customIcon) {
-    preview = `<img src="${esc(item._customIcon)}" class="w-16 h-16 object-contain ${ac}" />`;
+    preview = `<img src="${esc(item._customIcon)}" style="width:${isz}px;height:${isz}px" class="object-contain ${ac}" />`;
   } else if (item.type === 'color') {
-    preview = `<div class="w-12 h-12 rounded-full ${ac}" style="background:${esc(item.cssValue)};box-shadow:0 0 15px ${esc(item.cssValue)}"></div>`;
+    preview = `<div class="rounded-full ${ac}" style="width:${isz}px;height:${isz}px;background:${esc(item.cssValue)};box-shadow:0 0 15px ${esc(item.cssValue)}"></div>`;
   } else {
-    preview = `<img src="${esc(item.imageUrl)}" class="h-20 object-contain ${ac}" />`;
+    preview = `<img src="${esc(item.imageUrl)}" style="height:${isz}px" class="object-contain ${ac}" />`;
   }
   const priceDisplay = item.price != null ? (pongPriceUsd > 0 ? formatUsd(item.price * pongPriceUsd) + ' / ' : '') + Number(item.price).toLocaleString() + ' $PONG' : '';
   const rarityLabel = (item.rarity || 'common').replace('_', ' ');
