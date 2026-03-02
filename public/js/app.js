@@ -1779,12 +1779,12 @@ function renderCanvasShop(layout, allSkins, allCrates, ownedSkinIds, ownedCrates
   const sorted = [...layout.elements].sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0));
   let elHtml = '';
   for (const el of sorted) {
-    const bgColor = el.backgroundColor ? `background-color:${esc(el.backgroundColor)};` : '';
+    const bgAlpha = el.opacity != null ? el.opacity : 1;
+    const bgColor = el.backgroundColor ? `background-color:${hexToRgba(esc(el.backgroundColor), bgAlpha)};` : '';
     const bgImg = (el.type === 'crate' && el.crateBackgroundImage) ? `background-image:url('${esc(el.crateBackgroundImage)}');background-size:cover;background-position:center;` : '';
     const radius = el.borderRadius ? `border-radius:${el.borderRadius}px;` : '';
     const border = el.borderColor ? `border:1px solid ${esc(el.borderColor)};` : '';
-    const opacity = el.opacity != null ? `opacity:${el.opacity};` : '';
-    const base = `position:absolute;left:${el.x}%;top:${el.y}%;width:${el.w}%;height:${el.h}%;z-index:${el.zIndex||0};${bgColor}${bgImg}${radius}${border}${opacity}overflow:hidden;box-sizing:border-box;`;
+    const base = `position:absolute;left:${el.x}%;top:${el.y}%;width:${el.w}%;height:${el.h}%;z-index:${el.zIndex||0};${bgColor}${bgImg}${radius}${border}overflow:hidden;box-sizing:border-box;`;
 
     if (el.type === 'text') {
       const fs = el.fontSize || 24;
@@ -1841,13 +1841,16 @@ function renderCanvasShop(layout, allSkins, allCrates, ownedSkinIds, ownedCrates
           iconHtml = `<div style="width:48px;height:48px">${getCrateIllustration(cc)}</div>`;
         }
       }
+      const ctc = el.crateTextColor || '#fff';
+      const cfs = el.crateFontSize || 13;
+      const ctbg = el.crateTextBg ? 'background:'+esc(el.crateTextBg)+';padding:2px 6px;border-radius:4px;' : '';
       elHtml += `<div style="${base}cursor:pointer" onclick="openCratePreview('${crate.crateId}')" class="hover:border-purple-500 transition-all">
-        <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:6px;padding:8px">
+        <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:6px;padding:8px;color:${ctc}">
           ${iconHtml}
           <div style="text-align:center">
-            <div style="font-size:13px;font-weight:bold;color:${el.crateTextColor||'#fff'};${el.crateTextBg?'background:'+esc(el.crateTextBg)+';padding:2px 6px;border-radius:4px;':''}">${esc(crate.name)}</div>
-            <div style="font-size:9px;color:#9ca3af">${crate.totalSkins || '?'} skins</div>
-            <div style="font-size:10px;color:#a855f7;font-weight:500;margin-top:2px">${usdPrice}${Number(crate.price).toLocaleString()} $PONG</div>
+            <div style="font-size:${cfs}px;font-weight:bold;${ctbg}">${esc(crate.name)}</div>
+            <div style="font-size:${Math.max(8,cfs-3)}px">${crate.totalSkins || '?'} skins</div>
+            <div style="font-size:${Math.max(8,cfs-2)}px;font-weight:500;margin-top:2px">${usdPrice}${Number(crate.price).toLocaleString()} $PONG</div>
           </div>
           <div style="display:flex;gap:4px;flex-wrap:wrap;justify-content:center">
             ${owned > 0 ? `<button onclick="event.stopPropagation();openOwnedCrate('${crate.crateId}')" style="background:#16a34a;color:#fff;border:none;padding:3px 8px;border-radius:6px;font-size:10px;font-weight:600;cursor:pointer">Open (${owned})</button>` : ''}
@@ -1909,6 +1912,13 @@ function renderShopTile(item, size, isFeatured, ownedCount) {
             : '<span class="text-xs text-gray-500">Crate only</span>'}
       </div>
     </div>`;
+}
+
+function hexToRgba(hex, alpha) {
+  hex = (hex || '#000000').replace('#', '');
+  if (hex.length === 3) hex = hex[0]+hex[0]+hex[1]+hex[1]+hex[2]+hex[2];
+  const r = parseInt(hex.substring(0,2),16), g = parseInt(hex.substring(2,4),16), b = parseInt(hex.substring(4,6),16);
+  return `rgba(${r},${g},${b},${alpha})`;
 }
 
 function getCrateIllustration(color, crateType) {

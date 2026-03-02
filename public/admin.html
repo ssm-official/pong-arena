@@ -276,10 +276,11 @@
                   </div>
                   <div class="grid grid-cols-2 gap-1.5">
                     <div><label class="text-gray-500">Text Color</label><input id="prop-crateTextColor" type="color" value="#ffffff" class="w-full h-7 bg-gray-800 border border-gray-700 rounded cursor-pointer" onchange="propChanged('crateTextColor',this.value)"></div>
-                    <div>
-                      <div class="flex items-center gap-1"><label class="text-gray-500">Text BG</label><label class="flex items-center gap-1 cursor-pointer"><input id="prop-crateTextBgEnable" type="checkbox" onchange="toggleCrateTextBg()"><span class="text-[10px] text-gray-400">On</span></label></div>
-                      <input id="prop-crateTextBg" type="color" value="#000000" class="w-full h-7 bg-gray-800 border border-gray-700 rounded cursor-pointer" onchange="propChanged('crateTextBg',this.value)" disabled>
-                    </div>
+                    <div><label class="text-gray-500">Text Size</label><input id="prop-crateFontSize" type="number" min="8" max="72" value="13" class="w-full bg-gray-800 border border-gray-700 rounded px-1.5 py-1 text-white" onchange="propChanged('crateFontSize',Number(this.value))"></div>
+                  </div>
+                  <div>
+                    <div class="flex items-center gap-1"><label class="text-gray-500">Text BG</label><label class="flex items-center gap-1 cursor-pointer"><input id="prop-crateTextBgEnable" type="checkbox" onchange="toggleCrateTextBg()"><span class="text-[10px] text-gray-400">On</span></label></div>
+                    <input id="prop-crateTextBg" type="color" value="#000000" class="w-full h-7 bg-gray-800 border border-gray-700 rounded cursor-pointer" onchange="propChanged('crateTextBg',this.value)" disabled>
                   </div>
                 </div>
                 <!-- Common styling -->
@@ -290,7 +291,7 @@
                   </div>
                   <div class="grid grid-cols-2 gap-1.5">
                     <div><label class="text-gray-500">Radius</label><input id="prop-radius" type="number" min="0" max="50" value="8" class="w-full bg-gray-800 border border-gray-700 rounded px-1.5 py-1 text-white" onchange="propChanged('borderRadius',Number(this.value))"></div>
-                    <div><label class="text-gray-500">Opacity</label><input id="prop-opacity" type="number" min="0" max="1" step="0.05" value="1" class="w-full bg-gray-800 border border-gray-700 rounded px-1.5 py-1 text-white" onchange="propChanged('opacity',Number(this.value))"></div>
+                    <div><label class="text-gray-500">BG Opacity</label><input id="prop-opacity" type="number" min="0" max="1" step="0.05" value="1" class="w-full bg-gray-800 border border-gray-700 rounded px-1.5 py-1 text-white" onchange="propChanged('opacity',Number(this.value))"></div>
                   </div>
                 </div>
                 <button onclick="duplicateSelectedElement()" class="w-full bg-blue-900 hover:bg-blue-800 text-blue-300 text-xs px-3 py-2 rounded-lg font-medium mt-2">Duplicate Element</button>
@@ -901,6 +902,13 @@
 
     window.addEventListener('resize', () => { rescaleCanvas(); });
 
+    function hexToRgba(hex, alpha) {
+      hex = hex.replace('#', '');
+      if (hex.length === 3) hex = hex[0]+hex[0]+hex[1]+hex[1]+hex[2]+hex[2];
+      const r = parseInt(hex.substring(0,2),16), g = parseInt(hex.substring(2,4),16), b = parseInt(hex.substring(4,6),16);
+      return `rgba(${r},${g},${b},${alpha})`;
+    }
+
     function renderCanvas() {
       const area = document.getElementById('canvas-area');
       area.style.height = canvasHeightPx + 'px';
@@ -912,10 +920,10 @@
         const inSet = selectedElementIds.has(el.id);
         const border = inSet ? 'border:2px solid #a855f7;' : (el.borderColor ? `border:1px solid ${el.borderColor};` : '');
         const bgImg = (el.type === 'crate' && el.crateBackgroundImage) ? `background-image:url('${el.crateBackgroundImage}');background-size:cover;background-position:center;` : '';
-        const bg = el.backgroundColor ? `background-color:${el.backgroundColor};` : '';
+        const bgAlpha = el.opacity != null ? el.opacity : 1;
+        const bg = el.backgroundColor ? `background-color:${hexToRgba(el.backgroundColor, bgAlpha)};` : '';
         const radius = el.borderRadius ? `border-radius:${el.borderRadius}px;` : '';
-        const opacity = el.opacity != null ? `opacity:${el.opacity};` : '';
-        const base = `position:absolute;left:${el.x}%;top:${el.y}%;width:${el.w}%;height:${el.h}%;z-index:${el.zIndex||0};${border}${bg}${bgImg}${radius}${opacity}overflow:hidden;cursor:move;box-sizing:border-box;`;
+        const base = `position:absolute;left:${el.x}%;top:${el.y}%;width:${el.w}%;height:${el.h}%;z-index:${el.zIndex||0};${border}${bg}${bgImg}${radius}overflow:hidden;cursor:move;box-sizing:border-box;`;
 
         let inner = '';
         if (el.type === 'text') {
@@ -950,7 +958,8 @@
             }
             const txtColor = el.crateTextColor || '#fff';
             const txtBgStyle = el.crateTextBg ? `background:${el.crateTextBg};padding:2px 6px;border-radius:4px;` : '';
-            inner = `<div style="width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;padding:8px">${iconHtml}<span style="font-size:12px;color:${txtColor};font-weight:bold;${txtBgStyle}">${esc(crate.name)}</span><span style="font-size:9px;color:#9ca3af">${crate.skins ? crate.skins.length : '?'} skins</span><span style="font-size:10px;color:#a855f7">${Number(crate.price).toLocaleString()} $PONG</span></div>`;
+            const cfs = el.crateFontSize || 13;
+            inner = `<div style="width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;padding:8px;color:${txtColor}">${iconHtml}<span style="font-size:${cfs}px;font-weight:bold;${txtBgStyle}">${esc(crate.name)}</span><span style="font-size:${Math.max(8,cfs-3)}px">${crate.skins ? crate.skins.length : '?'} skins</span><span style="font-size:${Math.max(8,cfs-2)}px;font-weight:500">${Number(crate.price).toLocaleString()} $PONG</span></div>`;
           } else {
             inner = `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:#60a5fa;font-size:11px">Crate: ${esc(el.itemId||'none')}</div>`;
           }
@@ -1007,7 +1016,7 @@
         backgroundColor: type === 'text' ? '' : '#111128',
         borderRadius: 8, borderColor: '#333', opacity: 1,
         crateBackgroundImage: '', crateIconImage: '', crateShowIcon: true,
-        crateTextColor: '#ffffff', crateTextBg: '',
+        crateTextColor: '#ffffff', crateTextBg: '', crateFontSize: 13,
       };
       canvasElements.push(el);
       selectedElementId = el.id;
@@ -1088,6 +1097,7 @@
         document.getElementById('prop-crate-icon-preview').innerHTML = el.crateIconImage ? `<img src="${esc(el.crateIconImage)}" class="max-h-12 mx-auto rounded" />` : '';
         document.getElementById('crate-icon-remove').classList.toggle('hidden', !el.crateIconImage);
         document.getElementById('prop-crateTextColor').value = el.crateTextColor || '#ffffff';
+        document.getElementById('prop-crateFontSize').value = el.crateFontSize || 13;
         const hasBg = !!el.crateTextBg;
         document.getElementById('prop-crateTextBgEnable').checked = hasBg;
         document.getElementById('prop-crateTextBg').disabled = !hasBg;
@@ -1444,6 +1454,7 @@
             if (el.crateShowIcon === false) o.crateShowIcon = false;
             if (el.crateTextColor && el.crateTextColor !== '#ffffff') o.crateTextColor = el.crateTextColor;
             if (el.crateTextBg) o.crateTextBg = el.crateTextBg;
+            if (el.crateFontSize && el.crateFontSize !== 13) o.crateFontSize = el.crateFontSize;
           }
           if (el.backgroundColor) o.backgroundColor = el.backgroundColor;
           if (el.borderRadius) o.borderRadius = el.borderRadius;

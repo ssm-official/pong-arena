@@ -37,6 +37,7 @@ const shopLayoutSchema = new mongoose.Schema({
     crateShowIcon: { type: Boolean, default: true },
     crateTextColor: String,
     crateTextBg: String,
+    crateFontSize: Number,
   }],
   updatedAt: { type: Date, default: Date.now },
 });
