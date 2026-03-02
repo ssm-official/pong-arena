@@ -146,44 +146,38 @@
       </div><!-- /admin-tab-crates -->
 
       <div id="admin-tab-layout" class="hidden">
-        <h2 class="text-xl font-bold mb-4">Shop Layout — Canvas Editor</h2>
-        <p class="text-gray-400 text-sm mb-4">Drag elements anywhere on the canvas to build your shop page.</p>
+        <h2 class="text-xl font-bold mb-4">Shop Layout Editor</h2>
+        <p class="text-gray-400 text-sm mb-4">Build shop sections with item grids. Drag items to reorder, click to edit properties.</p>
 
         <div class="flex gap-3" style="min-height:600px">
           <!-- LEFT TOOLBAR -->
           <div class="w-56 flex-shrink-0 space-y-3">
             <div class="bg-arena-card rounded-xl border border-gray-800 p-3">
-              <h3 class="text-xs font-bold text-gray-400 uppercase mb-2">Add Element</h3>
-              <div class="grid grid-cols-2 gap-2">
-                <button onclick="canvasAddElement('text')" class="bg-gray-700 hover:bg-gray-600 text-white text-xs px-2 py-2 rounded-lg font-medium">+ Text</button>
-                <button onclick="canvasAddElement('image')" class="bg-gray-700 hover:bg-gray-600 text-white text-xs px-2 py-2 rounded-lg font-medium">+ Image</button>
-                <button onclick="canvasAddElement('skin')" class="bg-purple-700 hover:bg-purple-600 text-white text-xs px-2 py-2 rounded-lg font-medium">+ Skin</button>
-                <button onclick="canvasAddElement('crate')" class="bg-blue-700 hover:bg-blue-600 text-white text-xs px-2 py-2 rounded-lg font-medium">+ Crate</button>
+              <h3 class="text-xs font-bold text-gray-400 uppercase mb-2">Add Section</h3>
+              <div class="grid grid-cols-1 gap-2">
+                <button onclick="addSection('grid')" class="bg-gray-700 hover:bg-gray-600 text-white text-xs px-2 py-2 rounded-lg font-medium">+ Grid Section</button>
+                <button onclick="addSection('featured')" class="bg-purple-700 hover:bg-purple-600 text-white text-xs px-2 py-2 rounded-lg font-medium">+ Featured Section</button>
+                <button onclick="addSection('banner')" class="bg-blue-700 hover:bg-blue-600 text-white text-xs px-2 py-2 rounded-lg font-medium">+ Banner Section</button>
               </div>
             </div>
             <div class="bg-arena-card rounded-xl border border-gray-800 p-3">
-              <label class="block text-xs font-bold text-gray-400 uppercase mb-1">Canvas Height (px)</label>
-              <input id="canvas-height-input" type="number" value="800" min="400" max="4000" step="50"
-                class="w-full bg-gray-800 border border-gray-700 rounded-lg px-2 py-1.5 text-sm text-white"
-                oninput="canvasHeightPx=Number(this.value)||800;renderCanvas()" />
+              <h3 class="text-xs font-bold text-gray-400 uppercase mb-2">Sections</h3>
+              <div id="section-list" class="space-y-1 max-h-64 overflow-y-auto text-xs">
+                <p class="text-gray-500 text-center py-2">No sections yet</p>
+              </div>
             </div>
-            <div class="bg-arena-card rounded-xl border border-gray-800 p-3">
-              <h3 class="text-xs font-bold text-gray-400 uppercase mb-2">Elements (<span id="el-count">0</span>)</h3>
-              <div id="canvas-element-list" class="space-y-1 max-h-64 overflow-y-auto text-xs"></div>
-            </div>
+            <button id="add-item-btn" onclick="openItemPicker()" class="hidden w-full bg-purple-600 hover:bg-purple-700 text-white text-xs px-3 py-2 rounded-lg font-medium">+ Add Item to Section</button>
             <div class="flex gap-2">
-              <button onclick="saveCanvasLayout()" class="flex-1 bg-purple-600 hover:bg-purple-700 text-white px-4 py-2.5 rounded-lg font-bold text-sm">Save</button>
+              <button onclick="saveLayout()" class="flex-1 bg-purple-600 hover:bg-purple-700 text-white px-4 py-2.5 rounded-lg font-bold text-sm">Save</button>
               <a href="/" target="_blank" class="bg-gray-700 hover:bg-gray-600 text-white px-4 py-2.5 rounded-lg font-bold text-sm">Preview</a>
             </div>
           </div>
 
-          <!-- CENTER CANVAS -->
+          <!-- CENTER PREVIEW -->
           <div class="flex-1 min-w-0 flex flex-col">
-            <div id="canvas-wrapper" class="flex-1 bg-gray-950 rounded-xl border border-gray-800 overflow-hidden relative p-3">
-              <div id="canvas-scaler" style="transform-origin:top left">
-                <div id="canvas-area" class="relative" style="width:1200px;background:radial-gradient(circle,#222 1px,transparent 1px);background-size:20px 20px"
-                  onmousedown="canvasMouseDown(event)" onmousemove="canvasMouseMove(event)" onmouseup="canvasMouseUp(event)">
-                </div>
+            <div class="flex-1 bg-gray-950 rounded-xl border border-gray-800 overflow-y-auto p-4" style="max-height:80vh">
+              <div id="layout-preview" class="space-y-4">
+                <p class="text-gray-500 text-center py-12">Add a section to get started</p>
               </div>
             </div>
           </div>
@@ -191,121 +185,10 @@
           <!-- RIGHT PROPERTIES -->
           <div class="w-56 flex-shrink-0">
             <div id="props-panel" class="bg-arena-card rounded-xl border border-gray-800 p-3 hidden">
-              <h3 class="text-xs font-bold text-gray-400 uppercase mb-2">Properties</h3>
-              <div class="space-y-2 text-xs">
-                <div id="props-type-badge" class="text-center py-1 rounded bg-purple-900/50 text-purple-400 font-bold uppercase"></div>
-                <!-- Position / size -->
-                <div class="grid grid-cols-2 gap-1.5">
-                  <div><label class="text-gray-500">X %</label><input id="prop-x" type="number" step="0.5" class="w-full bg-gray-800 border border-gray-700 rounded px-1.5 py-1 text-white" onchange="propChanged('x',Number(this.value))"></div>
-                  <div><label class="text-gray-500">Y %</label><input id="prop-y" type="number" step="0.5" class="w-full bg-gray-800 border border-gray-700 rounded px-1.5 py-1 text-white" onchange="propChanged('y',Number(this.value))"></div>
-                  <div><label class="text-gray-500">W %</label><input id="prop-w" type="number" step="0.5" class="w-full bg-gray-800 border border-gray-700 rounded px-1.5 py-1 text-white" onchange="propChanged('w',Number(this.value))"></div>
-                  <div><label class="text-gray-500">H %</label><input id="prop-h" type="number" step="0.5" class="w-full bg-gray-800 border border-gray-700 rounded px-1.5 py-1 text-white" onchange="propChanged('h',Number(this.value))"></div>
-                </div>
-                <!-- Z-order -->
-                <div class="flex items-center gap-1">
-                  <label class="text-gray-500">Z:</label>
-                  <input id="prop-z" type="number" class="w-14 bg-gray-800 border border-gray-700 rounded px-1.5 py-1 text-white" onchange="propChanged('zIndex',Number(this.value))">
-                  <button onclick="moveZ(1)" class="bg-gray-700 hover:bg-gray-600 px-2 py-1 rounded text-gray-300" title="Bring forward">&#x25B2;</button>
-                  <button onclick="moveZ(-1)" class="bg-gray-700 hover:bg-gray-600 px-2 py-1 rounded text-gray-300" title="Send backward">&#x25BC;</button>
-                </div>
-                <!-- Text props -->
-                <div id="props-text" class="hidden space-y-1.5 border-t border-gray-700 pt-2">
-                  <label class="text-gray-500">Text</label>
-                  <textarea id="prop-text" rows="2" class="w-full bg-gray-800 border border-gray-700 rounded px-1.5 py-1 text-white text-xs" oninput="propChanged('text',this.value)"></textarea>
-                  <div class="grid grid-cols-2 gap-1.5">
-                    <div><label class="text-gray-500">Size (px)</label><input id="prop-fontSize" type="number" value="24" min="8" max="200" class="w-full bg-gray-800 border border-gray-700 rounded px-1.5 py-1 text-white" onchange="propChanged('fontSize',Number(this.value))"></div>
-                    <div><label class="text-gray-500">Color</label><input id="prop-fontColor" type="color" value="#ffffff" class="w-full h-7 bg-gray-800 border border-gray-700 rounded cursor-pointer" onchange="propChanged('fontColor',this.value)"></div>
-                  </div>
-                  <div class="grid grid-cols-2 gap-1.5">
-                    <div>
-                      <label class="text-gray-500">Weight</label>
-                      <select id="prop-fontWeight" class="w-full bg-gray-800 border border-gray-700 rounded px-1.5 py-1 text-white" onchange="propChanged('fontWeight',this.value)">
-                        <option value="normal">Normal</option><option value="bold">Bold</option><option value="800">Extra Bold</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label class="text-gray-500">Align</label>
-                      <select id="prop-textAlign" class="w-full bg-gray-800 border border-gray-700 rounded px-1.5 py-1 text-white" onchange="propChanged('textAlign',this.value)">
-                        <option value="left">Left</option><option value="center">Center</option><option value="right">Right</option>
-                      </select>
-                    </div>
-                  </div>
-                </div>
-                <!-- Image props -->
-                <div id="props-image" class="hidden space-y-1.5 border-t border-gray-700 pt-2">
-                  <label class="text-gray-500">Image</label>
-                  <div class="border-2 border-dashed border-gray-700 rounded-lg p-3 text-center cursor-pointer hover:border-purple-500 transition" onclick="document.getElementById('canvas-img-file').click()">
-                    <input id="canvas-img-file" type="file" class="hidden" accept="image/*" onchange="uploadElementImage(this)" />
-                    <div id="prop-img-preview" class="mb-1"></div>
-                    <p class="text-gray-500 text-[10px]">Click to upload</p>
-                  </div>
-                </div>
-                <!-- Skin/Crate props -->
-                <div id="props-item" class="hidden space-y-1.5 border-t border-gray-700 pt-2">
-                  <div class="flex items-center justify-between">
-                    <label class="text-gray-500">Item</label>
-                    <button onclick="openItemPicker()" class="bg-gray-700 hover:bg-gray-600 text-white text-[10px] px-2 py-1 rounded">Change</button>
-                  </div>
-                  <div id="prop-item-preview" class="text-gray-300 text-xs"></div>
-                </div>
-                <!-- Crate image customization -->
-                <div id="props-crate-images" class="hidden space-y-1.5 border-t border-gray-700 pt-2">
-                  <label class="text-gray-500 font-bold">Crate Appearance</label>
-                  <div>
-                    <label class="text-gray-500">Background Image</label>
-                    <div class="border border-dashed border-gray-700 rounded p-2 text-center cursor-pointer hover:border-purple-500 transition" onclick="document.getElementById('crate-bg-file').click()">
-                      <input id="crate-bg-file" type="file" class="hidden" accept="image/*" onchange="uploadCrateBgImage(this)" />
-                      <div id="prop-crate-bg-preview" class="mb-1"></div>
-                      <p class="text-gray-500 text-[10px]">Click to upload BG</p>
-                    </div>
-                    <button id="crate-bg-remove" onclick="removeCrateBg()" class="hidden text-red-400 text-[10px] mt-1 hover:underline">Remove BG</button>
-                  </div>
-                  <div>
-                    <div class="flex items-center justify-between">
-                      <label class="text-gray-500">Icon Image</label>
-                      <label class="flex items-center gap-1 text-gray-400 cursor-pointer"><input id="prop-crate-showIcon" type="checkbox" checked onchange="propChanged('crateShowIcon',this.checked);updatePropsPanel()"> <span class="text-[10px]">Show icon</span></label>
-                    </div>
-                    <div id="crate-icon-upload-area">
-                      <div class="border border-dashed border-gray-700 rounded p-2 text-center cursor-pointer hover:border-purple-500 transition" onclick="document.getElementById('crate-icon-file').click()">
-                        <input id="crate-icon-file" type="file" class="hidden" accept="image/*" onchange="uploadCrateIconImage(this)" />
-                        <div id="prop-crate-icon-preview" class="mb-1"></div>
-                        <p class="text-gray-500 text-[10px]">Custom icon (replaces default)</p>
-                      </div>
-                      <button id="crate-icon-remove" onclick="removeCrateIcon()" class="hidden text-red-400 text-[10px] mt-1 hover:underline">Remove custom icon</button>
-                    </div>
-                  </div>
-                  <div class="grid grid-cols-2 gap-1.5">
-                    <div><label class="text-gray-500">Text Color</label><input id="prop-crateTextColor" type="color" value="#ffffff" class="w-full h-7 bg-gray-800 border border-gray-700 rounded cursor-pointer" onchange="propChanged('crateTextColor',this.value)"></div>
-                    <div><label class="text-gray-500">Text Size</label><input id="prop-crateFontSize" type="number" min="8" max="72" value="13" class="w-full bg-gray-800 border border-gray-700 rounded px-1.5 py-1 text-white" onchange="propChanged('crateFontSize',Number(this.value))"></div>
-                  </div>
-                  <div>
-                    <div class="flex items-center gap-1"><label class="text-gray-500">Text BG</label><label class="flex items-center gap-1 cursor-pointer"><input id="prop-crateTextBgEnable" type="checkbox" onchange="toggleCrateTextBg()"><span class="text-[10px] text-gray-400">On</span></label></div>
-                    <input id="prop-crateTextBg" type="color" value="#000000" class="w-full h-7 bg-gray-800 border border-gray-700 rounded cursor-pointer" onchange="propChanged('crateTextBg',this.value)" disabled>
-                  </div>
-                </div>
-                <!-- Common styling -->
-                <div class="border-t border-gray-700 pt-2 space-y-1.5">
-                  <div class="grid grid-cols-2 gap-1.5">
-                    <div><label class="text-gray-500">BG Color</label><input id="prop-bgColor" type="color" value="#111128" class="w-full h-7 bg-gray-800 border border-gray-700 rounded cursor-pointer" onchange="propChanged('backgroundColor',this.value)"></div>
-                    <div><label class="text-gray-500">Border</label><input id="prop-borderColor" type="color" value="#333333" class="w-full h-7 bg-gray-800 border border-gray-700 rounded cursor-pointer" onchange="propChanged('borderColor',this.value)"></div>
-                  </div>
-                  <div class="grid grid-cols-2 gap-1.5">
-                    <div><label class="text-gray-500">Radius</label><input id="prop-radius" type="number" min="0" max="50" value="8" class="w-full bg-gray-800 border border-gray-700 rounded px-1.5 py-1 text-white" onchange="propChanged('borderRadius',Number(this.value))"></div>
-                    <div><label class="text-gray-500">BG Opacity</label><input id="prop-opacity" type="number" min="0" max="1" step="0.05" value="1" class="w-full bg-gray-800 border border-gray-700 rounded px-1.5 py-1 text-white" onchange="propChanged('opacity',Number(this.value))"></div>
-                  </div>
-                </div>
-                <button onclick="duplicateSelectedElement()" class="w-full bg-blue-900 hover:bg-blue-800 text-blue-300 text-xs px-3 py-2 rounded-lg font-medium mt-2">Duplicate Element</button>
-                <button onclick="deleteSelectedElement()" class="w-full bg-red-900 hover:bg-red-800 text-red-300 text-xs px-3 py-2 rounded-lg font-medium mt-1">Delete Element</button>
-              </div>
-            </div>
-            <div id="props-multi" class="bg-arena-card rounded-xl border border-gray-800 p-4 hidden">
-              <h3 class="text-xs font-bold text-gray-400 uppercase mb-2">Multi-Selection</h3>
-              <p class="text-sm text-purple-400 font-bold mb-3"><span id="multi-count">0</span> elements selected</p>
-              <button onclick="duplicateSelectedElement()" class="w-full bg-blue-900 hover:bg-blue-800 text-blue-300 text-xs px-3 py-2 rounded-lg font-medium mb-1">Duplicate All</button>
-              <button onclick="deleteSelectedElement()" class="w-full bg-red-900 hover:bg-red-800 text-red-300 text-xs px-3 py-2 rounded-lg font-medium">Delete All</button>
+              <div id="props-content" class="space-y-2 text-xs"></div>
             </div>
             <div id="props-empty" class="bg-arena-card rounded-xl border border-gray-800 p-4 text-center text-gray-500 text-sm">
-              <p>Click an element to edit its properties</p>
+              <p>Click a section or item to edit</p>
             </div>
           </div>
         </div>
@@ -827,57 +710,21 @@
     }
 
     // ============================
-    // CANVAS LAYOUT EDITOR
+    // SECTION-BASED LAYOUT EDITOR
     // ============================
-    let canvasElements = [];
-    let selectedElementId = null;
-    let selectedElementIds = new Set();
-    let canvasHeightPx = 800;
-    let canvasScale = 1;
+    let layoutSections = [];
+    let selectedSectionId = null;
+    let selectedItemId = null;
     let allPickerSkins = [];
     let allPickerCrates = [];
+    let dragItemId = null;
 
-    // Drag/resize state
-    let isDragging = false;
-    let isResizing = false;
-    let resizeCorner = '';
-    let dragStartX = 0, dragStartY = 0;
-    let dragElStartX = 0, dragElStartY = 0, dragElStartW = 0, dragElStartH = 0;
-    let dragStartPositions = {};
-
-    // Snap state
-    let activeSnapLines = [];
-    const SNAP_THRESHOLD = 1;
-
-    function getEl(id) { return canvasElements.find(e => e.id === id); }
-    function selectedEl() { return selectedElementIds.size === 1 ? getEl([...selectedElementIds][0]) : null; }
-
-    function selectElement(id, additive) {
-      if (additive) {
-        if (selectedElementIds.has(id)) selectedElementIds.delete(id);
-        else selectedElementIds.add(id);
-      } else {
-        selectedElementIds = new Set([id]);
-      }
-      selectedElementId = selectedElementIds.size === 1 ? [...selectedElementIds][0] : null;
-      renderCanvas();
-      updatePropsPanel();
-    }
+    function getSection(id) { return layoutSections.find(s => s.id === id); }
+    function getSelectedSection() { return selectedSectionId ? getSection(selectedSectionId) : null; }
 
     function crateSvg(color) {
       const c = esc(color || '#7c3aed');
       return `<svg viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:100%"><rect x="14" y="28" width="52" height="38" rx="4" fill="#1a1a3a" stroke="${c}" stroke-width="2"/><rect x="14" y="28" width="52" height="13" rx="4" fill="${c}" opacity="0.25"/><line x1="40" y1="28" x2="40" y2="66" stroke="${c}" stroke-width="2" opacity="0.5"/><rect x="32" y="41" width="16" height="8" rx="2" fill="${c}" opacity="0.6"/><path d="M30 28 L40 16 L50 28" stroke="${c}" stroke-width="2" fill="${c}" fill-opacity="0.15" stroke-linejoin="round"/></svg>`;
-    }
-
-    function rescaleCanvas() {
-      const wrapper = document.getElementById('canvas-wrapper');
-      const scaler = document.getElementById('canvas-scaler');
-      if (!wrapper || !scaler) return;
-      const available = wrapper.clientWidth - 24; // minus padding
-      canvasScale = Math.min(1, available / 1200);
-      scaler.style.transform = `scale(${canvasScale})`;
-      scaler.style.width = '1200px';
-      scaler.style.height = (canvasHeightPx * canvasScale) + 'px';
     }
 
     async function loadShopLayout() {
@@ -890,462 +737,149 @@
         allPickerSkins = skinsRes.skins || [];
         allPickerCrates = (cratesRes.crates || []).map(c => ({ ...c, _isCrate: true }));
         const layout = layoutRes.layout || {};
-        canvasElements = (layout.elements && layout.elements.length > 0) ? layout.elements : [];
-        canvasHeightPx = layout.canvasHeight || 800;
-        document.getElementById('canvas-height-input').value = canvasHeightPx;
-        selectedElementId = null;
-        selectedElementIds = new Set();
-        renderCanvas();
-        updatePropsPanel();
+        layoutSections = (layout.sections && layout.sections.length > 0)
+          ? layout.sections.map(s => ({ ...s, items: s.items || [] }))
+          : [];
+        selectedSectionId = null;
+        selectedItemId = null;
+        renderAll();
       } catch (err) { console.error('Failed to load layout:', err); }
     }
 
-    window.addEventListener('resize', () => { rescaleCanvas(); });
-
-    function hexToRgba(hex, alpha) {
-      hex = hex.replace('#', '');
-      if (hex.length === 3) hex = hex[0]+hex[0]+hex[1]+hex[1]+hex[2]+hex[2];
-      const r = parseInt(hex.substring(0,2),16), g = parseInt(hex.substring(2,4),16), b = parseInt(hex.substring(4,6),16);
-      return `rgba(${r},${g},${b},${alpha})`;
+    function renderAll() {
+      renderPreview();
+      updateSectionList();
+      updatePropsPanel();
     }
 
-    function renderCanvas() {
-      const area = document.getElementById('canvas-area');
-      area.style.height = canvasHeightPx + 'px';
-      rescaleCanvas();
-      let html = '';
-      const sorted = [...canvasElements].sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0));
-      const singleSel = selectedElementIds.size === 1;
-      for (const el of sorted) {
-        const inSet = selectedElementIds.has(el.id);
-        const border = inSet ? 'border:2px solid #a855f7;' : (el.borderColor ? `border:1px solid ${el.borderColor};` : '');
-        const bgImg = (el.type === 'crate' && el.crateBackgroundImage) ? `background-image:url('${el.crateBackgroundImage}');background-size:cover;background-position:center;` : '';
-        const bgAlpha = el.opacity != null ? el.opacity : 1;
-        const bg = el.backgroundColor ? `background-color:${hexToRgba(el.backgroundColor, bgAlpha)};` : '';
-        const radius = el.borderRadius ? `border-radius:${el.borderRadius}px;` : '';
-        const base = `position:absolute;left:${el.x}%;top:${el.y}%;width:${el.w}%;height:${el.h}%;z-index:${el.zIndex||0};${border}${bg}${bgImg}${radius}overflow:hidden;cursor:move;box-sizing:border-box;`;
-
-        let inner = '';
-        if (el.type === 'text') {
-          const fs = el.fontSize || 24;
-          const fc = el.fontColor || '#fff';
-          const fw = el.fontWeight || 'normal';
-          const ta = el.textAlign || 'left';
-          inner = `<div style="width:100%;height:100%;display:flex;align-items:center;padding:6px 8px;font-size:${fs}px;color:${fc};font-weight:${fw};text-align:${ta};overflow:hidden;line-height:1.2;justify-content:${ta==='center'?'center':ta==='right'?'flex-end':'flex-start'}">${esc(el.text || 'Text')}</div>`;
-        } else if (el.type === 'image') {
-          inner = el.imageUrl ? `<img src="${esc(el.imageUrl)}" style="width:100%;height:100%;object-fit:contain;" />` : '<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:#666;font-size:12px">No image</div>';
-        } else if (el.type === 'skin') {
-          const skin = allPickerSkins.find(s => s.skinId === el.itemId);
-          if (skin) {
-            const preview = skin.type === 'color'
-              ? `<div style="width:40px;height:40px;border-radius:50%;background:${esc(skin.cssValue)};box-shadow:0 0 10px ${esc(skin.cssValue)}"></div>`
-              : `<img src="${esc(skin.imageUrl)}" style="height:60px;object-fit:contain" />`;
-            inner = `<div style="width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;padding:8px">${preview}<span style="font-size:11px;color:#fff;font-weight:bold">${esc(skin.name)}</span><span style="font-size:9px;color:${skin.rarity==='legendary'?'#eab308':skin.rarity==='rare'?'#a855f7':'#9ca3af'}">${skin.rarity}</span></div>`;
-          } else {
-            inner = `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:#a855f7;font-size:11px">Skin: ${esc(el.itemId||'none')}</div>`;
-          }
-        } else if (el.type === 'crate') {
-          const crate = allPickerCrates.find(c => c.crateId === el.itemId);
-          if (crate) {
-            const showIcon = el.crateShowIcon !== false;
-            let iconHtml = '';
-            if (showIcon) {
-              if (el.crateIconImage) {
-                iconHtml = `<div style="width:48px;height:48px"><img src="${esc(el.crateIconImage)}" style="width:100%;height:100%;object-fit:contain" /></div>`;
-              } else {
-                iconHtml = `<div style="width:48px;height:48px">${crateSvg(crate.imageColor)}</div>`;
-              }
-            }
-            const txtColor = el.crateTextColor || '#fff';
-            const txtBgStyle = el.crateTextBg ? `background:${el.crateTextBg};padding:2px 6px;border-radius:4px;` : '';
-            const cfs = el.crateFontSize || 13;
-            inner = `<div style="width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;padding:8px;color:${txtColor}">${iconHtml}<span style="font-size:${cfs}px;font-weight:bold;${txtBgStyle}">${esc(crate.name)}</span><span style="font-size:${Math.max(8,cfs-3)}px">${crate.skins ? crate.skins.length : '?'} skins</span><span style="font-size:${Math.max(8,cfs-2)}px;font-weight:500">${Number(crate.price).toLocaleString()} $PONG</span></div>`;
-          } else {
-            inner = `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:#60a5fa;font-size:11px">Crate: ${esc(el.itemId||'none')}</div>`;
-          }
-        }
-
-        html += `<div data-elid="${el.id}" style="${base}">${inner}`;
-        if (inSet && singleSel) {
-          const h = 'width:10px;height:10px;background:#a855f7;position:absolute;border-radius:2px;z-index:9999;';
-          html += `<div data-resize="nw" style="${h}top:-5px;left:-5px;cursor:nw-resize"></div>`;
-          html += `<div data-resize="ne" style="${h}top:-5px;right:-5px;cursor:ne-resize"></div>`;
-          html += `<div data-resize="sw" style="${h}bottom:-5px;left:-5px;cursor:sw-resize"></div>`;
-          html += `<div data-resize="se" style="${h}bottom:-5px;right:-5px;cursor:se-resize"></div>`;
-        }
-        html += '</div>';
-      }
-      // Snap guide lines
-      for (const snap of activeSnapLines) {
-        if (snap.axis === 'x') {
-          html += `<div style="position:absolute;left:${snap.pos}%;top:0;width:0;height:100%;border-left:2px dashed #ec4899;pointer-events:none;z-index:99999"></div>`;
-        } else {
-          html += `<div style="position:absolute;top:${snap.pos}%;left:0;height:0;width:100%;border-top:2px dashed #06b6d4;pointer-events:none;z-index:99999"></div>`;
-        }
-      }
-      area.innerHTML = html;
-      // Update element list
-      const listEl = document.getElementById('canvas-element-list');
-      document.getElementById('el-count').textContent = canvasElements.length;
-      if (canvasElements.length === 0) {
-        listEl.innerHTML = '<p class="text-gray-500 text-center py-2">Empty canvas</p>';
-      } else {
-        listEl.innerHTML = canvasElements.map(el => {
-          const sel = selectedElementIds.has(el.id) ? 'bg-purple-900/40 border-purple-500' : 'border-gray-700 hover:border-gray-600';
-          const label = el.type === 'text' ? (el.text||'Text').slice(0,20) : el.type === 'image' ? 'Image' : el.type === 'skin' ? 'Skin' : 'Crate';
-          const typeColor = el.type === 'skin' ? 'text-purple-400' : el.type === 'crate' ? 'text-blue-400' : el.type === 'image' ? 'text-green-400' : 'text-gray-400';
-          return `<div class="border ${sel} rounded p-1.5 cursor-pointer flex items-center gap-1.5 transition" onclick="selectElement('${el.id}',event&&event.ctrlKey)">
-            <span class="${typeColor} font-bold uppercase" style="font-size:9px">${el.type}</span>
-            <span class="text-white truncate flex-1">${esc(label)}</span>
-            <span class="text-gray-600">${el.zIndex||0}</span>
-          </div>`;
-        }).join('');
-      }
-    }
-
-    function canvasAddElement(type) {
-      const el = {
+    // ---- Section management ----
+    function addSection(type) {
+      const s = {
         id: crypto.randomUUID(),
+        title: type === 'banner' ? '' : 'New Section',
         type,
-        x: 10, y: 10, w: type === 'text' ? 30 : 15, h: type === 'text' ? 5 : 15,
-        zIndex: canvasElements.length,
-        text: type === 'text' ? 'New Text' : '',
-        fontSize: 24, fontColor: '#ffffff', fontWeight: 'bold', textAlign: 'center',
-        imageUrl: '',
-        itemId: '',
-        backgroundColor: type === 'text' ? '' : '#111128',
-        borderRadius: 8, borderColor: '#333', opacity: 1,
-        crateBackgroundImage: '', crateIconImage: '', crateShowIcon: true,
-        crateTextColor: '#ffffff', crateTextBg: '', crateFontSize: 13,
+        order: layoutSections.length,
+        bannerImage: null,
+        items: [],
       };
-      canvasElements.push(el);
-      selectedElementId = el.id;
-      selectedElementIds = new Set([el.id]);
-      renderCanvas();
-      updatePropsPanel();
-      if (type === 'skin' || type === 'crate') openItemPicker();
+      layoutSections.push(s);
+      selectSection(s.id);
     }
 
-    // selectElement is now defined above with multi-select support
-
-    function toggleCrateTextBg() {
-      const enabled = document.getElementById('prop-crateTextBgEnable').checked;
-      const input = document.getElementById('prop-crateTextBg');
-      input.disabled = !enabled;
-      const el = selectedEl();
-      if (!el) return;
-      if (enabled) {
-        el.crateTextBg = input.value || '#000000';
-      } else {
-        el.crateTextBg = '';
-      }
-      renderCanvas();
+    function selectSection(id) {
+      selectedSectionId = id;
+      selectedItemId = null;
+      renderAll();
     }
 
-    function updatePropsPanel() {
-      const el = selectedEl();
-      const panel = document.getElementById('props-panel');
-      const multi = document.getElementById('props-multi');
-      const empty = document.getElementById('props-empty');
-      if (selectedElementIds.size > 1) {
-        panel.classList.add('hidden');
-        multi.classList.remove('hidden');
-        empty.classList.add('hidden');
-        document.getElementById('multi-count').textContent = selectedElementIds.size;
-        return;
-      }
-      multi.classList.add('hidden');
-      if (!el) {
-        panel.classList.add('hidden');
-        empty.classList.remove('hidden');
-        return;
-      }
-      panel.classList.remove('hidden');
-      empty.classList.add('hidden');
-      document.getElementById('props-type-badge').textContent = el.type;
-      document.getElementById('prop-x').value = Math.round(el.x * 10) / 10;
-      document.getElementById('prop-y').value = Math.round(el.y * 10) / 10;
-      document.getElementById('prop-w').value = Math.round(el.w * 10) / 10;
-      document.getElementById('prop-h').value = Math.round(el.h * 10) / 10;
-      document.getElementById('prop-z').value = el.zIndex || 0;
-      // Toggle type-specific sections
-      document.getElementById('props-text').classList.toggle('hidden', el.type !== 'text');
-      document.getElementById('props-image').classList.toggle('hidden', el.type !== 'image');
-      document.getElementById('props-item').classList.toggle('hidden', el.type !== 'skin' && el.type !== 'crate');
-      document.getElementById('props-crate-images').classList.toggle('hidden', el.type !== 'crate');
-      if (el.type === 'text') {
-        document.getElementById('prop-text').value = el.text || '';
-        document.getElementById('prop-fontSize').value = el.fontSize || 24;
-        document.getElementById('prop-fontColor').value = el.fontColor || '#ffffff';
-        document.getElementById('prop-fontWeight').value = el.fontWeight || 'normal';
-        document.getElementById('prop-textAlign').value = el.textAlign || 'left';
-      }
-      if (el.type === 'image') {
-        document.getElementById('prop-img-preview').innerHTML = el.imageUrl ? `<img src="${esc(el.imageUrl)}" class="max-h-16 mx-auto rounded" />` : '';
-      }
-      if (el.type === 'skin' || el.type === 'crate') {
-        let itemName = el.itemId || 'None';
-        if (el.type === 'skin') { const s = allPickerSkins.find(s => s.skinId === el.itemId); if (s) itemName = s.name; }
-        if (el.type === 'crate') { const c = allPickerCrates.find(c => c.crateId === el.itemId); if (c) itemName = c.name; }
-        document.getElementById('prop-item-preview').textContent = itemName;
-      }
-      if (el.type === 'crate') {
-        document.getElementById('prop-crate-showIcon').checked = el.crateShowIcon !== false;
-        document.getElementById('crate-icon-upload-area').style.display = el.crateShowIcon !== false ? '' : 'none';
-        document.getElementById('prop-crate-bg-preview').innerHTML = el.crateBackgroundImage ? `<img src="${esc(el.crateBackgroundImage)}" class="max-h-12 mx-auto rounded" />` : '';
-        document.getElementById('crate-bg-remove').classList.toggle('hidden', !el.crateBackgroundImage);
-        document.getElementById('prop-crate-icon-preview').innerHTML = el.crateIconImage ? `<img src="${esc(el.crateIconImage)}" class="max-h-12 mx-auto rounded" />` : '';
-        document.getElementById('crate-icon-remove').classList.toggle('hidden', !el.crateIconImage);
-        document.getElementById('prop-crateTextColor').value = el.crateTextColor || '#ffffff';
-        document.getElementById('prop-crateFontSize').value = el.crateFontSize || 13;
-        const hasBg = !!el.crateTextBg;
-        document.getElementById('prop-crateTextBgEnable').checked = hasBg;
-        document.getElementById('prop-crateTextBg').disabled = !hasBg;
-        document.getElementById('prop-crateTextBg').value = el.crateTextBg || '#000000';
-      }
-      // Common styling
-      document.getElementById('prop-bgColor').value = el.backgroundColor || '#111128';
-      document.getElementById('prop-borderColor').value = el.borderColor || '#333333';
-      document.getElementById('prop-radius').value = el.borderRadius ?? 8;
-      document.getElementById('prop-opacity').value = el.opacity ?? 1;
+    function selectItem(sectionId, itemId) {
+      selectedSectionId = sectionId;
+      selectedItemId = itemId;
+      renderAll();
     }
 
-    function propChanged(prop, val) {
-      const el = selectedEl();
-      if (!el) return;
-      el[prop] = val;
-      renderCanvas();
+    function removeSection() {
+      if (!selectedSectionId) return;
+      if (!confirm('Delete this section and all its items?')) return;
+      layoutSections = layoutSections.filter(s => s.id !== selectedSectionId);
+      layoutSections.forEach((s, i) => s.order = i);
+      selectedSectionId = null;
+      selectedItemId = null;
+      renderAll();
     }
 
-    function moveZ(dir) {
-      const el = selectedEl();
-      if (!el) return;
-      el.zIndex = (el.zIndex || 0) + dir;
-      document.getElementById('prop-z').value = el.zIndex;
-      renderCanvas();
+    function moveSection(dir) {
+      const idx = layoutSections.findIndex(s => s.id === selectedSectionId);
+      if (idx < 0) return;
+      const newIdx = idx + dir;
+      if (newIdx < 0 || newIdx >= layoutSections.length) return;
+      [layoutSections[idx], layoutSections[newIdx]] = [layoutSections[newIdx], layoutSections[idx]];
+      layoutSections.forEach((s, i) => s.order = i);
+      renderAll();
     }
 
-    function deleteSelectedElement() {
-      if (selectedElementIds.size === 0) return;
-      canvasElements = canvasElements.filter(e => !selectedElementIds.has(e.id));
-      selectedElementId = null;
-      selectedElementIds = new Set();
-      renderCanvas();
-      updatePropsPanel();
+    function updateSectionProp(prop, val) {
+      const s = getSelectedSection();
+      if (!s) return;
+      s[prop] = val;
+      renderAll();
     }
 
-    function duplicateSelectedElement() {
-      if (selectedElementIds.size === 0) return;
-      const newIds = new Set();
-      const maxZ = canvasElements.reduce((m, e) => Math.max(m, e.zIndex || 0), 0);
-      let zOff = 1;
-      for (const id of selectedElementIds) {
-        const orig = getEl(id);
-        if (!orig) continue;
-        const clone = JSON.parse(JSON.stringify(orig));
-        clone.id = crypto.randomUUID();
-        clone.x = Math.min(100 - clone.w, clone.x + 2);
-        clone.y = Math.min(100 - clone.h, clone.y + 2);
-        clone.zIndex = maxZ + zOff++;
-        canvasElements.push(clone);
-        newIds.add(clone.id);
-      }
-      selectedElementIds = newIds;
-      selectedElementId = newIds.size === 1 ? [...newIds][0] : null;
-      renderCanvas();
-      updatePropsPanel();
+    function updateItemProp(prop, val) {
+      const s = getSelectedSection();
+      if (!s || !selectedItemId) return;
+      const item = s.items.find(i => i.id === selectedItemId);
+      if (!item) return;
+      item[prop] = val;
+      renderAll();
     }
 
-    // Keyboard delete
-    document.addEventListener('keydown', e => {
-      if ((e.key === 'Delete' || e.key === 'Backspace') && selectedElementIds.size > 0 && !['INPUT','TEXTAREA','SELECT'].includes(document.activeElement.tagName)) {
-        deleteSelectedElement();
-      }
-    });
-
-    // Snap alignment
-    function computeSnap(el, isResizeOp, resizeEdges) {
-      const lines = [];
-      const targets = { x: [], y: [] };
-      // Canvas center
-      targets.x.push(50);
-      targets.y.push(50);
-      // Other elements
-      for (const other of canvasElements) {
-        if (selectedElementIds.has(other.id)) continue;
-        targets.x.push(other.x, other.x + other.w, other.x + other.w / 2);
-        targets.y.push(other.y, other.y + other.h, other.y + other.h / 2);
-      }
-
-      const elLeft = el.x, elRight = el.x + el.w, elCx = el.x + el.w / 2;
-      const elTop = el.y, elBottom = el.y + el.h, elCy = el.y + el.h / 2;
-
-      let snapDx = null, snapDy = null;
-
-      if (!isResizeOp) {
-        // Drag: check all 3 edges per axis
-        const xEdges = [{val: elLeft, shift: 0}, {val: elRight, shift: 0}, {val: elCx, shift: 0}];
-        for (const edge of xEdges) {
-          for (const t of targets.x) {
-            const d = t - edge.val;
-            if (Math.abs(d) < SNAP_THRESHOLD && (snapDx === null || Math.abs(d) < Math.abs(snapDx))) {
-              snapDx = d;
-            }
-          }
-        }
-        const yEdges = [{val: elTop}, {val: elBottom}, {val: elCy}];
-        for (const edge of yEdges) {
-          for (const t of targets.y) {
-            const d = t - edge.val;
-            if (Math.abs(d) < SNAP_THRESHOLD && (snapDy === null || Math.abs(d) < Math.abs(snapDy))) {
-              snapDy = d;
-            }
-          }
-        }
-        if (snapDx !== null) { el.x += snapDx; }
-        if (snapDy !== null) { el.y += snapDy; }
-      } else {
-        // Resize: only check edges being resized
-        if (resizeEdges.includes('w')) {
-          for (const t of targets.x) { const d = t - elLeft; if (Math.abs(d) < SNAP_THRESHOLD && (snapDx === null || Math.abs(d) < Math.abs(snapDx))) snapDx = d; }
-          if (snapDx !== null) { el.x += snapDx; el.w -= snapDx; }
-        }
-        if (resizeEdges.includes('e')) {
-          for (const t of targets.x) { const d = t - elRight; if (Math.abs(d) < SNAP_THRESHOLD && (snapDx === null || Math.abs(d) < Math.abs(snapDx))) snapDx = d; }
-          if (snapDx !== null) { el.w += snapDx; }
-        }
-        if (resizeEdges.includes('n')) {
-          for (const t of targets.y) { const d = t - elTop; if (Math.abs(d) < SNAP_THRESHOLD && (snapDy === null || Math.abs(d) < Math.abs(snapDy))) snapDy = d; }
-          if (snapDy !== null) { el.y += snapDy; el.h -= snapDy; }
-        }
-        if (resizeEdges.includes('s')) {
-          for (const t of targets.y) { const d = t - elBottom; if (Math.abs(d) < SNAP_THRESHOLD && (snapDy === null || Math.abs(d) < Math.abs(snapDy))) snapDy = d; }
-          if (snapDy !== null) { el.h += snapDy; }
-        }
-      }
-
-      // Build guide lines at snapped positions
-      const finalLeft = el.x, finalRight = el.x + el.w, finalCx = el.x + el.w / 2;
-      const finalTop = el.y, finalBottom = el.y + el.h, finalCy = el.y + el.h / 2;
-      for (const t of targets.x) {
-        if (Math.abs(t - finalLeft) < 0.01 || Math.abs(t - finalRight) < 0.01 || Math.abs(t - finalCx) < 0.01) {
-          lines.push({ axis: 'x', pos: t });
-        }
-      }
-      for (const t of targets.y) {
-        if (Math.abs(t - finalTop) < 0.01 || Math.abs(t - finalBottom) < 0.01 || Math.abs(t - finalCy) < 0.01) {
-          lines.push({ axis: 'y', pos: t });
-        }
-      }
-      return lines;
+    function addItemToSection(itemType, itemId) {
+      const s = getSelectedSection();
+      if (!s) return;
+      const item = {
+        id: crypto.randomUUID(),
+        itemType,
+        itemId,
+        size: 'medium',
+        order: s.items.length,
+      };
+      s.items.push(item);
+      selectItem(s.id, item.id);
     }
 
-    // Mouse events — account for CSS scale transform
-    function canvasMouseDown(e) {
-      if (e.target.dataset.resize && selectedElementIds.size === 1) {
-        isResizing = true;
-        resizeCorner = e.target.dataset.resize;
-        const el = selectedEl();
-        if (!el) return;
-        dragStartX = e.clientX;
-        dragStartY = e.clientY;
-        dragElStartX = el.x; dragElStartY = el.y;
-        dragElStartW = el.w; dragElStartH = el.h;
-        e.preventDefault();
-        return;
-      }
-      const elDiv = e.target.closest('[data-elid]');
-      if (elDiv) {
-        const id = elDiv.dataset.elid;
-        if (e.ctrlKey || e.metaKey) {
-          // Toggle in selection
-          if (selectedElementIds.has(id)) selectedElementIds.delete(id);
-          else selectedElementIds.add(id);
-          selectedElementId = selectedElementIds.size === 1 ? [...selectedElementIds][0] : null;
-          renderCanvas();
-          updatePropsPanel();
-          e.preventDefault();
-          return;
-        }
-        // Normal click
-        if (!selectedElementIds.has(id)) {
-          selectedElementIds = new Set([id]);
-          selectedElementId = id;
-        }
-        // Start drag for all selected
-        isDragging = true;
-        dragStartX = e.clientX;
-        dragStartY = e.clientY;
-        dragStartPositions = {};
-        for (const sid of selectedElementIds) {
-          const se = getEl(sid);
-          if (se) dragStartPositions[sid] = { x: se.x, y: se.y };
-        }
-        renderCanvas();
-        updatePropsPanel();
-        e.preventDefault();
-        return;
-      }
-      // Click empty canvas
-      selectedElementId = null;
-      selectedElementIds = new Set();
-      renderCanvas();
-      updatePropsPanel();
+    function removeItem() {
+      const s = getSelectedSection();
+      if (!s || !selectedItemId) return;
+      s.items = s.items.filter(i => i.id !== selectedItemId);
+      s.items.forEach((i, idx) => i.order = idx);
+      selectedItemId = null;
+      renderAll();
     }
 
-    function canvasMouseMove(e) {
-      if (!isDragging && !isResizing) return;
-      const dx = (e.clientX - dragStartX) / canvasScale;
-      const dy = (e.clientY - dragStartY) / canvasScale;
-      const pctX = (dx / 1200) * 100;
-      const pctY = (dy / canvasHeightPx) * 100;
-
-      if (isDragging) {
-        if (selectedElementIds.size === 1) {
-          const el = selectedEl();
-          if (!el) return;
-          const sp = dragStartPositions[el.id];
-          if (!sp) return;
-          el.x = Math.max(0, Math.min(100 - el.w, sp.x + pctX));
-          el.y = Math.max(0, Math.min(100 - el.h, sp.y + pctY));
-          activeSnapLines = computeSnap(el, false, '');
-        } else {
-          // Multi-drag: move all by delta, no snapping
-          for (const sid of selectedElementIds) {
-            const se = getEl(sid);
-            const sp = dragStartPositions[sid];
-            if (!se || !sp) continue;
-            se.x = Math.max(0, Math.min(100 - se.w, sp.x + pctX));
-            se.y = Math.max(0, Math.min(100 - se.h, sp.y + pctY));
-          }
-          activeSnapLines = [];
-        }
-      } else if (isResizing) {
-        const el = selectedEl();
-        if (!el) return;
-        let newX = dragElStartX, newY = dragElStartY, newW = dragElStartW, newH = dragElStartH;
-        if (resizeCorner.includes('e')) newW = Math.max(3, dragElStartW + pctX);
-        if (resizeCorner.includes('w')) { newW = Math.max(3, dragElStartW - pctX); newX = dragElStartX + pctX; }
-        if (resizeCorner.includes('s')) newH = Math.max(3, dragElStartH + pctY);
-        if (resizeCorner.includes('n')) { newH = Math.max(3, dragElStartH - pctY); newY = dragElStartY + pctY; }
-        el.x = Math.max(0, newX); el.y = Math.max(0, newY);
-        el.w = Math.min(100 - el.x, newW); el.h = Math.min(100 - el.y, newH);
-        const edges = resizeCorner.split('');
-        activeSnapLines = computeSnap(el, true, edges);
-      }
-      renderCanvas();
-      updatePropsPanel();
+    // ---- Drag to reorder items ----
+    function handleDragStart(e) {
+      dragItemId = e.target.dataset.itemId;
+      e.target.style.opacity = '0.5';
+      e.dataTransfer.effectAllowed = 'move';
     }
 
-    function canvasMouseUp() {
-      isDragging = false;
-      isResizing = false;
-      if (activeSnapLines.length > 0) {
-        activeSnapLines = [];
-        renderCanvas();
+    function handleDragOver(e) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      const card = e.target.closest('[data-item-id]');
+      // Clear all highlights first
+      document.querySelectorAll('[data-item-id]').forEach(el => el.style.borderColor = '');
+      if (card && card.dataset.itemId !== dragItemId) {
+        card.style.borderColor = '#a855f7';
       }
     }
 
+    function handleDrop(e) {
+      e.preventDefault();
+      const targetCard = e.target.closest('[data-item-id]');
+      if (!targetCard || !dragItemId) return;
+      const targetId = targetCard.dataset.itemId;
+      const sectionId = targetCard.dataset.sectionId;
+      if (targetId === dragItemId) return;
+      const section = getSection(sectionId);
+      if (!section) return;
+      const fromIdx = section.items.findIndex(i => i.id === dragItemId);
+      const toIdx = section.items.findIndex(i => i.id === targetId);
+      if (fromIdx < 0 || toIdx < 0) return;
+      const [moved] = section.items.splice(fromIdx, 1);
+      section.items.splice(toIdx, 0, moved);
+      section.items.forEach((i, idx) => i.order = idx);
+      renderAll();
+    }
+
+    function handleDragEnd(e) {
+      e.target.style.opacity = '1';
+      dragItemId = null;
+      document.querySelectorAll('[data-item-id]').forEach(el => el.style.borderColor = '');
+    }
+
+    // ---- Banner upload ----
     async function uploadToServer(file) {
       const formData = new FormData();
       formData.append('image', file);
@@ -1354,64 +888,227 @@
       return data.imageUrl || null;
     }
 
-    async function uploadElementImage(input) {
-      if (!input.files[0] || !selectedElementId) return;
-      const el = selectedEl();
-      if (!el) return;
+    async function uploadBannerImage(input) {
+      if (!input.files[0]) return;
+      const s = getSelectedSection();
+      if (!s || s.type !== 'banner') return;
       const url = await uploadToServer(input.files[0]);
-      if (url) { el.imageUrl = url; renderCanvas(); updatePropsPanel(); }
+      if (url) { s.bannerImage = url; renderAll(); }
     }
 
-    async function uploadCrateBgImage(input) {
-      if (!input.files[0] || !selectedElementId) return;
-      const el = selectedEl();
-      if (!el) return;
-      const url = await uploadToServer(input.files[0]);
-      if (url) { el.crateBackgroundImage = url; renderCanvas(); updatePropsPanel(); }
+    // ---- Preview rendering ----
+    function renderPreview() {
+      const container = document.getElementById('layout-preview');
+      if (layoutSections.length === 0) {
+        container.innerHTML = '<p class="text-gray-500 text-center py-12">Add a section to get started</p>';
+        return;
+      }
+      const sorted = [...layoutSections].sort((a, b) => (a.order || 0) - (b.order || 0));
+      let html = '';
+      for (const section of sorted) {
+        const isSel = section.id === selectedSectionId && !selectedItemId;
+        const sectionBorder = isSel ? 'border-purple-500 ring-1 ring-purple-500/30' : 'border-gray-800 hover:border-gray-700';
+
+        if (section.type === 'banner') {
+          html += `<div class="rounded-xl border-2 ${sectionBorder} overflow-hidden cursor-pointer transition-all" onclick="selectSection('${section.id}')">`;
+          if (section.bannerImage) {
+            html += `<img src="${esc(section.bannerImage)}" class="w-full" />`;
+          } else {
+            html += `<div class="h-24 flex items-center justify-center bg-gray-900/50 text-gray-500 text-sm">Click to add banner image</div>`;
+          }
+          html += '</div>';
+          continue;
+        }
+
+        const isFeatured = section.type === 'featured';
+        const gridCols = isFeatured ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3' : 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-4';
+        const titleClass = isFeatured ? 'text-xl bg-gradient-to-r from-yellow-400 to-purple-400 bg-clip-text text-transparent' : 'text-lg text-white';
+
+        html += `<div class="rounded-xl border-2 ${sectionBorder} p-3 transition-all">`;
+        html += `<div class="cursor-pointer mb-2" onclick="selectSection('${section.id}')">`;
+        html += `<h3 class="font-bold ${titleClass}">${esc(section.title || 'Untitled')}</h3>`;
+        html += `<span class="text-[10px] uppercase text-gray-500">${section.type} &middot; ${section.items.length} items</span>`;
+        html += '</div>';
+
+        if (section.items.length > 0) {
+          const sortedItems = [...section.items].sort((a, b) => (a.order || 0) - (b.order || 0));
+          html += `<div class="grid ${gridCols} gap-3">`;
+          for (const item of sortedItems) {
+            const isItemSel = item.id === selectedItemId;
+            const itemBorder = isItemSel ? 'border-purple-500 ring-1 ring-purple-500/30' : 'border-gray-700';
+            const spanClass = item.size === 'large' ? 'col-span-2' : '';
+            html += `<div class="${spanClass} bg-arena-card rounded-xl border-2 ${itemBorder} cursor-pointer overflow-hidden transition-all hover:border-gray-500" data-item-id="${item.id}" data-section-id="${section.id}" draggable="true" ondragstart="handleDragStart(event)" ondragover="handleDragOver(event)" ondrop="handleDrop(event)" ondragend="handleDragEnd(event)" onclick="event.stopPropagation();selectItem('${section.id}','${item.id}')">`;
+            html += renderItemCard(item, isFeatured);
+            html += '</div>';
+          }
+          html += '</div>';
+        } else {
+          html += '<p class="text-gray-600 text-xs text-center py-4">No items — select this section and add items</p>';
+        }
+        html += '</div>';
+      }
+      container.innerHTML = html;
     }
 
-    async function uploadCrateIconImage(input) {
-      if (!input.files[0] || !selectedElementId) return;
-      const el = selectedEl();
-      if (!el) return;
-      const url = await uploadToServer(input.files[0]);
-      if (url) { el.crateIconImage = url; renderCanvas(); updatePropsPanel(); }
+    function renderItemCard(item, isFeatured) {
+      const height = isFeatured ? 'h-40' : (item.size === 'large' ? 'h-40' : 'h-28');
+      if (item.itemType === 'crate') {
+        const crate = allPickerCrates.find(c => c.crateId === item.itemId);
+        if (!crate) return `<div class="${height} flex items-center justify-center text-gray-500 text-xs">Crate not found</div>`;
+        return `<div class="${height} flex flex-col items-center justify-center gap-1 p-2">
+          <div class="w-10 h-10">${crateSvg(crate.imageColor)}</div>
+          <span class="text-xs font-bold text-white truncate max-w-full">${esc(crate.name)}</span>
+          <span class="text-[10px] text-gray-400">${crate.skins ? crate.skins.length : '?'} skins</span>
+          <span class="text-[10px] text-purple-400 font-medium">${Number(crate.price).toLocaleString()} $PONG</span>
+        </div>`;
+      } else {
+        const skin = allPickerSkins.find(s => s.skinId === item.itemId);
+        if (!skin) return `<div class="${height} flex items-center justify-center text-gray-500 text-xs">Skin not found</div>`;
+        const rarityColor = skin.rarity === 'legendary' ? 'text-yellow-400' : skin.rarity === 'rare' ? 'text-purple-400' : 'text-gray-400';
+        const preview = skin.type === 'color'
+          ? `<div class="w-8 h-8 rounded-full" style="background:${esc(skin.cssValue)};box-shadow:0 0 8px ${esc(skin.cssValue)}"></div>`
+          : `<img src="${esc(skin.imageUrl)}" class="h-12 object-contain" />`;
+        return `<div class="${height} flex flex-col items-center justify-center gap-1 p-2">
+          ${preview}
+          <span class="text-xs font-bold text-white truncate max-w-full">${esc(skin.name)}</span>
+          <span class="text-[10px] ${rarityColor} uppercase">${skin.rarity}</span>
+        </div>`;
+      }
     }
 
-    function removeCrateBg() {
-      const el = selectedEl();
-      if (!el) return;
-      el.crateBackgroundImage = '';
-      renderCanvas(); updatePropsPanel();
+    // ---- Section list sidebar ----
+    function updateSectionList() {
+      const listEl = document.getElementById('section-list');
+      const addBtn = document.getElementById('add-item-btn');
+      if (layoutSections.length === 0) {
+        listEl.innerHTML = '<p class="text-gray-500 text-center py-2">No sections yet</p>';
+        addBtn.classList.add('hidden');
+        return;
+      }
+      const sorted = [...layoutSections].sort((a, b) => (a.order || 0) - (b.order || 0));
+      listEl.innerHTML = sorted.map(s => {
+        const sel = s.id === selectedSectionId ? 'bg-purple-900/40 border-purple-500' : 'border-gray-700 hover:border-gray-600';
+        const typeColor = s.type === 'featured' ? 'text-yellow-400' : s.type === 'banner' ? 'text-blue-400' : 'text-gray-400';
+        return `<div class="border ${sel} rounded p-1.5 cursor-pointer flex items-center gap-1.5 transition" onclick="selectSection('${s.id}')">
+          <span class="${typeColor} font-bold uppercase" style="font-size:9px">${s.type}</span>
+          <span class="text-white truncate flex-1">${esc(s.title || 'Banner')}</span>
+          <span class="text-gray-600 text-[10px]">${s.items.length}</span>
+        </div>`;
+      }).join('');
+      // Show "Add Item" button only when a non-banner section is selected
+      const sel = getSelectedSection();
+      addBtn.classList.toggle('hidden', !sel || sel.type === 'banner');
     }
 
-    function removeCrateIcon() {
-      const el = selectedEl();
-      if (!el) return;
-      el.crateIconImage = '';
-      renderCanvas(); updatePropsPanel();
+    // ---- Properties panel ----
+    function updatePropsPanel() {
+      const panel = document.getElementById('props-panel');
+      const empty = document.getElementById('props-empty');
+      const content = document.getElementById('props-content');
+      const section = getSelectedSection();
+
+      if (!section) {
+        panel.classList.add('hidden');
+        empty.classList.remove('hidden');
+        return;
+      }
+
+      panel.classList.remove('hidden');
+      empty.classList.add('hidden');
+
+      // Item selected?
+      if (selectedItemId) {
+        const item = section.items.find(i => i.id === selectedItemId);
+        if (!item) { selectedItemId = null; updatePropsPanel(); return; }
+        const itemName = item.itemType === 'crate'
+          ? (allPickerCrates.find(c => c.crateId === item.itemId)?.name || 'Unknown')
+          : (allPickerSkins.find(s => s.skinId === item.itemId)?.name || 'Unknown');
+        content.innerHTML = `
+          <div class="text-center py-1 rounded bg-purple-900/50 text-purple-400 font-bold uppercase">${item.itemType} Item</div>
+          <div class="text-gray-300 text-center">${esc(itemName)}</div>
+          <div>
+            <label class="text-gray-500">Size</label>
+            <select onchange="updateItemProp('size',this.value)" class="w-full bg-gray-800 border border-gray-700 rounded px-1.5 py-1 text-white">
+              <option value="small" ${item.size==='small'?'selected':''}>Small</option>
+              <option value="medium" ${item.size==='medium'?'selected':''}>Medium</option>
+              <option value="large" ${item.size==='large'?'selected':''}>Large (2 cols)</option>
+            </select>
+          </div>
+          <button onclick="openItemPickerForChange()" class="w-full bg-gray-700 hover:bg-gray-600 text-white px-3 py-2 rounded-lg font-medium">Change Item</button>
+          <button onclick="removeItem()" class="w-full bg-red-900 hover:bg-red-800 text-red-300 px-3 py-2 rounded-lg font-medium">Remove from Section</button>
+        `;
+        return;
+      }
+
+      // Section selected
+      let html = `<div class="text-center py-1 rounded bg-purple-900/50 text-purple-400 font-bold uppercase">${section.type} Section</div>`;
+
+      if (section.type !== 'banner') {
+        html += `<div>
+          <label class="text-gray-500">Title</label>
+          <input type="text" value="${esc(section.title || '')}" onchange="updateSectionProp('title',this.value)" class="w-full bg-gray-800 border border-gray-700 rounded px-1.5 py-1 text-white" />
+        </div>`;
+      }
+
+      html += `<div>
+        <label class="text-gray-500">Type</label>
+        <select onchange="updateSectionProp('type',this.value)" class="w-full bg-gray-800 border border-gray-700 rounded px-1.5 py-1 text-white">
+          <option value="grid" ${section.type==='grid'?'selected':''}>Grid</option>
+          <option value="featured" ${section.type==='featured'?'selected':''}>Featured</option>
+          <option value="banner" ${section.type==='banner'?'selected':''}>Banner</option>
+        </select>
+      </div>`;
+
+      if (section.type === 'banner') {
+        html += `<div>
+          <label class="text-gray-500">Banner Image</label>
+          <div class="border-2 border-dashed border-gray-700 rounded-lg p-3 text-center cursor-pointer hover:border-purple-500 transition" onclick="document.getElementById('banner-img-file').click()">
+            <input id="banner-img-file" type="file" class="hidden" accept="image/*" onchange="uploadBannerImage(this)" />
+            ${section.bannerImage ? `<img src="${esc(section.bannerImage)}" class="max-h-16 mx-auto rounded mb-1" />` : ''}
+            <p class="text-gray-500 text-[10px]">Click to upload</p>
+          </div>
+        </div>`;
+      }
+
+      html += `<div class="flex gap-1 pt-1">
+        <button onclick="moveSection(-1)" class="flex-1 bg-gray-700 hover:bg-gray-600 px-2 py-1.5 rounded text-gray-300 text-xs">Move Up</button>
+        <button onclick="moveSection(1)" class="flex-1 bg-gray-700 hover:bg-gray-600 px-2 py-1.5 rounded text-gray-300 text-xs">Move Down</button>
+      </div>`;
+      html += `<button onclick="removeSection()" class="w-full bg-red-900 hover:bg-red-800 text-red-300 px-3 py-2 rounded-lg font-medium mt-1">Delete Section</button>`;
+      content.innerHTML = html;
     }
 
-    // Item picker — rewired for canvas
-    async function openItemPicker() {
+    // ---- Item picker ----
+    function openItemPicker() {
+      if (!getSelectedSection()) return alert('Select a section first');
       document.getElementById('item-picker-modal').classList.remove('hidden');
       document.getElementById('item-picker-search').value = '';
       filterItemPicker('');
     }
 
-    function closeItemPicker() { document.getElementById('item-picker-modal').classList.add('hidden'); }
+    let pickerMode = 'add'; // 'add' or 'change'
+
+    function openItemPickerForChange() {
+      pickerMode = 'change';
+      document.getElementById('item-picker-modal').classList.remove('hidden');
+      document.getElementById('item-picker-search').value = '';
+      filterItemPicker('');
+    }
+
+    function closeItemPicker() {
+      document.getElementById('item-picker-modal').classList.add('hidden');
+      pickerMode = 'add';
+    }
 
     function filterItemPicker(q) {
       const lower = q.toLowerCase();
       const container = document.getElementById('item-picker-list');
-      const el = selectedEl();
-      const filterType = el ? el.type : null;
-      const filteredSkins = (filterType === 'skin' || !filterType) ? allPickerSkins.filter(s => s.name.toLowerCase().includes(lower)) : [];
-      const filteredCrates = (filterType === 'crate' || !filterType) ? allPickerCrates.filter(c => c.name.toLowerCase().includes(lower)) : [];
+      const filteredSkins = allPickerSkins.filter(s => s.name.toLowerCase().includes(lower));
+      const filteredCrates = allPickerCrates.filter(c => c.name.toLowerCase().includes(lower));
       let html = '';
       if (filteredCrates.length > 0) {
         html += '<p class="text-xs text-gray-500 uppercase font-bold mb-1">Crates</p>';
-        html += filteredCrates.map(c => `<div class="flex items-center gap-3 bg-gray-800/50 rounded-lg p-2 cursor-pointer hover:bg-gray-700 border border-gray-700" onclick="pickItem('crate','${esc(c.crateId)}','${esc(c.name)}')">
+        html += filteredCrates.map(c => `<div class="flex items-center gap-3 bg-gray-800/50 rounded-lg p-2 cursor-pointer hover:bg-gray-700 border border-gray-700" onclick="pickItem('crate','${esc(c.crateId)}')">
           <div class="w-8 h-8 rounded" style="background:${esc(c.imageColor || '#7c3aed')}"></div>
           <span class="text-sm text-white flex-1 truncate">${esc(c.name)}</span>
           <span class="text-xs px-1.5 py-0.5 rounded bg-blue-900/50 text-blue-400">CRATE</span>
@@ -1419,7 +1116,7 @@
       }
       if (filteredSkins.length > 0) {
         html += '<p class="text-xs text-gray-500 uppercase font-bold mb-1 mt-3">Skins</p>';
-        html += filteredSkins.map(s => `<div class="flex items-center gap-3 bg-gray-800/50 rounded-lg p-2 cursor-pointer hover:bg-gray-700 border border-gray-700" onclick="pickItem('skin','${esc(s.skinId)}','${esc(s.name)}')">
+        html += filteredSkins.map(s => `<div class="flex items-center gap-3 bg-gray-800/50 rounded-lg p-2 cursor-pointer hover:bg-gray-700 border border-gray-700" onclick="pickItem('skin','${esc(s.skinId)}')">
           ${s.type === 'color' ? `<div class="w-8 h-8 rounded-full" style="background:${esc(s.cssValue)}"></div>` : `<div class="w-8 h-8 rounded bg-gray-700 flex items-center justify-center"><img src="${esc(s.imageUrl)}" class="h-6 object-contain" /></div>`}
           <span class="text-sm text-white flex-1 truncate">${esc(s.name)}</span>
           <span class="text-xs px-1.5 py-0.5 rounded bg-purple-900/50 text-purple-400">SKIN</span>
@@ -1429,46 +1126,39 @@
       container.innerHTML = html;
     }
 
-    function pickItem(itemType, itemId, name) {
-      const el = selectedEl();
-      if (el && (el.type === 'skin' || el.type === 'crate')) {
-        el.itemId = itemId;
+    function pickItem(itemType, itemId) {
+      if (pickerMode === 'change' && selectedItemId) {
+        const s = getSelectedSection();
+        if (s) {
+          const item = s.items.find(i => i.id === selectedItemId);
+          if (item) { item.itemType = itemType; item.itemId = itemId; }
+        }
         closeItemPicker();
-        renderCanvas();
-        updatePropsPanel();
+        renderAll();
         return;
       }
+      addItemToSection(itemType, itemId);
       closeItemPicker();
     }
 
-    async function saveCanvasLayout() {
+    // ---- Save ----
+    async function saveLayout() {
       try {
-        const cleaned = canvasElements.map(el => {
-          const o = { id: el.id, type: el.type, x: el.x, y: el.y, w: el.w, h: el.h, zIndex: el.zIndex || 0 };
-          if (el.type === 'text') { o.text = el.text; o.fontSize = el.fontSize; o.fontColor = el.fontColor; o.fontWeight = el.fontWeight; o.textAlign = el.textAlign; }
-          if (el.type === 'image') o.imageUrl = el.imageUrl;
-          if (el.type === 'skin' || el.type === 'crate') o.itemId = el.itemId;
-          if (el.type === 'crate') {
-            if (el.crateBackgroundImage) o.crateBackgroundImage = el.crateBackgroundImage;
-            if (el.crateIconImage) o.crateIconImage = el.crateIconImage;
-            if (el.crateShowIcon === false) o.crateShowIcon = false;
-            if (el.crateTextColor && el.crateTextColor !== '#ffffff') o.crateTextColor = el.crateTextColor;
-            if (el.crateTextBg) o.crateTextBg = el.crateTextBg;
-            if (el.crateFontSize && el.crateFontSize !== 13) o.crateFontSize = el.crateFontSize;
-          }
-          if (el.backgroundColor) o.backgroundColor = el.backgroundColor;
-          if (el.borderRadius) o.borderRadius = el.borderRadius;
-          if (el.borderColor) o.borderColor = el.borderColor;
-          if (el.opacity != null && el.opacity !== 1) o.opacity = el.opacity;
-          return o;
-        });
+        const cleaned = layoutSections.map(s => ({
+          id: s.id, title: s.title, type: s.type, order: s.order,
+          bannerImage: s.bannerImage || null,
+          items: (s.items || []).map(i => ({
+            id: i.id, itemType: i.itemType, itemId: i.itemId,
+            size: i.size, order: i.order,
+          })),
+        }));
         const res = await fetch('/api/admin/shop-layout', {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json', 'X-Admin-Password': adminPw },
-          body: JSON.stringify({ elements: cleaned, canvasHeight: canvasHeightPx }),
+          body: JSON.stringify({ sections: cleaned }),
         });
         const data = await res.json();
-        if (data.layout) alert('Canvas layout saved!');
+        if (data.layout) alert('Shop layout saved!');
         else alert('Error: ' + (data.error || 'Unknown'));
       } catch (err) { alert('Save failed: ' + err.message); }
     }
