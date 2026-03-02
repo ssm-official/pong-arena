@@ -135,6 +135,7 @@
             <option value="super_rare">Super Rare</option>
             <option value="legendary">Legendary</option>
             <option value="mythic">Mythic</option>
+            <option value="secret">Secret</option>
           </select>
         </div>
         <div class="mt-3 grid grid-cols-2 gap-3">
@@ -496,7 +497,7 @@
                     }
                     <div>
                       <span class="text-sm font-medium">${esc(s.name)}</span>
-                      <span class="text-xs ml-1 ${s.rarity === 'mythic' ? 'text-red-400' : s.rarity === 'legendary' ? 'text-yellow-400' : s.rarity === 'super_rare' ? 'text-pink-400' : s.rarity === 'rare' ? 'text-purple-400' : s.rarity === 'uncommon' ? 'text-green-400' : 'text-gray-500'}">${s.rarity}</span>
+                      <span class="text-xs ml-1 ${s.rarity === 'secret' ? 'text-cyan-300' : s.rarity === 'mythic' ? 'text-red-400' : s.rarity === 'legendary' ? 'text-yellow-400' : s.rarity === 'super_rare' ? 'text-pink-400' : s.rarity === 'rare' ? 'text-purple-400' : s.rarity === 'uncommon' ? 'text-green-400' : 'text-gray-500'}">${s.rarity}</span>
                     </div>
                   </div>
                   <div class="flex gap-1">
@@ -1017,7 +1018,7 @@
       } else {
         const skin = allPickerSkins.find(s => s.skinId === item.itemId);
         if (!skin) return `<div class="${height} flex items-center justify-center text-gray-500 text-xs">Skin not found</div>`;
-        const rarityColor = { mythic: 'text-red-400', legendary: 'text-yellow-400', super_rare: 'text-pink-400', rare: 'text-purple-400', uncommon: 'text-green-400', common: 'text-gray-400' }[skin.rarity] || 'text-gray-400';
+        const rarityColor = { secret: 'text-cyan-300', mythic: 'text-red-400', legendary: 'text-yellow-400', super_rare: 'text-pink-400', rare: 'text-purple-400', uncommon: 'text-green-400', common: 'text-gray-400' }[skin.rarity] || 'text-gray-400';
         let preview;
         if (iconImg) {
           preview = iconImg;

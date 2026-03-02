@@ -32,7 +32,7 @@ router.get('/', optionalAuth, async (req, res) => {
     const cratesWithSkins = crates.map(c => {
       const crateSkins = skins.filter(s => s.crateId === c.crateId);
       const unownedCount = crateSkins.filter(s => !ownedIds.includes(s.skinId)).length;
-      const rarityBreakdown = { common: 0, uncommon: 0, rare: 0, super_rare: 0, legendary: 0, mythic: 0 };
+      const rarityBreakdown = { common: 0, uncommon: 0, rare: 0, super_rare: 0, legendary: 0, mythic: 0, secret: 0 };
       crateSkins.forEach(s => { if (rarityBreakdown[s.rarity] !== undefined) rarityBreakdown[s.rarity]++; });
 
       return {
@@ -90,8 +90,8 @@ router.get('/crate/:crateId/skins', async (req, res) => {
     const crate = await Crate.findOne({ crateId: req.params.crateId, active: true });
     if (!crate) return res.status(404).json({ error: 'Crate not found' });
     const skins = await Skin.find({ crateId: crate.crateId });
-    const weights = { common: 70, uncommon: 50, rare: 25, super_rare: 12, legendary: 5, mythic: 2 };
-    const rarityCounts = { common: 0, uncommon: 0, rare: 0, super_rare: 0, legendary: 0, mythic: 0 };
+    const weights = { common: 70, uncommon: 50, rare: 25, super_rare: 12, legendary: 5, mythic: 2, secret: 0.02 };
+    const rarityCounts = { common: 0, uncommon: 0, rare: 0, super_rare: 0, legendary: 0, mythic: 0, secret: 0 };
     skins.forEach(s => { if (rarityCounts[s.rarity] !== undefined) rarityCounts[s.rarity]++; });
     const skinsWithChance = skins.map(s => {
       const count = rarityCounts[s.rarity] || 1;
@@ -195,10 +195,10 @@ router.post('/open-crate', authMiddleware, async (req, res) => {
     const ownedIds = user.skins.map(s => s.skinId);
 
     // Weighted random by rarity
-    const weights = { common: 70, uncommon: 50, rare: 25, super_rare: 12, legendary: 5, mythic: 2 };
+    const weights = { common: 7000, uncommon: 5000, rare: 2500, super_rare: 1200, legendary: 500, mythic: 200, secret: 2 };
     const weighted = [];
     for (const skin of crateSkins) {
-      const w = weights[skin.rarity] || 70;
+      const w = weights[skin.rarity] || 7000;
       for (let i = 0; i < w; i++) weighted.push(skin);
     }
     const droppedSkin = weighted[Math.floor(Math.random() * weighted.length)];

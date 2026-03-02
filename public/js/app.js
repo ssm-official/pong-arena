@@ -12,6 +12,7 @@ let chosenSide = 'left';
 
 // --- Rarity config ---
 const RARITY_COLORS = {
+  secret:     { hex: '#06b6d4', tw: 'text-cyan-300',   border: 'border-cyan-400/60',   bg: 'bg-cyan-900/50',   bgRgba: 'rgba(6,182,212,0.2)' },
   mythic:     { hex: '#ef4444', tw: 'text-red-400',    border: 'border-red-600/50',    bg: 'bg-red-900/50',    bgRgba: 'rgba(239,68,68,0.15)' },
   legendary:  { hex: '#eab308', tw: 'text-yellow-400', border: 'border-yellow-600/50', bg: 'bg-yellow-900/50', bgRgba: 'rgba(234,179,8,0.15)' },
   super_rare: { hex: '#ec4899', tw: 'text-pink-400',   border: 'border-pink-600/50',   bg: 'bg-pink-900/50',   bgRgba: 'rgba(236,72,153,0.15)' },
@@ -22,7 +23,7 @@ const RARITY_COLORS = {
 function rc(rarity) { return RARITY_COLORS[rarity] || RARITY_COLORS.common; }
 function rarityBadge(rarity) {
   const map = {
-    mythic: 'bg-red-900 text-red-300', legendary: 'bg-yellow-900 text-yellow-300',
+    secret: 'bg-cyan-900 text-cyan-200', mythic: 'bg-red-900 text-red-300', legendary: 'bg-yellow-900 text-yellow-300',
     super_rare: 'bg-pink-900 text-pink-300', rare: 'bg-purple-900 text-purple-300',
     uncommon: 'bg-green-900 text-green-300', common: 'bg-gray-800 text-gray-400',
   };
@@ -2056,6 +2057,7 @@ function renderCrateCard(c, section, ownedCount) {
             ${c.rarityBreakdown.super_rare ? `<span class="text-pink-400">${c.rarityBreakdown.super_rare}SR</span>` : ''}
             ${c.rarityBreakdown.legendary ? `<span class="text-yellow-400">${c.rarityBreakdown.legendary}L</span>` : ''}
             ${c.rarityBreakdown.mythic ? `<span class="text-red-400">${c.rarityBreakdown.mythic}M</span>` : ''}
+            ${c.rarityBreakdown.secret ? `<span class="text-cyan-300">${c.rarityBreakdown.secret}S</span>` : ''}
             <span class="text-gray-600">|</span>
             <span class="text-white font-semibold">${usdPrice}${c.price.toLocaleString()} $PONG</span>
           </div>
@@ -2203,7 +2205,7 @@ function playTickSound(progress) {
 function playRevealSound(rarity) {
   try {
     const ctx = getRollerAudioCtx();
-    const isHigh = ['mythic', 'legendary'].includes(rarity);
+    const isHigh = ['secret', 'mythic', 'legendary'].includes(rarity);
     const isMid = ['super_rare', 'rare'].includes(rarity);
     const freqs = isHigh ? [523, 659, 784, 1047] : isMid ? [523, 659, 784] : [523, 659];
     const duration = isHigh ? 1.2 : isMid ? 0.8 : 0.5;
@@ -2297,7 +2299,7 @@ function showFinalReveal(skin, isDuplicate) {
   const rarityLabel = (skin.rarity || 'common').replace('_', ' ').toUpperCase();
   rarityEl.textContent = isDuplicate ? rarityLabel + ' (DUPLICATE)' : rarityLabel;
   rarityEl.className = `text-sm mb-4 font-bold ${isDuplicate ? 'text-gray-500' : rc(skin.rarity).tw}`;
-  if (['mythic', 'legendary'].includes(skin.rarity)) {
+  if (['secret', 'mythic', 'legendary'].includes(skin.rarity)) {
     const flash = document.getElementById('roller-flash');
     flash.style.opacity = '0.6';
     setTimeout(() => { flash.style.opacity = '0'; }, 300);
