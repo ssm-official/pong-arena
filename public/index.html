@@ -71,6 +71,23 @@
     .shop-anim-underline.shop-ul-shimmer { background: linear-gradient(90deg, #7c3aed, #f59e0b, #7c3aed); }
     .shop-anim-underline.shop-ul-fire { background: linear-gradient(90deg, #ff4500, #ff8c00, #ff4500); }
     .shop-countdown { font-variant-numeric: tabular-nums; }
+    /* === SECRET CUTSCENE === */
+    #secret-cutscene { background: #000; }
+    #secret-cutscene canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+    @keyframes secret-crack { 0% { opacity: 0; transform: scaleY(0); } 30% { opacity: 1; transform: scaleY(1); } 100% { opacity: 0; } }
+    @keyframes secret-flash { 0% { opacity: 0; } 15% { opacity: 1; } 100% { opacity: 0; } }
+    @keyframes secret-zoom-in { 0% { transform: scale(0) rotate(-180deg); opacity: 0; } 60% { transform: scale(1.2) rotate(10deg); opacity: 1; } 80% { transform: scale(0.95) rotate(-3deg); } 100% { transform: scale(1) rotate(0deg); opacity: 1; } }
+    @keyframes secret-title-in { 0% { opacity: 0; transform: translateY(30px) scale(0.5); letter-spacing: 1em; } 50% { opacity: 1; transform: translateY(-5px) scale(1.1); letter-spacing: 0.3em; } 100% { transform: translateY(0) scale(1); letter-spacing: 0.2em; } }
+    @keyframes secret-name-in { 0% { opacity: 0; transform: translateY(20px); } 100% { opacity: 1; transform: translateY(0); } }
+    @keyframes secret-holo { 0% { filter: hue-rotate(0deg) brightness(1.2); } 100% { filter: hue-rotate(360deg) brightness(1.2); } }
+    @keyframes secret-ring { 0% { transform: scale(0); opacity: 0.8; } 100% { transform: scale(3); opacity: 0; } }
+    @keyframes secret-pulse-border { 0%, 100% { box-shadow: 0 0 30px rgba(6,182,212,0.6), 0 0 60px rgba(6,182,212,0.3), inset 0 0 30px rgba(6,182,212,0.1); } 50% { box-shadow: 0 0 50px rgba(6,182,212,0.9), 0 0 100px rgba(6,182,212,0.5), inset 0 0 50px rgba(6,182,212,0.2); } }
+    @keyframes secret-star { 0% { transform: scale(0) rotate(0deg); opacity: 1; } 50% { opacity: 1; } 100% { transform: scale(1) rotate(180deg); opacity: 0; } }
+    .secret-item-frame { animation: secret-zoom-in 1s cubic-bezier(0.34,1.56,0.64,1) forwards, secret-pulse-border 2s ease-in-out 1s infinite; border: 3px solid #06b6d4; border-radius: 16px; }
+    .secret-title-text { animation: secret-title-in 1.2s cubic-bezier(0.34,1.56,0.64,1) forwards; background: linear-gradient(90deg, #06b6d4, #a855f7, #ec4899, #eab308, #06b6d4); background-size: 200% auto; -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+    .secret-title-text.holo { animation: secret-title-in 1.2s cubic-bezier(0.34,1.56,0.64,1) forwards, secret-holo 3s linear 1.2s infinite; }
+    .secret-name-text { animation: secret-name-in 0.8s ease-out forwards; }
+    .secret-ring-burst { position: absolute; width: 100px; height: 100px; border: 3px solid #06b6d4; border-radius: 50%; animation: secret-ring 1s ease-out forwards; pointer-events: none; }
     .pfp-dropzone.drag-over { border-color: #a855f7; background: rgba(168, 85, 247, 0.1); }
     /* Autocomplete dropdown */
     .autocomplete-dropdown { position: absolute; z-index: 40; top: 100%; left: 0; right: 0; max-height: 240px; overflow-y: auto; }
@@ -1494,6 +1511,19 @@
     </div>
   </div>
 
+  <!-- ============ SECRET CUTSCENE OVERLAY ============ -->
+  <div id="secret-cutscene" class="hidden fixed inset-0 z-[70] flex flex-col items-center justify-center overflow-hidden cursor-pointer">
+    <canvas id="secret-particles"></canvas>
+    <div id="secret-flash-layer" class="fixed inset-0 z-[71] pointer-events-none" style="opacity:0;background:radial-gradient(circle,rgba(6,182,212,1) 0%,rgba(168,85,247,0.6) 40%,transparent 70%)"></div>
+    <div id="secret-content" class="relative z-[72] flex flex-col items-center justify-center opacity-0">
+      <div id="secret-item-preview" class="secret-item-frame w-36 h-36 flex items-center justify-center bg-gray-900/80 mb-6 relative overflow-visible"></div>
+      <div id="secret-label" class="secret-title-text holo text-4xl sm:text-5xl font-black tracking-widest mb-3 opacity-0">SECRET</div>
+      <h2 id="secret-skin-name" class="secret-name-text text-2xl font-bold text-white mb-2 opacity-0"></h2>
+      <p id="secret-skin-desc" class="secret-name-text text-gray-400 text-sm mb-6 opacity-0"></p>
+      <p class="text-gray-600 text-xs animate-pulse mt-4">Click anywhere to continue</p>
+    </div>
+  </div>
+
   <!-- ============ PRACTICE BUTTON (bottom-right) ============ -->
   <a href="/practice.html" id="practice-fab" class="fixed bottom-5 right-5 z-40 bg-purple-600 hover:bg-purple-700 text-white rounded-xl px-4 py-2.5 flex items-center gap-2 shadow-lg shadow-purple-900/40 transition hover:scale-105" style="text-decoration:none;">
     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
@@ -1512,6 +1542,6 @@
   <script src="/js/wallet.js?v=33"></script>
   <script src="/js/pong-sim.js?v=34"></script>
   <script src="/js/game-client.js?v=40"></script>
-  <script src="/js/app.js?v=74"></script>
+  <script src="/js/app.js?v=75"></script>
 </body>
 </html>

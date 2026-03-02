@@ -2091,7 +2091,7 @@ async function openCratePreview(crateId) {
     }
     grid.innerHTML = res.skins.map(s => {
       const rarityClass = rarityBadge(s.rarity);
-      const chancePct = s.chance >= 1 ? s.chance.toFixed(0) + '%' : s.chance.toFixed(1) + '%';
+      const chancePct = s.chance >= 1 ? s.chance.toFixed(0) + '%' : s.chance >= 0.1 ? s.chance.toFixed(1) + '%' : s.chance.toFixed(2) + '%';
       const chanceColor = rc(s.rarity).tw;
       let preview, bgColor;
       if (s.type === 'color') {
@@ -2108,7 +2108,7 @@ async function openCratePreview(crateId) {
             ${preview}
           </div>
           <h4 class="font-bold text-xs text-center truncate w-full">${esc(s.name)}</h4>
-          <span class="text-xs px-1.5 py-0.5 rounded ${rarityClass}">${s.rarity}</span>
+          <span class="text-xs px-1.5 py-0.5 rounded ${rarityClass}">${(s.rarity || 'common').replace('_', ' ')}</span>
           <span class="text-xs font-mono ${chanceColor}">${chancePct}</span>
         </div>
       `;
@@ -2323,7 +2323,14 @@ async function showCrateRoller(wonSkin, crateSkins, isDuplicate) {
   const { cards, winIndex } = buildRollerStrip(wonSkin, crateSkins);
   await new Promise(r => setTimeout(r, 300));
   await animateRoller(cards, winIndex);
-  showFinalReveal(wonSkin, isDuplicate);
+
+  if (wonSkin.rarity === 'secret') {
+    // Hide roller modal, launch epic cutscene
+    modal.classList.add('hidden');
+    await playSecretCutscene(wonSkin, isDuplicate);
+  } else {
+    showFinalReveal(wonSkin, isDuplicate);
+  }
 }
 
 function closeRoller() {
@@ -2331,6 +2338,330 @@ function closeRoller() {
   document.getElementById('roller-reveal').classList.add('hidden');
   document.getElementById('roller-reveal-preview').classList.remove('reveal-glow');
   loadShop();
+}
+
+// ===========================================
+// SECRET RARITY — EPIC CUTSCENE
+// ===========================================
+
+let secretParticleAnim = null;
+
+function playSecretCutscene(skin, isDuplicate) {
+  return new Promise((resolve) => {
+    const cutscene = document.getElementById('secret-cutscene');
+    const canvas = document.getElementById('secret-particles');
+    const flashLayer = document.getElementById('secret-flash-layer');
+    const content = document.getElementById('secret-content');
+    const itemPreview = document.getElementById('secret-item-preview');
+    const label = document.getElementById('secret-label');
+    const nameEl = document.getElementById('secret-skin-name');
+    const descEl = document.getElementById('secret-skin-desc');
+    const ctx = canvas.getContext('2d');
+
+    // Reset all
+    content.style.opacity = '0';
+    label.style.opacity = '0';
+    nameEl.style.opacity = '0';
+    descEl.style.opacity = '0';
+    flashLayer.style.opacity = '0';
+    flashLayer.style.transition = 'none';
+    itemPreview.innerHTML = '';
+    cutscene.classList.remove('hidden');
+
+    // Size canvas
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+    const W = canvas.width, H = canvas.height;
+    const cx = W / 2, cy = H / 2;
+
+    // ---- Particle system ----
+    const particles = [];
+    const phase = { current: 0 }; // 0=vortex, 1=converge, 2=explode, 3=ambient
+
+    function spawnParticle(opts = {}) {
+      const angle = Math.random() * Math.PI * 2;
+      const dist = opts.dist || (150 + Math.random() * 300);
+      particles.push({
+        x: opts.x ?? (cx + Math.cos(angle) * dist),
+        y: opts.y ?? (cy + Math.sin(angle) * dist),
+        vx: opts.vx || 0, vy: opts.vy || 0,
+        size: opts.size || (1 + Math.random() * 3),
+        life: opts.life || (60 + Math.random() * 120),
+        maxLife: opts.life || (60 + Math.random() * 120),
+        hue: opts.hue ?? (180 + Math.random() * 60), // cyan range
+        angle, dist, speed: opts.speed || (0.02 + Math.random() * 0.03),
+      });
+    }
+
+    // Spawn initial vortex particles
+    for (let i = 0; i < 200; i++) spawnParticle();
+
+    function updateParticles() {
+      for (let i = particles.length - 1; i >= 0; i--) {
+        const p = particles[i];
+        p.life--;
+        if (p.life <= 0) { particles.splice(i, 1); continue; }
+
+        if (phase.current === 0) {
+          // Vortex — orbit and slowly pull in
+          p.angle += p.speed;
+          p.dist = Math.max(p.dist - 0.5, 10);
+          p.x = cx + Math.cos(p.angle) * p.dist;
+          p.y = cy + Math.sin(p.angle) * p.dist;
+        } else if (phase.current === 1) {
+          // Converge to center fast
+          const dx = cx - p.x, dy = cy - p.y;
+          const d = Math.sqrt(dx * dx + dy * dy);
+          if (d > 5) { p.x += dx * 0.08; p.y += dy * 0.08; }
+        } else if (phase.current === 2) {
+          // Explode outward
+          p.x += p.vx; p.y += p.vy;
+          p.vx *= 0.97; p.vy *= 0.97;
+        } else {
+          // Ambient float
+          p.angle += p.speed * 0.5;
+          p.x += Math.cos(p.angle) * 0.5;
+          p.y += Math.sin(p.angle) * 0.3 + p.vy;
+          p.vy = (p.vy || 0) - 0.01;
+        }
+      }
+    }
+
+    function drawParticles() {
+      ctx.clearRect(0, 0, W, H);
+      for (const p of particles) {
+        const alpha = Math.min(1, p.life / p.maxLife * 2);
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+        ctx.fillStyle = `hsla(${p.hue}, 100%, 70%, ${alpha})`;
+        ctx.fill();
+        // Glow
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size * 3, 0, Math.PI * 2);
+        ctx.fillStyle = `hsla(${p.hue}, 100%, 70%, ${alpha * 0.15})`;
+        ctx.fill();
+      }
+    }
+
+    let frameId;
+    function particleLoop() {
+      updateParticles();
+      drawParticles();
+      frameId = requestAnimationFrame(particleLoop);
+    }
+    frameId = requestAnimationFrame(particleLoop);
+    secretParticleAnim = frameId;
+
+    // ---- Sound: building tension ----
+    function playSecretBuildSound() {
+      try {
+        const actx = getRollerAudioCtx();
+        // Low rumble
+        const rumble = actx.createOscillator();
+        const rumbleGain = actx.createGain();
+        rumble.connect(rumbleGain); rumbleGain.connect(actx.destination);
+        rumble.frequency.value = 60;
+        rumble.type = 'sawtooth';
+        rumbleGain.gain.setValueAtTime(0, actx.currentTime);
+        rumbleGain.gain.linearRampToValueAtTime(0.08, actx.currentTime + 1.5);
+        rumbleGain.gain.linearRampToValueAtTime(0.12, actx.currentTime + 2.5);
+        rumbleGain.gain.exponentialRampToValueAtTime(0.001, actx.currentTime + 3);
+        rumble.start(actx.currentTime);
+        rumble.stop(actx.currentTime + 3);
+
+        // Rising tone
+        const rise = actx.createOscillator();
+        const riseGain = actx.createGain();
+        rise.connect(riseGain); riseGain.connect(actx.destination);
+        rise.frequency.setValueAtTime(200, actx.currentTime);
+        rise.frequency.exponentialRampToValueAtTime(2000, actx.currentTime + 2.5);
+        rise.type = 'sine';
+        riseGain.gain.setValueAtTime(0, actx.currentTime);
+        riseGain.gain.linearRampToValueAtTime(0.05, actx.currentTime + 1);
+        riseGain.gain.linearRampToValueAtTime(0.1, actx.currentTime + 2.3);
+        riseGain.gain.exponentialRampToValueAtTime(0.001, actx.currentTime + 2.8);
+        rise.start(actx.currentTime);
+        rise.stop(actx.currentTime + 3);
+      } catch (e) {}
+    }
+
+    function playSecretRevealSound() {
+      try {
+        const actx = getRollerAudioCtx();
+        // Impact boom
+        const boom = actx.createOscillator();
+        const boomGain = actx.createGain();
+        boom.connect(boomGain); boomGain.connect(actx.destination);
+        boom.frequency.value = 80;
+        boom.type = 'sine';
+        boomGain.gain.setValueAtTime(0.3, actx.currentTime);
+        boomGain.gain.exponentialRampToValueAtTime(0.001, actx.currentTime + 0.8);
+        boom.start(actx.currentTime);
+        boom.stop(actx.currentTime + 0.8);
+
+        // Bright chime arpeggio
+        const notes = [523, 659, 784, 1047, 1319, 1568];
+        notes.forEach((freq, i) => {
+          const osc = actx.createOscillator();
+          const gain = actx.createGain();
+          osc.connect(gain); gain.connect(actx.destination);
+          osc.frequency.value = freq;
+          osc.type = 'sine';
+          const t = actx.currentTime + 0.1 + i * 0.07;
+          gain.gain.setValueAtTime(0.12, t);
+          gain.gain.exponentialRampToValueAtTime(0.001, t + 1.5);
+          osc.start(t);
+          osc.stop(t + 1.5);
+        });
+
+        // Shimmer noise
+        const bufferSize = actx.sampleRate * 2;
+        const buffer = actx.createBuffer(1, bufferSize, actx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < bufferSize; i++) data[i] = (Math.random() * 2 - 1) * 0.3;
+        const noise = actx.createBufferSource();
+        noise.buffer = buffer;
+        const noiseFilter = actx.createBiquadFilter();
+        noiseFilter.type = 'highpass';
+        noiseFilter.frequency.value = 6000;
+        const noiseGain = actx.createGain();
+        noise.connect(noiseFilter); noiseFilter.connect(noiseGain); noiseGain.connect(actx.destination);
+        noiseGain.gain.setValueAtTime(0.06, actx.currentTime);
+        noiseGain.gain.exponentialRampToValueAtTime(0.001, actx.currentTime + 1.5);
+        noise.start(actx.currentTime);
+        noise.stop(actx.currentTime + 1.5);
+      } catch (e) {}
+    }
+
+    // ---- Timeline ----
+    playSecretBuildSound();
+
+    // Phase 0: Vortex (0-2s) — already running
+    // Add more particles over time
+    const spawnInterval = setInterval(() => {
+      for (let i = 0; i < 8; i++) spawnParticle({ hue: 170 + Math.random() * 80 });
+    }, 50);
+
+    // Phase 1: Converge (2s)
+    setTimeout(() => { phase.current = 1; }, 2000);
+
+    // Phase 2: Flash + Explode (2.8s)
+    setTimeout(() => {
+      clearInterval(spawnInterval);
+      phase.current = 2;
+
+      // Flash
+      flashLayer.style.transition = 'none';
+      flashLayer.style.opacity = '1';
+      setTimeout(() => {
+        flashLayer.style.transition = 'opacity 0.6s ease-out';
+        flashLayer.style.opacity = '0';
+      }, 80);
+
+      playSecretRevealSound();
+
+      // Explode particles outward
+      for (const p of particles) {
+        const angle = Math.atan2(p.y - cy, p.x - cx);
+        const speed = 4 + Math.random() * 12;
+        p.vx = Math.cos(angle) * speed;
+        p.vy = Math.sin(angle) * speed;
+        p.life = 60 + Math.random() * 40;
+        p.maxLife = p.life;
+        p.hue = Math.random() * 360; // Rainbow explosion
+      }
+
+      // Spawn explosion particles
+      for (let i = 0; i < 150; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        const speed = 3 + Math.random() * 15;
+        spawnParticle({
+          x: cx, y: cy,
+          vx: Math.cos(angle) * speed,
+          vy: Math.sin(angle) * speed,
+          size: 1 + Math.random() * 4,
+          life: 50 + Math.random() * 60,
+          hue: Math.random() * 360,
+        });
+      }
+
+      // Ring bursts
+      for (let i = 0; i < 3; i++) {
+        setTimeout(() => {
+          const ring = document.createElement('div');
+          ring.className = 'secret-ring-burst';
+          ring.style.left = (cx - 50) + 'px';
+          ring.style.top = (cy - 50) + 'px';
+          ring.style.borderColor = `hsl(${180 + i * 40}, 80%, 60%)`;
+          cutscene.appendChild(ring);
+          setTimeout(() => ring.remove(), 1000);
+        }, i * 200);
+      }
+    }, 2800);
+
+    // Phase 3: Show item (3.5s)
+    setTimeout(() => {
+      phase.current = 3;
+      content.style.opacity = '1';
+      content.style.transition = 'opacity 0.3s';
+
+      // Skin preview
+      if (skin.type === 'color') {
+        itemPreview.innerHTML = `<div class="w-20 h-20 rounded-full" style="background:${esc(skin.cssValue)};box-shadow:0 0 40px ${esc(skin.cssValue)}, 0 0 80px ${esc(skin.cssValue)}44"></div>`;
+      } else {
+        itemPreview.innerHTML = `<img src="${esc(skin.imageUrl)}" class="h-24 object-contain" style="filter:drop-shadow(0 0 20px rgba(6,182,212,0.8))" />`;
+      }
+
+      // Ambient sparkle particles
+      const ambientInterval = setInterval(() => {
+        for (let i = 0; i < 3; i++) {
+          spawnParticle({
+            x: cx + (Math.random() - 0.5) * 400,
+            y: cy + (Math.random() - 0.5) * 400,
+            size: 0.5 + Math.random() * 2,
+            life: 80 + Math.random() * 80,
+            hue: 170 + Math.random() * 80,
+            speed: 0.01 + Math.random() * 0.02,
+            vy: -0.3 - Math.random() * 0.5,
+          });
+        }
+      }, 80);
+
+      // Cleanup ambient on close
+      cutscene._ambientInterval = ambientInterval;
+    }, 3500);
+
+    // Show label (4s)
+    setTimeout(() => {
+      label.style.opacity = '1';
+      label.textContent = isDuplicate ? 'SECRET (DUPLICATE)' : 'SECRET';
+    }, 4000);
+
+    // Show name (4.5s)
+    setTimeout(() => {
+      nameEl.style.opacity = '1';
+      nameEl.textContent = skin.name;
+      descEl.style.opacity = '1';
+      descEl.textContent = skin.description || '';
+    }, 4500);
+
+    // Click to close
+    function onClose() {
+      cutscene.removeEventListener('click', onClose);
+      cancelAnimationFrame(frameId);
+      if (cutscene._ambientInterval) clearInterval(cutscene._ambientInterval);
+      cutscene.classList.add('hidden');
+      particles.length = 0;
+      ctx.clearRect(0, 0, W, H);
+      loadShop();
+      resolve();
+    }
+
+    // Allow closing after 5s
+    setTimeout(() => {
+      cutscene.addEventListener('click', onClose);
+    }, 5000);
+  });
 }
 
 async function equipSkin(skinId) {
@@ -3378,7 +3709,7 @@ async function loadCosmetics() {
               <span class="text-[10px] px-1.5 py-0.5 rounded bg-gray-700 text-gray-400 flex-shrink-0">SKIN</span>
             </div>
             <div class="flex items-center justify-between mt-1.5">
-              <span class="text-xs px-1.5 py-0.5 rounded ${rarityClass}">${s.rarity}</span>
+              <span class="text-xs px-1.5 py-0.5 rounded ${rarityClass}">${(s.rarity || 'common').replace('_', ' ')}</span>
               <button onclick="equipFromCosmetics('${s.skinId}')" class="text-xs font-medium ${s.equipped ? 'text-green-400' : 'text-purple-400 hover:text-purple-300'}">
                 ${s.equipped ? '✓ Equipped' : 'Equip'}
               </button>
