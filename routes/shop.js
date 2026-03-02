@@ -90,12 +90,12 @@ router.get('/crate/:crateId/skins', async (req, res) => {
     const crate = await Crate.findOne({ crateId: req.params.crateId, active: true });
     if (!crate) return res.status(404).json({ error: 'Crate not found' });
     const skins = await Skin.find({ crateId: crate.crateId });
-    const weights = { common: 70, rare: 25, legendary: 5 };
-    const rarityCounts = { common: 0, rare: 0, legendary: 0 };
-    skins.forEach(s => { rarityCounts[s.rarity]++; });
+    const weights = { common: 70, uncommon: 50, rare: 25, super_rare: 12, legendary: 5, mythic: 2 };
+    const rarityCounts = { common: 0, uncommon: 0, rare: 0, super_rare: 0, legendary: 0, mythic: 0 };
+    skins.forEach(s => { if (rarityCounts[s.rarity] !== undefined) rarityCounts[s.rarity]++; });
     const skinsWithChance = skins.map(s => {
       const count = rarityCounts[s.rarity] || 1;
-      const chance = weights[s.rarity] / count;
+      const chance = (weights[s.rarity] || 70) / count;
       return { ...s.toObject(), chance: Math.round(chance * 100) / 100 };
     });
     res.json({ crate: { crateId: crate.crateId, name: crate.name }, skins: skinsWithChance });
@@ -195,7 +195,7 @@ router.post('/open-crate', authMiddleware, async (req, res) => {
     const ownedIds = user.skins.map(s => s.skinId);
 
     // Weighted random by rarity
-    const weights = { common: 70, rare: 25, legendary: 5 };
+    const weights = { common: 70, uncommon: 50, rare: 25, super_rare: 12, legendary: 5, mythic: 2 };
     const weighted = [];
     for (const skin of crateSkins) {
       const w = weights[skin.rarity] || 70;
