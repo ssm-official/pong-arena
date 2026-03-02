@@ -1968,6 +1968,10 @@ function renderShopTile(item, size, isFeatured, ownedCount) {
             <span class="text-xs text-purple-400 font-medium">${usdPrice}${Number(item.price).toLocaleString()} $PONG</span>
             ${ownedCount > 0 ? `<span class="text-xs text-green-400">${ownedCount} owned</span>` : ''}
           </div>
+          <div class="flex gap-2 mt-2">
+            ${ownedCount > 0 ? `<button onclick="event.stopPropagation();openOwnedCrate('${item.crateId}')" class="flex-1 bg-green-600 hover:bg-green-700 py-1.5 rounded-lg text-xs font-medium transition text-center">Open (${ownedCount})</button>` : ''}
+            <button onclick="event.stopPropagation();buyCrate('${item.crateId}')" class="flex-1 bg-purple-600 hover:bg-purple-700 py-1.5 rounded-lg text-xs font-medium transition text-center">Buy</button>
+          </div>
         </div>
       </div>`;
   }
