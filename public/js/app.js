@@ -1845,7 +1845,7 @@ function renderCanvasShop(layout, allSkins, allCrates, ownedSkinIds, ownedCrates
         <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:6px;padding:8px">
           ${iconHtml}
           <div style="text-align:center">
-            <div style="font-size:13px;font-weight:bold;color:#fff">${esc(crate.name)}</div>
+            <div style="font-size:13px;font-weight:bold;color:${el.crateTextColor||'#fff'};${el.crateTextBg?'background:'+esc(el.crateTextBg)+';padding:2px 6px;border-radius:4px;':''}">${esc(crate.name)}</div>
             <div style="font-size:9px;color:#9ca3af">${crate.totalSkins || '?'} skins</div>
             <div style="font-size:10px;color:#a855f7;font-weight:500;margin-top:2px">${usdPrice}${Number(crate.price).toLocaleString()} $PONG</div>
           </div>

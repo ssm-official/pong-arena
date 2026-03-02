@@ -274,6 +274,13 @@
                       <button id="crate-icon-remove" onclick="removeCrateIcon()" class="hidden text-red-400 text-[10px] mt-1 hover:underline">Remove custom icon</button>
                     </div>
                   </div>
+                  <div class="grid grid-cols-2 gap-1.5">
+                    <div><label class="text-gray-500">Text Color</label><input id="prop-crateTextColor" type="color" value="#ffffff" class="w-full h-7 bg-gray-800 border border-gray-700 rounded cursor-pointer" onchange="propChanged('crateTextColor',this.value)"></div>
+                    <div>
+                      <div class="flex items-center gap-1"><label class="text-gray-500">Text BG</label><label class="flex items-center gap-1 cursor-pointer"><input id="prop-crateTextBgEnable" type="checkbox" onchange="toggleCrateTextBg()"><span class="text-[10px] text-gray-400">On</span></label></div>
+                      <input id="prop-crateTextBg" type="color" value="#000000" class="w-full h-7 bg-gray-800 border border-gray-700 rounded cursor-pointer" onchange="propChanged('crateTextBg',this.value)" disabled>
+                    </div>
+                  </div>
                 </div>
                 <!-- Common styling -->
                 <div class="border-t border-gray-700 pt-2 space-y-1.5">
@@ -286,8 +293,15 @@
                     <div><label class="text-gray-500">Opacity</label><input id="prop-opacity" type="number" min="0" max="1" step="0.05" value="1" class="w-full bg-gray-800 border border-gray-700 rounded px-1.5 py-1 text-white" onchange="propChanged('opacity',Number(this.value))"></div>
                   </div>
                 </div>
-                <button onclick="deleteSelectedElement()" class="w-full bg-red-900 hover:bg-red-800 text-red-300 text-xs px-3 py-2 rounded-lg font-medium mt-2">Delete Element</button>
+                <button onclick="duplicateSelectedElement()" class="w-full bg-blue-900 hover:bg-blue-800 text-blue-300 text-xs px-3 py-2 rounded-lg font-medium mt-2">Duplicate Element</button>
+                <button onclick="deleteSelectedElement()" class="w-full bg-red-900 hover:bg-red-800 text-red-300 text-xs px-3 py-2 rounded-lg font-medium mt-1">Delete Element</button>
               </div>
+            </div>
+            <div id="props-multi" class="bg-arena-card rounded-xl border border-gray-800 p-4 hidden">
+              <h3 class="text-xs font-bold text-gray-400 uppercase mb-2">Multi-Selection</h3>
+              <p class="text-sm text-purple-400 font-bold mb-3"><span id="multi-count">0</span> elements selected</p>
+              <button onclick="duplicateSelectedElement()" class="w-full bg-blue-900 hover:bg-blue-800 text-blue-300 text-xs px-3 py-2 rounded-lg font-medium mb-1">Duplicate All</button>
+              <button onclick="deleteSelectedElement()" class="w-full bg-red-900 hover:bg-red-800 text-red-300 text-xs px-3 py-2 rounded-lg font-medium">Delete All</button>
             </div>
             <div id="props-empty" class="bg-arena-card rounded-xl border border-gray-800 p-4 text-center text-gray-500 text-sm">
               <p>Click an element to edit its properties</p>
@@ -816,6 +830,7 @@
     // ============================
     let canvasElements = [];
     let selectedElementId = null;
+    let selectedElementIds = new Set();
     let canvasHeightPx = 800;
     let canvasScale = 1;
     let allPickerSkins = [];
@@ -827,9 +842,26 @@
     let resizeCorner = '';
     let dragStartX = 0, dragStartY = 0;
     let dragElStartX = 0, dragElStartY = 0, dragElStartW = 0, dragElStartH = 0;
+    let dragStartPositions = {};
+
+    // Snap state
+    let activeSnapLines = [];
+    const SNAP_THRESHOLD = 1;
 
     function getEl(id) { return canvasElements.find(e => e.id === id); }
-    function selectedEl() { return getEl(selectedElementId); }
+    function selectedEl() { return selectedElementIds.size === 1 ? getEl([...selectedElementIds][0]) : null; }
+
+    function selectElement(id, additive) {
+      if (additive) {
+        if (selectedElementIds.has(id)) selectedElementIds.delete(id);
+        else selectedElementIds.add(id);
+      } else {
+        selectedElementIds = new Set([id]);
+      }
+      selectedElementId = selectedElementIds.size === 1 ? [...selectedElementIds][0] : null;
+      renderCanvas();
+      updatePropsPanel();
+    }
 
     function crateSvg(color) {
       const c = esc(color || '#7c3aed');
@@ -861,6 +893,7 @@
         canvasHeightPx = layout.canvasHeight || 800;
         document.getElementById('canvas-height-input').value = canvasHeightPx;
         selectedElementId = null;
+        selectedElementIds = new Set();
         renderCanvas();
         updatePropsPanel();
       } catch (err) { console.error('Failed to load layout:', err); }
@@ -874,9 +907,10 @@
       rescaleCanvas();
       let html = '';
       const sorted = [...canvasElements].sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0));
+      const singleSel = selectedElementIds.size === 1;
       for (const el of sorted) {
-        const sel = el.id === selectedElementId;
-        const border = sel ? 'border:2px solid #a855f7;' : (el.borderColor ? `border:1px solid ${el.borderColor};` : '');
+        const inSet = selectedElementIds.has(el.id);
+        const border = inSet ? 'border:2px solid #a855f7;' : (el.borderColor ? `border:1px solid ${el.borderColor};` : '');
         const bgImg = (el.type === 'crate' && el.crateBackgroundImage) ? `background-image:url('${el.crateBackgroundImage}');background-size:cover;background-position:center;` : '';
         const bg = el.backgroundColor ? `background-color:${el.backgroundColor};` : '';
         const radius = el.borderRadius ? `border-radius:${el.borderRadius}px;` : '';
@@ -914,14 +948,16 @@
                 iconHtml = `<div style="width:48px;height:48px">${crateSvg(crate.imageColor)}</div>`;
               }
             }
-            inner = `<div style="width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;padding:8px">${iconHtml}<span style="font-size:12px;color:#fff;font-weight:bold">${esc(crate.name)}</span><span style="font-size:9px;color:#9ca3af">${crate.skins ? crate.skins.length : '?'} skins</span><span style="font-size:10px;color:#a855f7">${Number(crate.price).toLocaleString()} $PONG</span></div>`;
+            const txtColor = el.crateTextColor || '#fff';
+            const txtBgStyle = el.crateTextBg ? `background:${el.crateTextBg};padding:2px 6px;border-radius:4px;` : '';
+            inner = `<div style="width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;padding:8px">${iconHtml}<span style="font-size:12px;color:${txtColor};font-weight:bold;${txtBgStyle}">${esc(crate.name)}</span><span style="font-size:9px;color:#9ca3af">${crate.skins ? crate.skins.length : '?'} skins</span><span style="font-size:10px;color:#a855f7">${Number(crate.price).toLocaleString()} $PONG</span></div>`;
           } else {
             inner = `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:#60a5fa;font-size:11px">Crate: ${esc(el.itemId||'none')}</div>`;
           }
         }
 
         html += `<div data-elid="${el.id}" style="${base}">${inner}`;
-        if (sel) {
+        if (inSet && singleSel) {
           const h = 'width:10px;height:10px;background:#a855f7;position:absolute;border-radius:2px;z-index:9999;';
           html += `<div data-resize="nw" style="${h}top:-5px;left:-5px;cursor:nw-resize"></div>`;
           html += `<div data-resize="ne" style="${h}top:-5px;right:-5px;cursor:ne-resize"></div>`;
@@ -929,6 +965,14 @@
           html += `<div data-resize="se" style="${h}bottom:-5px;right:-5px;cursor:se-resize"></div>`;
         }
         html += '</div>';
+      }
+      // Snap guide lines
+      for (const snap of activeSnapLines) {
+        if (snap.axis === 'x') {
+          html += `<div style="position:absolute;left:${snap.pos}%;top:0;width:0;height:100%;border-left:2px dashed #ec4899;pointer-events:none;z-index:99999"></div>`;
+        } else {
+          html += `<div style="position:absolute;top:${snap.pos}%;left:0;height:0;width:100%;border-top:2px dashed #06b6d4;pointer-events:none;z-index:99999"></div>`;
+        }
       }
       area.innerHTML = html;
       // Update element list
@@ -938,10 +982,10 @@
         listEl.innerHTML = '<p class="text-gray-500 text-center py-2">Empty canvas</p>';
       } else {
         listEl.innerHTML = canvasElements.map(el => {
-          const sel = el.id === selectedElementId ? 'bg-purple-900/40 border-purple-500' : 'border-gray-700 hover:border-gray-600';
+          const sel = selectedElementIds.has(el.id) ? 'bg-purple-900/40 border-purple-500' : 'border-gray-700 hover:border-gray-600';
           const label = el.type === 'text' ? (el.text||'Text').slice(0,20) : el.type === 'image' ? 'Image' : el.type === 'skin' ? 'Skin' : 'Crate';
           const typeColor = el.type === 'skin' ? 'text-purple-400' : el.type === 'crate' ? 'text-blue-400' : el.type === 'image' ? 'text-green-400' : 'text-gray-400';
-          return `<div class="border ${sel} rounded p-1.5 cursor-pointer flex items-center gap-1.5 transition" onclick="selectElement('${el.id}')">
+          return `<div class="border ${sel} rounded p-1.5 cursor-pointer flex items-center gap-1.5 transition" onclick="selectElement('${el.id}',event&&event.ctrlKey)">
             <span class="${typeColor} font-bold uppercase" style="font-size:9px">${el.type}</span>
             <span class="text-white truncate flex-1">${esc(label)}</span>
             <span class="text-gray-600">${el.zIndex||0}</span>
@@ -963,24 +1007,45 @@
         backgroundColor: type === 'text' ? '' : '#111128',
         borderRadius: 8, borderColor: '#333', opacity: 1,
         crateBackgroundImage: '', crateIconImage: '', crateShowIcon: true,
+        crateTextColor: '#ffffff', crateTextBg: '',
       };
       canvasElements.push(el);
       selectedElementId = el.id;
+      selectedElementIds = new Set([el.id]);
       renderCanvas();
       updatePropsPanel();
       if (type === 'skin' || type === 'crate') openItemPicker();
     }
 
-    function selectElement(id) {
-      selectedElementId = id;
+    // selectElement is now defined above with multi-select support
+
+    function toggleCrateTextBg() {
+      const enabled = document.getElementById('prop-crateTextBgEnable').checked;
+      const input = document.getElementById('prop-crateTextBg');
+      input.disabled = !enabled;
+      const el = selectedEl();
+      if (!el) return;
+      if (enabled) {
+        el.crateTextBg = input.value || '#000000';
+      } else {
+        el.crateTextBg = '';
+      }
       renderCanvas();
-      updatePropsPanel();
     }
 
     function updatePropsPanel() {
       const el = selectedEl();
       const panel = document.getElementById('props-panel');
+      const multi = document.getElementById('props-multi');
       const empty = document.getElementById('props-empty');
+      if (selectedElementIds.size > 1) {
+        panel.classList.add('hidden');
+        multi.classList.remove('hidden');
+        empty.classList.add('hidden');
+        document.getElementById('multi-count').textContent = selectedElementIds.size;
+        return;
+      }
+      multi.classList.add('hidden');
       if (!el) {
         panel.classList.add('hidden');
         empty.classList.remove('hidden');
@@ -1022,6 +1087,11 @@
         document.getElementById('crate-bg-remove').classList.toggle('hidden', !el.crateBackgroundImage);
         document.getElementById('prop-crate-icon-preview').innerHTML = el.crateIconImage ? `<img src="${esc(el.crateIconImage)}" class="max-h-12 mx-auto rounded" />` : '';
         document.getElementById('crate-icon-remove').classList.toggle('hidden', !el.crateIconImage);
+        document.getElementById('prop-crateTextColor').value = el.crateTextColor || '#ffffff';
+        const hasBg = !!el.crateTextBg;
+        document.getElementById('prop-crateTextBgEnable').checked = hasBg;
+        document.getElementById('prop-crateTextBg').disabled = !hasBg;
+        document.getElementById('prop-crateTextBg').value = el.crateTextBg || '#000000';
       }
       // Common styling
       document.getElementById('prop-bgColor').value = el.backgroundColor || '#111128';
@@ -1046,23 +1116,123 @@
     }
 
     function deleteSelectedElement() {
-      if (!selectedElementId) return;
-      canvasElements = canvasElements.filter(e => e.id !== selectedElementId);
+      if (selectedElementIds.size === 0) return;
+      canvasElements = canvasElements.filter(e => !selectedElementIds.has(e.id));
       selectedElementId = null;
+      selectedElementIds = new Set();
+      renderCanvas();
+      updatePropsPanel();
+    }
+
+    function duplicateSelectedElement() {
+      if (selectedElementIds.size === 0) return;
+      const newIds = new Set();
+      const maxZ = canvasElements.reduce((m, e) => Math.max(m, e.zIndex || 0), 0);
+      let zOff = 1;
+      for (const id of selectedElementIds) {
+        const orig = getEl(id);
+        if (!orig) continue;
+        const clone = JSON.parse(JSON.stringify(orig));
+        clone.id = crypto.randomUUID();
+        clone.x = Math.min(100 - clone.w, clone.x + 2);
+        clone.y = Math.min(100 - clone.h, clone.y + 2);
+        clone.zIndex = maxZ + zOff++;
+        canvasElements.push(clone);
+        newIds.add(clone.id);
+      }
+      selectedElementIds = newIds;
+      selectedElementId = newIds.size === 1 ? [...newIds][0] : null;
       renderCanvas();
       updatePropsPanel();
     }
 
     // Keyboard delete
     document.addEventListener('keydown', e => {
-      if ((e.key === 'Delete' || e.key === 'Backspace') && selectedElementId && !['INPUT','TEXTAREA','SELECT'].includes(document.activeElement.tagName)) {
+      if ((e.key === 'Delete' || e.key === 'Backspace') && selectedElementIds.size > 0 && !['INPUT','TEXTAREA','SELECT'].includes(document.activeElement.tagName)) {
         deleteSelectedElement();
       }
     });
 
+    // Snap alignment
+    function computeSnap(el, isResizeOp, resizeEdges) {
+      const lines = [];
+      const targets = { x: [], y: [] };
+      // Canvas center
+      targets.x.push(50);
+      targets.y.push(50);
+      // Other elements
+      for (const other of canvasElements) {
+        if (selectedElementIds.has(other.id)) continue;
+        targets.x.push(other.x, other.x + other.w, other.x + other.w / 2);
+        targets.y.push(other.y, other.y + other.h, other.y + other.h / 2);
+      }
+
+      const elLeft = el.x, elRight = el.x + el.w, elCx = el.x + el.w / 2;
+      const elTop = el.y, elBottom = el.y + el.h, elCy = el.y + el.h / 2;
+
+      let snapDx = null, snapDy = null;
+
+      if (!isResizeOp) {
+        // Drag: check all 3 edges per axis
+        const xEdges = [{val: elLeft, shift: 0}, {val: elRight, shift: 0}, {val: elCx, shift: 0}];
+        for (const edge of xEdges) {
+          for (const t of targets.x) {
+            const d = t - edge.val;
+            if (Math.abs(d) < SNAP_THRESHOLD && (snapDx === null || Math.abs(d) < Math.abs(snapDx))) {
+              snapDx = d;
+            }
+          }
+        }
+        const yEdges = [{val: elTop}, {val: elBottom}, {val: elCy}];
+        for (const edge of yEdges) {
+          for (const t of targets.y) {
+            const d = t - edge.val;
+            if (Math.abs(d) < SNAP_THRESHOLD && (snapDy === null || Math.abs(d) < Math.abs(snapDy))) {
+              snapDy = d;
+            }
+          }
+        }
+        if (snapDx !== null) { el.x += snapDx; }
+        if (snapDy !== null) { el.y += snapDy; }
+      } else {
+        // Resize: only check edges being resized
+        if (resizeEdges.includes('w')) {
+          for (const t of targets.x) { const d = t - elLeft; if (Math.abs(d) < SNAP_THRESHOLD && (snapDx === null || Math.abs(d) < Math.abs(snapDx))) snapDx = d; }
+          if (snapDx !== null) { el.x += snapDx; el.w -= snapDx; }
+        }
+        if (resizeEdges.includes('e')) {
+          for (const t of targets.x) { const d = t - elRight; if (Math.abs(d) < SNAP_THRESHOLD && (snapDx === null || Math.abs(d) < Math.abs(snapDx))) snapDx = d; }
+          if (snapDx !== null) { el.w += snapDx; }
+        }
+        if (resizeEdges.includes('n')) {
+          for (const t of targets.y) { const d = t - elTop; if (Math.abs(d) < SNAP_THRESHOLD && (snapDy === null || Math.abs(d) < Math.abs(snapDy))) snapDy = d; }
+          if (snapDy !== null) { el.y += snapDy; el.h -= snapDy; }
+        }
+        if (resizeEdges.includes('s')) {
+          for (const t of targets.y) { const d = t - elBottom; if (Math.abs(d) < SNAP_THRESHOLD && (snapDy === null || Math.abs(d) < Math.abs(snapDy))) snapDy = d; }
+          if (snapDy !== null) { el.h += snapDy; }
+        }
+      }
+
+      // Build guide lines at snapped positions
+      const finalLeft = el.x, finalRight = el.x + el.w, finalCx = el.x + el.w / 2;
+      const finalTop = el.y, finalBottom = el.y + el.h, finalCy = el.y + el.h / 2;
+      for (const t of targets.x) {
+        if (Math.abs(t - finalLeft) < 0.01 || Math.abs(t - finalRight) < 0.01 || Math.abs(t - finalCx) < 0.01) {
+          lines.push({ axis: 'x', pos: t });
+        }
+      }
+      for (const t of targets.y) {
+        if (Math.abs(t - finalTop) < 0.01 || Math.abs(t - finalBottom) < 0.01 || Math.abs(t - finalCy) < 0.01) {
+          lines.push({ axis: 'y', pos: t });
+        }
+      }
+      return lines;
+    }
+
     // Mouse events — account for CSS scale transform
     function canvasMouseDown(e) {
-      if (e.target.dataset.resize) {
+      if (e.target.dataset.resize && selectedElementIds.size === 1) {
         isResizing = true;
         resizeCorner = e.target.dataset.resize;
         const el = selectedEl();
@@ -1077,39 +1247,72 @@
       const elDiv = e.target.closest('[data-elid]');
       if (elDiv) {
         const id = elDiv.dataset.elid;
-        selectedElementId = id;
-        const el = getEl(id);
-        if (el) {
-          isDragging = true;
-          dragStartX = e.clientX;
-          dragStartY = e.clientY;
-          dragElStartX = el.x;
-          dragElStartY = el.y;
+        if (e.ctrlKey || e.metaKey) {
+          // Toggle in selection
+          if (selectedElementIds.has(id)) selectedElementIds.delete(id);
+          else selectedElementIds.add(id);
+          selectedElementId = selectedElementIds.size === 1 ? [...selectedElementIds][0] : null;
+          renderCanvas();
+          updatePropsPanel();
+          e.preventDefault();
+          return;
+        }
+        // Normal click
+        if (!selectedElementIds.has(id)) {
+          selectedElementIds = new Set([id]);
+          selectedElementId = id;
+        }
+        // Start drag for all selected
+        isDragging = true;
+        dragStartX = e.clientX;
+        dragStartY = e.clientY;
+        dragStartPositions = {};
+        for (const sid of selectedElementIds) {
+          const se = getEl(sid);
+          if (se) dragStartPositions[sid] = { x: se.x, y: se.y };
         }
         renderCanvas();
         updatePropsPanel();
         e.preventDefault();
         return;
       }
+      // Click empty canvas
       selectedElementId = null;
+      selectedElementIds = new Set();
       renderCanvas();
       updatePropsPanel();
     }
 
     function canvasMouseMove(e) {
       if (!isDragging && !isResizing) return;
-      // Use unscaled canvas dimensions (1200 x canvasHeightPx) for percentage calc
       const dx = (e.clientX - dragStartX) / canvasScale;
       const dy = (e.clientY - dragStartY) / canvasScale;
       const pctX = (dx / 1200) * 100;
       const pctY = (dy / canvasHeightPx) * 100;
-      const el = selectedEl();
-      if (!el) return;
 
       if (isDragging) {
-        el.x = Math.max(0, Math.min(100 - el.w, dragElStartX + pctX));
-        el.y = Math.max(0, Math.min(100 - el.h, dragElStartY + pctY));
+        if (selectedElementIds.size === 1) {
+          const el = selectedEl();
+          if (!el) return;
+          const sp = dragStartPositions[el.id];
+          if (!sp) return;
+          el.x = Math.max(0, Math.min(100 - el.w, sp.x + pctX));
+          el.y = Math.max(0, Math.min(100 - el.h, sp.y + pctY));
+          activeSnapLines = computeSnap(el, false, '');
+        } else {
+          // Multi-drag: move all by delta, no snapping
+          for (const sid of selectedElementIds) {
+            const se = getEl(sid);
+            const sp = dragStartPositions[sid];
+            if (!se || !sp) continue;
+            se.x = Math.max(0, Math.min(100 - se.w, sp.x + pctX));
+            se.y = Math.max(0, Math.min(100 - se.h, sp.y + pctY));
+          }
+          activeSnapLines = [];
+        }
       } else if (isResizing) {
+        const el = selectedEl();
+        if (!el) return;
         let newX = dragElStartX, newY = dragElStartY, newW = dragElStartW, newH = dragElStartH;
         if (resizeCorner.includes('e')) newW = Math.max(3, dragElStartW + pctX);
         if (resizeCorner.includes('w')) { newW = Math.max(3, dragElStartW - pctX); newX = dragElStartX + pctX; }
@@ -1117,6 +1320,8 @@
         if (resizeCorner.includes('n')) { newH = Math.max(3, dragElStartH - pctY); newY = dragElStartY + pctY; }
         el.x = Math.max(0, newX); el.y = Math.max(0, newY);
         el.w = Math.min(100 - el.x, newW); el.h = Math.min(100 - el.y, newH);
+        const edges = resizeCorner.split('');
+        activeSnapLines = computeSnap(el, true, edges);
       }
       renderCanvas();
       updatePropsPanel();
@@ -1125,6 +1330,10 @@
     function canvasMouseUp() {
       isDragging = false;
       isResizing = false;
+      if (activeSnapLines.length > 0) {
+        activeSnapLines = [];
+        renderCanvas();
+      }
     }
 
     async function uploadToServer(file) {
@@ -1233,6 +1442,8 @@
             if (el.crateBackgroundImage) o.crateBackgroundImage = el.crateBackgroundImage;
             if (el.crateIconImage) o.crateIconImage = el.crateIconImage;
             if (el.crateShowIcon === false) o.crateShowIcon = false;
+            if (el.crateTextColor && el.crateTextColor !== '#ffffff') o.crateTextColor = el.crateTextColor;
+            if (el.crateTextBg) o.crateTextBg = el.crateTextBg;
           }
           if (el.backgroundColor) o.backgroundColor = el.backgroundColor;
           if (el.borderRadius) o.borderRadius = el.borderRadius;
