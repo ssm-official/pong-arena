@@ -1776,15 +1776,15 @@ function renderShopSection(section, allSkins, allCrates, ownedCrates) {
 
 function renderCanvasShop(layout, allSkins, allCrates, ownedSkinIds, ownedCrates) {
   const ch = layout.canvasHeight || 800;
-  const aspectPct = (ch / 1200) * 100;
   const sorted = [...layout.elements].sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0));
   let elHtml = '';
   for (const el of sorted) {
-    const bg = el.backgroundColor ? `background:${esc(el.backgroundColor)};` : '';
+    const bgColor = el.backgroundColor ? `background-color:${esc(el.backgroundColor)};` : '';
+    const bgImg = (el.type === 'crate' && el.crateBackgroundImage) ? `background-image:url('${esc(el.crateBackgroundImage)}');background-size:cover;background-position:center;` : '';
     const radius = el.borderRadius ? `border-radius:${el.borderRadius}px;` : '';
     const border = el.borderColor ? `border:1px solid ${esc(el.borderColor)};` : '';
     const opacity = el.opacity != null ? `opacity:${el.opacity};` : '';
-    const base = `position:absolute;left:${el.x}%;top:${el.y}%;width:${el.w}%;height:${el.h}%;z-index:${el.zIndex||0};${bg}${radius}${border}${opacity}overflow:hidden;box-sizing:border-box;`;
+    const base = `position:absolute;left:${el.x}%;top:${el.y}%;width:${el.w}%;height:${el.h}%;z-index:${el.zIndex||0};${bgColor}${bgImg}${radius}${border}${opacity}overflow:hidden;box-sizing:border-box;`;
 
     if (el.type === 'text') {
       const fs = el.fontSize || 24;
@@ -1792,7 +1792,7 @@ function renderCanvasShop(layout, allSkins, allCrates, ownedSkinIds, ownedCrates
       const fw = el.fontWeight || 'normal';
       const ta = el.textAlign || 'left';
       const jc = ta === 'center' ? 'center' : ta === 'right' ? 'flex-end' : 'flex-start';
-      elHtml += `<div style="${base}"><div style="width:100%;height:100%;display:flex;align-items:center;padding:4px 8px;font-size:clamp(${Math.max(8,Math.round(fs*0.4))}px,${fs/12}vw,${fs}px);color:${fc};font-weight:${fw};text-align:${ta};word-break:break-word;line-height:1.2;justify-content:${jc}">${esc(el.text || '')}</div></div>`;
+      elHtml += `<div style="${base}"><div style="width:100%;height:100%;display:flex;align-items:center;padding:6px 8px;font-size:${fs}px;color:${fc};font-weight:${fw};text-align:${ta};overflow:hidden;line-height:1.2;justify-content:${jc}">${esc(el.text || '')}</div></div>`;
     } else if (el.type === 'image') {
       elHtml += `<div style="${base}">${el.imageUrl ? `<img src="${esc(el.imageUrl)}" style="width:100%;height:100%;object-fit:contain" />` : ''}</div>`;
     } else if (el.type === 'skin') {
@@ -1820,7 +1820,7 @@ function renderCanvasShop(layout, allSkins, allCrates, ownedSkinIds, ownedCrates
         <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:4px;padding:8px;background:${rarityBg}">
           ${preview}
           <div style="text-align:center">
-            <div style="font-size:clamp(10px,1.2vw,13px);font-weight:bold;color:#fff">${esc(skin.name)}</div>
+            <div style="font-size:13px;font-weight:bold;color:#fff">${esc(skin.name)}</div>
             <div style="font-size:9px;color:${rarityColor};text-transform:uppercase">${skin.rarity}</div>
           </div>
           ${actionHtml}
@@ -1831,12 +1831,21 @@ function renderCanvasShop(layout, allSkins, allCrates, ownedSkinIds, ownedCrates
       if (!crate) { elHtml += `<div style="${base}"></div>`; continue; }
       const owned = ownedCrates[crate.crateId] || 0;
       const usdPrice = pongPriceUsd > 0 ? formatUsd(crate.price * pongPriceUsd) + ' / ' : '';
-      const c = esc(crate.imageColor || '#7c3aed');
+      const cc = esc(crate.imageColor || '#7c3aed');
+      const showIcon = el.crateShowIcon !== false;
+      let iconHtml = '';
+      if (showIcon) {
+        if (el.crateIconImage) {
+          iconHtml = `<div style="width:48px;height:48px"><img src="${esc(el.crateIconImage)}" style="width:100%;height:100%;object-fit:contain" /></div>`;
+        } else {
+          iconHtml = `<div style="width:48px;height:48px">${getCrateIllustration(cc)}</div>`;
+        }
+      }
       elHtml += `<div style="${base}cursor:pointer" onclick="openCratePreview('${crate.crateId}')" class="hover:border-purple-500 transition-all">
         <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:6px;padding:8px">
-          <div style="width:48px;height:48px"><svg viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:100%"><rect x="14" y="28" width="52" height="38" rx="4" fill="#1a1a3a" stroke="${c}" stroke-width="2"/><rect x="14" y="28" width="52" height="13" rx="4" fill="${c}" opacity="0.25"/><line x1="40" y1="28" x2="40" y2="66" stroke="${c}" stroke-width="2" opacity="0.5"/><rect x="32" y="41" width="16" height="8" rx="2" fill="${c}" opacity="0.6"/><path d="M30 28 L40 16 L50 28" stroke="${c}" stroke-width="2" fill="${c}" fill-opacity="0.15" stroke-linejoin="round"/></svg></div>
+          ${iconHtml}
           <div style="text-align:center">
-            <div style="font-size:clamp(10px,1.2vw,13px);font-weight:bold;color:#fff">${esc(crate.name)}</div>
+            <div style="font-size:13px;font-weight:bold;color:#fff">${esc(crate.name)}</div>
             <div style="font-size:9px;color:#9ca3af">${crate.totalSkins || '?'} skins</div>
             <div style="font-size:10px;color:#a855f7;font-weight:500;margin-top:2px">${usdPrice}${Number(crate.price).toLocaleString()} $PONG</div>
           </div>
@@ -1848,7 +1857,7 @@ function renderCanvasShop(layout, allSkins, allCrates, ownedSkinIds, ownedCrates
       </div>`;
     }
   }
-  return `<div style="position:relative;width:100%;padding-bottom:${aspectPct}%;overflow:hidden">${elHtml}</div>`;
+  return `<div style="position:relative;width:100%;aspect-ratio:1200/${ch};overflow:hidden">${elHtml}</div>`;
 }
 
 function renderShopTile(item, size, isFeatured, ownedCount) {
