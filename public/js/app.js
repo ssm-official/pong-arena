@@ -3256,7 +3256,7 @@ socket.on('payout-error', (data) => console.error('Payout error:', data.error));
 // DASHBOARD
 // ===========================================
 
-let currentDashLbSort = 'earnings';
+var currentDashLbSort = 'earnings';
 
 function loadDashboard() {
   loadDashboardLeaderboard(currentDashLbSort);
