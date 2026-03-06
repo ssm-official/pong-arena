@@ -262,17 +262,31 @@ io.on('connection', (socket) => {
 // --------------- MongoDB & Start ---------------
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/pong-arena';
 
-mongoose.connect(MONGODB_URI)
-  .then(async () => {
-    console.log('Connected to MongoDB');
-    await seedSkins();
+// Start HTTP server immediately so the host doesn't kill us while we connect to MongoDB
+const PORT = process.env.PORT || 3000;
+server.listen(PORT, () => {
+  console.log(`Pong Arena running at http://localhost:${PORT}`);
+});
 
-    const PORT = process.env.PORT || 3000;
-    server.listen(PORT, () => {
-      console.log(`Pong Arena running at http://localhost:${PORT}`);
-    });
-  })
-  .catch((err) => {
-    console.error('MongoDB connection failed:', err.message);
-    process.exit(1);
-  });
+async function connectWithRetry(retries = 5, delay = 5000) {
+  for (let i = 1; i <= retries; i++) {
+    try {
+      await mongoose.connect(MONGODB_URI, {
+        serverSelectionTimeoutMS: 15000,
+        socketTimeoutMS: 45000,
+      });
+      console.log('Connected to MongoDB');
+      await seedSkins().catch(e => console.warn('Seed skipped:', e.message));
+      return;
+    } catch (err) {
+      console.error(`MongoDB connection attempt ${i}/${retries} failed:`, err.message);
+      if (i < retries) {
+        console.log(`Retrying in ${delay / 1000}s...`);
+        await new Promise(r => setTimeout(r, delay));
+      }
+    }
+  }
+  console.error('All MongoDB connection attempts failed. Server running without DB.');
+}
+
+connectWithRetry();
