@@ -424,7 +424,7 @@ function updateNav() {
 // CLIENT-SIDE ROUTING
 // ===========================================
 
-const TAB_ROUTES = {
+var TAB_ROUTES = {
   '/play': 'play',
   '/dashboard': 'play',
   '/leaderboard': 'leaderboard',
@@ -437,7 +437,7 @@ const TAB_ROUTES = {
   '/settings': 'settings',
   '/tokenomics': 'tokenomics',
 };
-const ROUTE_PATHS = {};
+var ROUTE_PATHS = {};
 Object.entries(TAB_ROUTES).forEach(([path, tab]) => { ROUTE_PATHS[tab] = path; });
 
 function getTabFromPath() {
