@@ -62,6 +62,14 @@ const publicApiLimiter = rateLimit({
 });
 app.use('/api/v1/', publicApiLimiter);
 
+// Return 503 if MongoDB isn't connected yet
+app.use('/api/', (req, res, next) => {
+  if (mongoose.connection.readyState !== 1) {
+    return res.status(503).json({ error: 'Database connecting, please retry in a moment.' });
+  }
+  next();
+});
+
 // --------------- API Routes ---------------
 app.use('/api/auth', authRoutes);
 app.use('/api/profile', authMiddleware, profileRoutes);

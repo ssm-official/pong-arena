@@ -206,6 +206,24 @@ function getAuthHeader() {
 }
 
 // ---- Socket.io ----
+// --- Tab routing (must be before tryAutoLogin IIFE) ---
+const TAB_ROUTES = {
+  '/play': 'play',
+  '/dashboard': 'play',
+  '/leaderboard': 'leaderboard',
+  '/profile': 'profile',
+  '/friends': 'friends',
+  '/opponents': 'opponents',
+  '/cosmetics': 'cosmetics',
+  '/shop': 'shop',
+  '/history': 'history',
+  '/settings': 'settings',
+  '/tokenomics': 'tokenomics',
+};
+const ROUTE_PATHS = {};
+Object.entries(TAB_ROUTES).forEach(([path, tab]) => { ROUTE_PATHS[tab] = path; });
+let currentDashLbSort = 'earnings';
+
 const socket = io();
 window.socket = socket;
 
@@ -424,21 +442,7 @@ function updateNav() {
 // CLIENT-SIDE ROUTING
 // ===========================================
 
-var TAB_ROUTES = {
-  '/play': 'play',
-  '/dashboard': 'play',
-  '/leaderboard': 'leaderboard',
-  '/profile': 'profile',
-  '/friends': 'friends',
-  '/opponents': 'opponents',
-  '/cosmetics': 'cosmetics',
-  '/shop': 'shop',
-  '/history': 'history',
-  '/settings': 'settings',
-  '/tokenomics': 'tokenomics',
-};
-var ROUTE_PATHS = {};
-Object.entries(TAB_ROUTES).forEach(([path, tab]) => { ROUTE_PATHS[tab] = path; });
+// (TAB_ROUTES & ROUTE_PATHS declared at top of file)
 
 function getTabFromPath() {
   const path = window.location.pathname;
@@ -3256,7 +3260,7 @@ socket.on('payout-error', (data) => console.error('Payout error:', data.error));
 // DASHBOARD
 // ===========================================
 
-var currentDashLbSort = 'earnings';
+// (currentDashLbSort declared at top of file)
 
 function loadDashboard() {
   loadDashboardLeaderboard(currentDashLbSort);
