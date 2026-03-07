@@ -19,17 +19,32 @@
     @keyframes k-pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.08); } }
     @keyframes k-shimmer { 0% { filter: brightness(1); } 50% { filter: brightness(1.4) saturate(1.3); } 100% { filter: brightness(1); } }
     @keyframes k-fire { 0%, 100% { filter: drop-shadow(0 2px 4px rgba(255,100,0,0.7)); } 50% { filter: drop-shadow(0 4px 12px rgba(255,60,0,1)); } }
+    @keyframes k-spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    @keyframes k-bounce { 0%, 100% { transform: translateY(0); } 40% { transform: translateY(-12px); } 60% { transform: translateY(-4px); } }
+    @keyframes k-rainbow { 0% { filter: hue-rotate(0deg) drop-shadow(0 0 8px rgba(168,85,247,0.6)); } 100% { filter: hue-rotate(360deg) drop-shadow(0 0 8px rgba(168,85,247,0.6)); } }
+    @keyframes k-shake { 0%, 100% { transform: translateX(0); } 20% { transform: translateX(-3px) rotate(-1deg); } 40% { transform: translateX(3px) rotate(1deg); } 60% { transform: translateX(-2px); } 80% { transform: translateX(2px); } }
+    @keyframes k-zoom { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.15); } }
     .anim-glow { animation: k-glow 2s ease-in-out infinite; }
     .anim-float { animation: k-float 2.5s ease-in-out infinite; }
     .anim-pulse { animation: k-pulse 1.5s ease-in-out infinite; }
     .anim-shimmer { animation: k-shimmer 2s ease-in-out infinite; }
     .anim-fire { animation: k-fire 1.2s ease-in-out infinite; }
+    .anim-spin { animation: k-spin 3s linear infinite; }
+    .anim-bounce { animation: k-bounce 1.5s ease-in-out infinite; }
+    .anim-rainbow { animation: k-rainbow 3s linear infinite; }
+    .anim-shake { animation: k-shake 0.6s ease-in-out infinite; }
+    .anim-zoom { animation: k-zoom 2s ease-in-out infinite; }
     .anim-underline { width: 40px; height: 4px; border-radius: 2px; margin-top: 2px; }
     .anim-underline.anim-glow { background: rgba(168,85,247,0.5); animation: k-glow 2s ease-in-out infinite; }
     .anim-underline.anim-float { background: rgba(96,165,250,0.5); animation: k-pulse 2s ease-in-out infinite; }
     .anim-underline.anim-pulse { background: rgba(168,85,247,0.5); animation: k-pulse 1.5s ease-in-out infinite; }
     .anim-underline.anim-shimmer { background: linear-gradient(90deg, #7c3aed, #f59e0b, #7c3aed); background-size: 200% 100%; animation: k-shimmer 2s ease-in-out infinite; }
     .anim-underline.anim-fire { background: linear-gradient(90deg, #ff4500, #ff8c00, #ff4500); animation: k-fire 1.2s ease-in-out infinite; }
+    .anim-underline.anim-spin { background: rgba(96,165,250,0.5); animation: k-pulse 2s ease-in-out infinite; }
+    .anim-underline.anim-bounce { background: rgba(34,197,94,0.5); animation: k-pulse 1.5s ease-in-out infinite; }
+    .anim-underline.anim-rainbow { background: linear-gradient(90deg, #ef4444, #eab308, #22c55e, #3b82f6, #a855f7); background-size: 200% 100%; animation: k-shimmer 2s ease-in-out infinite; }
+    .anim-underline.anim-shake { background: rgba(239,68,68,0.5); animation: k-pulse 1s ease-in-out infinite; }
+    .anim-underline.anim-zoom { background: rgba(168,85,247,0.5); animation: k-zoom 2s ease-in-out infinite; }
   </style>
 </head>
 <body class="text-gray-100 min-h-screen">
@@ -1176,7 +1191,7 @@
     }
 
     function animClass(anim) {
-      const map = { glow: 'anim-glow', float: 'anim-float', pulse: 'anim-pulse', shimmer: 'anim-shimmer', fire: 'anim-fire' };
+      const map = { glow: 'anim-glow', float: 'anim-float', pulse: 'anim-pulse', shimmer: 'anim-shimmer', fire: 'anim-fire', spin: 'anim-spin', bounce: 'anim-bounce', rainbow: 'anim-rainbow', shake: 'anim-shake', zoom: 'anim-zoom' };
       return map[anim] || '';
     }
 
@@ -1287,7 +1302,7 @@
           </div>
           <div>
             <label class="text-gray-500">Icon Size <span id="icon-size-val" class="text-white">${item.iconSize || 64}px</span></label>
-            <input type="range" min="24" max="160" step="4" value="${item.iconSize || 64}" oninput="document.getElementById('icon-size-val').textContent=this.value+'px'; updateItemProp('iconSize',Number(this.value))" class="w-full accent-purple-500" />
+            <input type="range" min="24" max="512" step="4" value="${item.iconSize || 64}" oninput="document.getElementById('icon-size-val').textContent=this.value+'px'; updateItemProp('iconSize',Number(this.value))" class="w-full accent-purple-500" />
           </div>
           <div>
             <label class="text-gray-500">Animation</label>
@@ -1298,6 +1313,11 @@
               <option value="pulse" ${anim==='pulse'?'selected':''}>Pulse</option>
               <option value="shimmer" ${anim==='shimmer'?'selected':''}>Shimmer</option>
               <option value="fire" ${anim==='fire'?'selected':''}>Fire</option>
+              <option value="spin" ${anim==='spin'?'selected':''}>Spin</option>
+              <option value="bounce" ${anim==='bounce'?'selected':''}>Bounce</option>
+              <option value="rainbow" ${anim==='rainbow'?'selected':''}>Rainbow</option>
+              <option value="shake" ${anim==='shake'?'selected':''}>Shake</option>
+              <option value="zoom" ${anim==='zoom'?'selected':''}>Zoom</option>
             </select>
           </div>
           <button onclick="openItemPickerForChange()" class="w-full bg-gray-700 hover:bg-gray-600 text-white px-3 py-2 rounded-lg font-medium">Change Item</button>

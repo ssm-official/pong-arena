@@ -58,18 +58,33 @@
     @keyframes shop-pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.06); } }
     @keyframes shop-shimmer { 0% { filter: brightness(1); } 50% { filter: brightness(1.5) saturate(1.4); } 100% { filter: brightness(1); } }
     @keyframes shop-fire { 0%, 100% { filter: drop-shadow(0 2px 6px rgba(255,100,0,0.7)); } 50% { filter: drop-shadow(0 6px 16px rgba(255,60,0,1)); } }
+    @keyframes shop-spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    @keyframes shop-bounce { 0%, 100% { transform: translateY(0); } 40% { transform: translateY(-12px); } 60% { transform: translateY(-4px); } }
+    @keyframes shop-rainbow { 0% { filter: hue-rotate(0deg) drop-shadow(0 0 8px rgba(168,85,247,0.6)); } 100% { filter: hue-rotate(360deg) drop-shadow(0 0 8px rgba(168,85,247,0.6)); } }
+    @keyframes shop-shake { 0%, 100% { transform: translateX(0); } 20% { transform: translateX(-3px) rotate(-1deg); } 40% { transform: translateX(3px) rotate(1deg); } 60% { transform: translateX(-2px); } 80% { transform: translateX(2px); } }
+    @keyframes shop-zoom { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.15); } }
     @keyframes shop-underline-pulse { 0%, 100% { opacity: 0.4; transform: scaleX(0.8); } 50% { opacity: 1; transform: scaleX(1.1); } }
     .shop-anim-glow { animation: shop-glow 2s ease-in-out infinite; }
     .shop-anim-float { animation: shop-float 2.5s ease-in-out infinite; }
     .shop-anim-pulse { animation: shop-pulse 1.5s ease-in-out infinite; }
     .shop-anim-shimmer { animation: shop-shimmer 2s ease-in-out infinite; }
     .shop-anim-fire { animation: shop-fire 1.2s ease-in-out infinite; }
+    .shop-anim-spin { animation: shop-spin 3s linear infinite; }
+    .shop-anim-bounce { animation: shop-bounce 1.5s ease-in-out infinite; }
+    .shop-anim-rainbow { animation: shop-rainbow 3s linear infinite; }
+    .shop-anim-shake { animation: shop-shake 0.6s ease-in-out infinite; }
+    .shop-anim-zoom { animation: shop-zoom 2s ease-in-out infinite; }
     .shop-anim-underline { width: 50px; height: 4px; border-radius: 2px; margin: 4px auto 0; animation: shop-underline-pulse 2s ease-in-out infinite; }
     .shop-anim-underline.shop-ul-glow { background: rgba(168,85,247,0.6); }
     .shop-anim-underline.shop-ul-float { background: rgba(96,165,250,0.6); }
     .shop-anim-underline.shop-ul-pulse { background: rgba(168,85,247,0.6); }
     .shop-anim-underline.shop-ul-shimmer { background: linear-gradient(90deg, #7c3aed, #f59e0b, #7c3aed); }
     .shop-anim-underline.shop-ul-fire { background: linear-gradient(90deg, #ff4500, #ff8c00, #ff4500); }
+    .shop-anim-underline.shop-ul-spin { background: rgba(96,165,250,0.6); }
+    .shop-anim-underline.shop-ul-bounce { background: rgba(34,197,94,0.6); }
+    .shop-anim-underline.shop-ul-rainbow { background: linear-gradient(90deg, #ef4444, #eab308, #22c55e, #3b82f6, #a855f7); }
+    .shop-anim-underline.shop-ul-shake { background: rgba(239,68,68,0.6); }
+    .shop-anim-underline.shop-ul-zoom { background: rgba(168,85,247,0.6); }
     .shop-countdown { font-variant-numeric: tabular-nums; }
     /* === SECRET CUTSCENE === */
     #secret-cutscene { background: #000; }

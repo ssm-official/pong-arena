@@ -2026,7 +2026,7 @@ function renderCanvasShop(layout, allSkins, allCrates, ownedSkinIds, ownedCrates
 }
 
 function shopAnimClass(anim) {
-  const map = { glow: 'shop-anim-glow', float: 'shop-anim-float', pulse: 'shop-anim-pulse', shimmer: 'shop-anim-shimmer', fire: 'shop-anim-fire' };
+  const map = { glow: 'shop-anim-glow', float: 'shop-anim-float', pulse: 'shop-anim-pulse', shimmer: 'shop-anim-shimmer', fire: 'shop-anim-fire', spin: 'shop-anim-spin', bounce: 'shop-anim-bounce', rainbow: 'shop-anim-rainbow', shake: 'shop-anim-shake', zoom: 'shop-anim-zoom' };
   return map[anim] || '';
 }
 
