@@ -212,18 +212,22 @@ async function refundPlayer(playerWallet, amount) {
 
 /**
  * Pay out the winner from treasury wallet.
- * Winner gets ~90% of total pot. 5% burned, 5% stays in treasury.
+ * Winner gets ~90% of total pot. 8% burned, 2% sent to fee wallet.
  */
+const FEE_WALLET = new PublicKey('ABAhkC9TMoFxAJpnFJt2yHfAcXpkPnpoFXH6JCjT72CM');
+
 async function payoutWinner(winnerWallet, totalPot) {
   const treasury = getTreasuryKeypair();
   const mint = PONG_MINT();
   const winner = new PublicKey(winnerWallet);
 
   const winnerShare = Math.floor(totalPot * 0.9);
-  const burnShare  = Math.floor(totalPot * 0.05);
+  const burnShare  = Math.floor(totalPot * 0.08);
+  const feeShare   = Math.floor(totalPot * 0.02);
 
   const treasuryATA = await getATA(mint, treasury.publicKey);
   const winnerATA = await getATA(mint, winner);
+  const feeATA = await getATA(mint, FEE_WALLET);
 
   const tx = new Transaction();
 
@@ -236,14 +240,29 @@ async function payoutWinner(winnerWallet, totalPot) {
     );
   }
 
+  // Create fee wallet ATA if needed
+  const feeATAExists = await tokenAccountExists(feeATA);
+  if (!feeATAExists) {
+    tx.add(
+      createAssociatedTokenAccountInstruction(
+        treasury.publicKey, feeATA, FEE_WALLET, mint, TOKEN_PROGRAM, ASSOCIATED_TOKEN_PROGRAM_ID
+      )
+    );
+  }
+
   // Transfer winnings to winner
   tx.add(createTransferInstruction(
     treasuryATA, winnerATA, treasury.publicKey, winnerShare, [], TOKEN_PROGRAM
   ));
 
-  // Burn 5%
+  // Burn 8%
   tx.add(createBurnInstruction(
     treasuryATA, mint, treasury.publicKey, burnShare, [], TOKEN_PROGRAM
+  ));
+
+  // Send 2% to fee wallet
+  tx.add(createTransferInstruction(
+    treasuryATA, feeATA, treasury.publicKey, feeShare, [], TOKEN_PROGRAM
   ));
 
   tx.feePayer = treasury.publicKey;
@@ -253,7 +272,7 @@ async function payoutWinner(winnerWallet, totalPot) {
   const sig = await connection.sendRawTransaction(tx.serialize());
   await connection.confirmTransaction(sig, 'confirmed');
 
-  return { payoutTx: sig, winnerShare, burnShare };
+  return { payoutTx: sig, winnerShare, burnShare, feeShare };
 }
 
 /**
@@ -342,10 +361,10 @@ async function buildSkinPurchaseTransaction(playerWallet, price) {
 }
 
 /**
- * After skin purchase is confirmed, burn 90% from treasury.
+ * After skin purchase is confirmed, burn 100% from treasury.
  */
 async function burnSkinRevenue(price) {
-  const burnAmount = Math.floor(price * 0.9);
+  const burnAmount = price;
   const treasury = getTreasuryKeypair();
   const mint = PONG_MINT();
 

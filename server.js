@@ -86,9 +86,9 @@ app.get('/api/stats/burned', async (req, res) => {
       { $match: { status: 'completed' } },
       { $group: { _id: null, totalStaked: { $sum: '$stakeAmount' } } }
     ]);
-    // Each match: both players stake stakeAmount, total pot = 2x, 5% burned
+    // Each match: both players stake stakeAmount, total pot = 2x, 8% burned
     const totalStaked = result.length > 0 ? result[0].totalStaked : 0;
-    const totalBurned = Math.floor(totalStaked * 2 * 0.05);
+    const totalBurned = Math.floor(totalStaked * 2 * 0.08);
     res.json({ totalBurned });
   } catch (err) {
     res.json({ totalBurned: 0 });
