@@ -780,6 +780,7 @@
         adminContainer.classList.toggle('max-w-4xl', tab !== 'layout');
         adminContainer.classList.toggle('max-w-7xl', tab === 'layout');
       }
+      if (tab === 'crates') loadCrates();
       if (tab === 'layout') loadShopLayout();
       if (tab === 'main') loadServerConfig();
     }
