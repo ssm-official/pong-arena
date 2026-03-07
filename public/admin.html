@@ -829,7 +829,7 @@
       try {
         await fetch('/api/admin/server-config', {
           method: 'PUT',
-          headers: authHeaders(),
+          headers: headers(),
           body: JSON.stringify({ maintenanceMode: newState }),
         });
         serverMaintenance = newState;
@@ -846,7 +846,7 @@
       try {
         await fetch('/api/admin/server-config', {
           method: 'PUT',
-          headers: authHeaders(),
+          headers: headers(),
           body: JSON.stringify({ allowedWallets: wallets }),
         });
         status.textContent = 'Saved!';
