@@ -155,7 +155,7 @@ router.post('/confirm-crate', authMiddleware, async (req, res) => {
       { $push: { ownedCrates: { crateId } } }
     );
 
-    // Burn 90% of revenue in background
+    // Burn 100% of revenue in background
     burnSkinRevenue(priceBaseUnits).catch(err => {
       console.error('Crate burn failed:', err.message);
     });
@@ -337,7 +337,7 @@ router.post('/confirm-skin', authMiddleware, async (req, res) => {
       { $push: { skins: { skinId } } }
     );
 
-    // Burn 90% of revenue
+    // Burn 100% of revenue
     burnSkinRevenue(priceBaseUnits).catch(err => {
       console.error('Skin burn failed:', err.message);
     });
