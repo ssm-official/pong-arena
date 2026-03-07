@@ -2156,7 +2156,7 @@ async function loadShop() {
       fallback.classList.add('hidden');
 
       const sortedSections = [...layout.sections].sort((a, b) => (a.order || 0) - (b.order || 0));
-      let sectionsHtml = '<div style="display:flex;flex-wrap:wrap;gap:16px;align-items:flex-start">';
+      let sectionsHtml = '<div style="display:flex;flex-wrap:wrap;row-gap:16px;column-gap:0;align-items:flex-start">';
       for (const section of sortedSections) {
         sectionsHtml += renderShopSection(section, allSkins, allCrates, ownedCrates);
       }
@@ -2226,7 +2226,7 @@ function renderShopSection(section, allSkins, allCrates, ownedCrates) {
   // Skip expired sections
   if (section.expiresAt && new Date(section.expiresAt) <= new Date()) return '';
 
-  const widthStyle = { half: 'width:calc(50% - 8px)', third: 'width:calc(33.333% - 11px)' };
+  const widthStyle = { half: 'width:50%', third: 'width:33.333%' };
   const ws = widthStyle[section.width] || 'width:100%';
 
   if (section.type === 'banner') {
