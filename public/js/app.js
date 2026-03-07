@@ -238,10 +238,90 @@ socket.on('connect', () => {
 // WALLET CONNECTION & AUTH
 // ===========================================
 
+// --- Maintenance mode state ---
+let maintenanceModeActive = false;
+let maintenanceAllowedWallets = [];
+
+async function checkMaintenanceMode() {
+  try {
+    const res = await fetch('/api/server-status');
+    const data = await res.json();
+    maintenanceModeActive = !!data.maintenance;
+    maintenanceAllowedWallets = data.allowedWallets || [];
+    return maintenanceModeActive;
+  } catch {
+    return false;
+  }
+}
+
+function showMaintenanceScreen() {
+  document.getElementById('maintenance-overlay').classList.remove('hidden');
+}
+
+function hideMaintenanceScreen() {
+  document.getElementById('maintenance-overlay').classList.add('hidden');
+}
+
+async function maintenanceConnectWallet() {
+  const statusEl = document.getElementById('maintenance-status');
+  const btn = document.getElementById('maintenance-connect-btn');
+  statusEl.classList.remove('hidden');
+  statusEl.textContent = 'Connecting wallet...';
+  statusEl.className = 'text-gray-400 text-sm mt-4';
+  try {
+    const wallet = await WalletManager.connect();
+    const walletAddr = WalletManager.getWallet();
+    if (maintenanceAllowedWallets.includes(walletAddr)) {
+      statusEl.textContent = 'Access granted! Loading...';
+      statusEl.className = 'text-green-400 text-sm mt-4';
+      hideMaintenanceScreen();
+      // Continue normal auto-login flow
+      const saved = localStorage.getItem('pong_session');
+      if (saved) {
+        try {
+          const { token } = JSON.parse(saved);
+          const res = await fetch('/api/profile', {
+            headers: { Authorization: 'Bearer ' + token }
+          }).then(r => r.json());
+          if (res.user) {
+            sessionToken = token;
+            currentUser = res.user;
+            showApp();
+            return;
+          }
+        } catch {}
+      }
+      // No valid session — try login
+      const authData = await WalletManager.signAuthMessage();
+      const loginRes = await apiPost('/api/auth/login', authData);
+      sessionToken = loginRes.token;
+      if (loginRes.status === 'existing') {
+        currentUser = loginRes.user;
+        saveSession();
+        showApp();
+      } else {
+        initDashboard();
+      }
+    } else {
+      statusEl.textContent = 'Access denied. Your wallet is not authorized for maintenance bypass.';
+      statusEl.className = 'text-red-400 text-sm mt-4';
+    }
+  } catch (err) {
+    statusEl.textContent = 'Connection failed: ' + err.message;
+    statusEl.className = 'text-red-400 text-sm mt-4';
+  }
+}
+
 (async function tryAutoLogin() {
+  // Check maintenance mode first
+  const isMaintenance = await checkMaintenanceMode();
+
   const saved = localStorage.getItem('pong_session');
   if (!saved) {
-    // No session — show dashboard without wallet
+    if (isMaintenance) {
+      showMaintenanceScreen();
+      return;
+    }
     initDashboard();
     return;
   }
@@ -251,16 +331,24 @@ socket.on('connect', () => {
       headers: { Authorization: 'Bearer ' + token }
     }).then(r => r.json());
     if (res.user) {
+      // If maintenance, check if this user's wallet is allowed
+      if (isMaintenance && !maintenanceAllowedWallets.includes(res.user.wallet)) {
+        localStorage.removeItem('pong_session');
+        showMaintenanceScreen();
+        return;
+      }
       sessionToken = token;
       currentUser = res.user;
       await WalletManager.reconnectIfTrusted();
       showApp();
     } else {
       localStorage.removeItem('pong_session');
+      if (isMaintenance) { showMaintenanceScreen(); return; }
       initDashboard();
     }
   } catch {
     localStorage.removeItem('pong_session');
+    if (isMaintenance) { showMaintenanceScreen(); return; }
     initDashboard();
   }
 })();

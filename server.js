@@ -26,6 +26,7 @@ const { setupMatchmaking } = require('./game/matchmaking');
 const { PongEngine } = require('./game/PongEngine');
 const { seedSkins } = require('./models/Skin');
 const Message = require('./models/Message');
+const { getConfig } = require('./models/ServerConfig');
 
 const app = express();
 const server = http.createServer(app);
@@ -68,6 +69,43 @@ app.use('/api/', (req, res, next) => {
     return res.status(503).json({ error: 'Database connecting, please retry in a moment.' });
   }
   next();
+});
+
+// --------------- Maintenance Mode ---------------
+let maintenanceCache = { enabled: false, allowedWallets: [], lastRefresh: 0 };
+
+async function refreshMaintenanceCache() {
+  try {
+    if (mongoose.connection.readyState !== 1) return;
+    const enabled = (await getConfig('maintenanceMode')) === 'true';
+    const raw = (await getConfig('allowedWallets')) || '';
+    const wallets = raw.split(',').map(w => w.trim()).filter(Boolean);
+    maintenanceCache = { enabled, allowedWallets: wallets, lastRefresh: Date.now() };
+  } catch { /* keep previous cache */ }
+}
+
+// Refresh cache every 30s
+setInterval(refreshMaintenanceCache, 30000);
+
+// Public endpoint — no auth needed
+app.get('/api/server-status', async (req, res) => {
+  if (Date.now() - maintenanceCache.lastRefresh > 30000) await refreshMaintenanceCache();
+  res.json({
+    maintenance: maintenanceCache.enabled,
+    allowedWallets: maintenanceCache.enabled ? maintenanceCache.allowedWallets : [],
+  });
+});
+
+// Maintenance middleware — block most API routes when in maintenance mode
+app.use('/api/', (req, res, next) => {
+  if (!maintenanceCache.enabled) return next();
+  const p = req.path;
+  // Allow admin, server-status, auth/login, profile through
+  if (p.startsWith('/admin') || p.startsWith('/server-status') ||
+      p.startsWith('/auth/login') || p.startsWith('/profile')) {
+    return next();
+  }
+  return res.status(503).json({ error: 'Maintenance mode' });
 });
 
 // --------------- API Routes ---------------

@@ -301,6 +301,39 @@ router.get('/all-skins', adminAuth, async (req, res) => {
 // Database Backup & Restore
 // ===========================================
 
+const { getConfig, setConfig } = require('../models/ServerConfig');
+
+// ===========================================
+// Server Config (Maintenance Mode)
+// ===========================================
+
+// GET /api/admin/server-config — get maintenance mode + allowed wallets
+router.get('/server-config', adminAuth, async (req, res) => {
+  try {
+    const maintenanceMode = (await getConfig('maintenanceMode')) === 'true';
+    const allowedWallets = (await getConfig('allowedWallets')) || '';
+    res.json({ maintenanceMode, allowedWallets });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch server config' });
+  }
+});
+
+// PUT /api/admin/server-config — toggle maintenance mode, update allowed wallets
+router.put('/server-config', adminAuth, async (req, res) => {
+  try {
+    const { maintenanceMode, allowedWallets } = req.body;
+    if (maintenanceMode !== undefined) {
+      await setConfig('maintenanceMode', String(!!maintenanceMode));
+    }
+    if (allowedWallets !== undefined) {
+      await setConfig('allowedWallets', String(allowedWallets));
+    }
+    res.json({ status: 'ok' });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to update server config' });
+  }
+});
+
 const User = require('../models/User');
 const Match = require('../models/Match');
 const Message = require('../models/Message');

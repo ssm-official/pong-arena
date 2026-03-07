@@ -60,12 +60,42 @@
 
       <!-- Admin Tabs -->
       <div class="flex gap-2 mb-6">
-        <button id="admin-tab-btn-crates" class="px-4 py-2 rounded-lg text-sm font-bold bg-purple-600 text-white" onclick="switchAdminTab('crates')">Crates & Skins</button>
+        <button id="admin-tab-btn-main" class="px-4 py-2 rounded-lg text-sm font-bold bg-purple-600 text-white" onclick="switchAdminTab('main')">Main</button>
+        <button id="admin-tab-btn-crates" class="px-4 py-2 rounded-lg text-sm font-bold bg-gray-700 text-gray-300 hover:bg-gray-600" onclick="switchAdminTab('crates')">Crates & Skins</button>
         <button id="admin-tab-btn-layout" class="px-4 py-2 rounded-lg text-sm font-bold bg-gray-700 text-gray-300 hover:bg-gray-600" onclick="switchAdminTab('layout')">Shop Layout</button>
         <button id="admin-tab-btn-backup" class="px-4 py-2 rounded-lg text-sm font-bold bg-gray-700 text-gray-300 hover:bg-gray-600" onclick="switchAdminTab('backup')">Backup</button>
       </div>
 
-      <div id="admin-tab-crates">
+      <!-- Main Tab -->
+      <div id="admin-tab-main">
+        <!-- Server Status -->
+        <div class="bg-arena-card rounded-xl p-6 glow-border mb-6">
+          <h3 class="text-lg font-bold text-purple-400 mb-4">Server Status</h3>
+          <div class="flex items-center gap-4 mb-4">
+            <span id="server-status-dot" class="relative flex h-4 w-4">
+              <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+              <span class="relative inline-flex rounded-full h-4 w-4 bg-green-400"></span>
+            </span>
+            <span id="server-status-text" class="text-lg font-bold text-green-400">Online</span>
+          </div>
+          <button id="server-toggle-btn" onclick="toggleMaintenance()" class="px-6 py-3 rounded-lg font-bold text-sm transition bg-red-600 hover:bg-red-700 text-white">
+            SHUT DOWN SERVER
+          </button>
+        </div>
+
+        <!-- Allowed Wallets -->
+        <div class="bg-arena-card rounded-xl p-6 glow-border">
+          <h3 class="text-lg font-bold text-purple-400 mb-2">Allowed Wallets (Maintenance Bypass)</h3>
+          <p class="text-gray-500 text-sm mb-3">One wallet address per line. These wallets can access the site during maintenance.</p>
+          <textarea id="allowed-wallets" rows="6" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm font-mono focus:border-purple-500 focus:outline-none" placeholder="wallet1...&#10;wallet2...&#10;wallet3..."></textarea>
+          <button onclick="saveAllowedWallets()" class="mt-3 bg-purple-600 hover:bg-purple-700 px-6 py-2.5 rounded-lg font-medium transition text-white">
+            Save Wallets
+          </button>
+          <span id="wallets-save-status" class="text-gray-500 text-sm ml-3"></span>
+        </div>
+      </div><!-- /admin-tab-main -->
+
+      <div id="admin-tab-crates" class="hidden">
 
       <!-- SVG TEMPLATE DOWNLOAD -->
       <div class="bg-arena-card rounded-xl p-6 glow-border mb-6">
@@ -379,7 +409,7 @@
         sessionStorage.setItem('adminPw', pw);
         document.getElementById('login-view').classList.add('hidden');
         document.getElementById('admin-view').classList.remove('hidden');
-        loadCrates();
+        loadServerConfig();
       } catch (err) {
         console.error(err);
       }
@@ -739,7 +769,7 @@
     const adminContainer = document.querySelector('.max-w-4xl');
 
     function switchAdminTab(tab) {
-      ['crates', 'layout', 'backup'].forEach(t => {
+      ['main', 'crates', 'layout', 'backup'].forEach(t => {
         document.getElementById('admin-tab-' + t).classList.toggle('hidden', tab !== t);
         document.getElementById('admin-tab-btn-' + t).className = tab === t
           ? 'px-4 py-2 rounded-lg text-sm font-bold bg-purple-600 text-white'
@@ -751,6 +781,81 @@
         adminContainer.classList.toggle('max-w-7xl', tab === 'layout');
       }
       if (tab === 'layout') loadShopLayout();
+      if (tab === 'main') loadServerConfig();
+    }
+
+    // ============================
+    // MAIN TAB — SERVER CONFIG
+    // ============================
+    let serverMaintenance = false;
+
+    async function loadServerConfig() {
+      try {
+        const res = await fetch('/api/admin/server-config', { headers: { 'x-admin-password': adminPw } });
+        const data = await res.json();
+        serverMaintenance = !!data.maintenanceMode;
+        updateServerStatusUI();
+        document.getElementById('allowed-wallets').value = (data.allowedWallets || '').split(',').filter(Boolean).join('\n');
+      } catch (err) {
+        console.error('Failed to load server config:', err);
+      }
+    }
+
+    function updateServerStatusUI() {
+      const dot = document.getElementById('server-status-dot');
+      const text = document.getElementById('server-status-text');
+      const btn = document.getElementById('server-toggle-btn');
+      if (serverMaintenance) {
+        dot.innerHTML = '<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span><span class="relative inline-flex rounded-full h-4 w-4 bg-red-400"></span>';
+        text.textContent = 'Maintenance Mode';
+        text.className = 'text-lg font-bold text-red-400';
+        btn.textContent = 'BRING SERVER ONLINE';
+        btn.className = 'px-6 py-3 rounded-lg font-bold text-sm transition bg-green-600 hover:bg-green-700 text-white';
+      } else {
+        dot.innerHTML = '<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span><span class="relative inline-flex rounded-full h-4 w-4 bg-green-400"></span>';
+        text.textContent = 'Online';
+        text.className = 'text-lg font-bold text-green-400';
+        btn.textContent = 'SHUT DOWN SERVER';
+        btn.className = 'px-6 py-3 rounded-lg font-bold text-sm transition bg-red-600 hover:bg-red-700 text-white';
+      }
+    }
+
+    async function toggleMaintenance() {
+      const newState = !serverMaintenance;
+      const confirmMsg = newState
+        ? 'Are you sure you want to put the server in maintenance mode? Non-whitelisted users will be blocked.'
+        : 'Bring the server back online for all users?';
+      if (!confirm(confirmMsg)) return;
+      try {
+        await fetch('/api/admin/server-config', {
+          method: 'PUT',
+          headers: authHeaders(),
+          body: JSON.stringify({ maintenanceMode: newState }),
+        });
+        serverMaintenance = newState;
+        updateServerStatusUI();
+      } catch (err) {
+        alert('Failed to toggle maintenance: ' + err.message);
+      }
+    }
+
+    async function saveAllowedWallets() {
+      const raw = document.getElementById('allowed-wallets').value;
+      const wallets = raw.split('\n').map(w => w.trim()).filter(Boolean).join(',');
+      const status = document.getElementById('wallets-save-status');
+      try {
+        await fetch('/api/admin/server-config', {
+          method: 'PUT',
+          headers: authHeaders(),
+          body: JSON.stringify({ allowedWallets: wallets }),
+        });
+        status.textContent = 'Saved!';
+        status.className = 'text-green-400 text-sm ml-3';
+        setTimeout(() => { status.textContent = ''; }, 3000);
+      } catch (err) {
+        status.textContent = 'Failed to save';
+        status.className = 'text-red-400 text-sm ml-3';
+      }
     }
 
     // ============================
