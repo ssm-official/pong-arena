@@ -297,4 +297,73 @@ router.get('/all-skins', adminAuth, async (req, res) => {
   }
 });
 
+// ===========================================
+// Database Backup & Restore
+// ===========================================
+
+const User = require('../models/User');
+const Match = require('../models/Match');
+const Message = require('../models/Message');
+
+// GET /api/admin/backup — download full database as JSON
+router.get('/backup', adminAuth, async (req, res) => {
+  try {
+    const backup = {
+      _meta: { version: 1, date: new Date().toISOString(), collections: 7 },
+      users: await User.find({}).lean(),
+      crates: await Crate.find({}).lean(),
+      skins: await Skin.find({}).lean(),
+      matches: await Match.find({}).lean(),
+      messages: await Message.find({}).lean(),
+      shopLayouts: await ShopLayout.find({}).lean(),
+    };
+    const filename = `pong-arena-backup-${new Date().toISOString().slice(0, 10)}.json`;
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Content-Type', 'application/json');
+    res.json(backup);
+  } catch (err) {
+    console.error('Backup error:', err);
+    res.status(500).json({ error: 'Backup failed: ' + err.message });
+  }
+});
+
+// POST /api/admin/restore — restore database from backup JSON
+router.post('/restore', adminAuth, express.json({ limit: '50mb' }), async (req, res) => {
+  try {
+    const data = req.body;
+    if (!data._meta || !data.users) {
+      return res.status(400).json({ error: 'Invalid backup format' });
+    }
+    const results = {};
+    if (data.users?.length) {
+      await User.deleteMany({});
+      results.users = (await User.insertMany(data.users, { ordered: false }).catch(e => [])).length;
+    }
+    if (data.crates?.length) {
+      await Crate.deleteMany({});
+      results.crates = (await Crate.insertMany(data.crates, { ordered: false }).catch(e => [])).length;
+    }
+    if (data.skins?.length) {
+      await Skin.deleteMany({});
+      results.skins = (await Skin.insertMany(data.skins, { ordered: false }).catch(e => [])).length;
+    }
+    if (data.matches?.length) {
+      await Match.deleteMany({});
+      results.matches = (await Match.insertMany(data.matches, { ordered: false }).catch(e => [])).length;
+    }
+    if (data.messages?.length) {
+      await Message.deleteMany({});
+      results.messages = (await Message.insertMany(data.messages, { ordered: false }).catch(e => [])).length;
+    }
+    if (data.shopLayouts?.length) {
+      await ShopLayout.deleteMany({});
+      results.shopLayouts = (await ShopLayout.insertMany(data.shopLayouts, { ordered: false }).catch(e => [])).length;
+    }
+    res.json({ status: 'restored', results });
+  } catch (err) {
+    console.error('Restore error:', err);
+    res.status(500).json({ error: 'Restore failed: ' + err.message });
+  }
+});
+
 module.exports = router;

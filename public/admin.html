@@ -62,6 +62,7 @@
       <div class="flex gap-2 mb-6">
         <button id="admin-tab-btn-crates" class="px-4 py-2 rounded-lg text-sm font-bold bg-purple-600 text-white" onclick="switchAdminTab('crates')">Crates & Skins</button>
         <button id="admin-tab-btn-layout" class="px-4 py-2 rounded-lg text-sm font-bold bg-gray-700 text-gray-300 hover:bg-gray-600" onclick="switchAdminTab('layout')">Shop Layout</button>
+        <button id="admin-tab-btn-backup" class="px-4 py-2 rounded-lg text-sm font-bold bg-gray-700 text-gray-300 hover:bg-gray-600" onclick="switchAdminTab('backup')">Backup</button>
       </div>
 
       <div id="admin-tab-crates">
@@ -213,6 +214,27 @@
           </div>
         </div>
       </div><!-- /admin-tab-layout -->
+
+      <div id="admin-tab-backup" class="hidden">
+        <div class="bg-arena-card rounded-xl p-6 glow-border mb-6">
+          <h3 class="text-lg font-bold text-purple-400 mb-2">Database Backup</h3>
+          <p class="text-gray-500 text-sm mb-4">Download a full JSON backup of all data (users, crates, skins, matches, messages, shop layout).</p>
+          <button onclick="downloadBackup()" id="backup-download-btn" class="bg-green-600 hover:bg-green-700 px-6 py-2.5 rounded-lg font-medium transition">
+            Download Backup
+          </button>
+          <span id="backup-status" class="text-gray-500 text-sm ml-3"></span>
+        </div>
+
+        <div class="bg-arena-card rounded-xl p-6 glow-border">
+          <h3 class="text-lg font-bold text-red-400 mb-2">Restore from Backup</h3>
+          <p class="text-gray-500 text-sm mb-4">Upload a backup JSON file to restore all data. <strong class="text-red-400">This will overwrite all current data!</strong></p>
+          <input type="file" id="restore-file" accept=".json" class="hidden" onchange="handleRestoreFile(this)" />
+          <button onclick="document.getElementById('restore-file').click()" class="bg-red-900 hover:bg-red-800 text-red-300 px-6 py-2.5 rounded-lg font-medium transition">
+            Upload & Restore
+          </button>
+          <span id="restore-status" class="text-gray-500 text-sm ml-3"></span>
+        </div>
+      </div><!-- /admin-tab-backup -->
 
     </div>
   </div>
@@ -717,20 +739,72 @@
     const adminContainer = document.querySelector('.max-w-4xl');
 
     function switchAdminTab(tab) {
-      document.getElementById('admin-tab-crates').classList.toggle('hidden', tab !== 'crates');
-      document.getElementById('admin-tab-layout').classList.toggle('hidden', tab !== 'layout');
-      document.getElementById('admin-tab-btn-crates').className = tab === 'crates'
-        ? 'px-4 py-2 rounded-lg text-sm font-bold bg-purple-600 text-white'
-        : 'px-4 py-2 rounded-lg text-sm font-bold bg-gray-700 text-gray-300 hover:bg-gray-600';
-      document.getElementById('admin-tab-btn-layout').className = tab === 'layout'
-        ? 'px-4 py-2 rounded-lg text-sm font-bold bg-purple-600 text-white'
-        : 'px-4 py-2 rounded-lg text-sm font-bold bg-gray-700 text-gray-300 hover:bg-gray-600';
+      ['crates', 'layout', 'backup'].forEach(t => {
+        document.getElementById('admin-tab-' + t).classList.toggle('hidden', tab !== t);
+        document.getElementById('admin-tab-btn-' + t).className = tab === t
+          ? 'px-4 py-2 rounded-lg text-sm font-bold bg-purple-600 text-white'
+          : 'px-4 py-2 rounded-lg text-sm font-bold bg-gray-700 text-gray-300 hover:bg-gray-600';
+      });
       // Widen container for layout canvas
       if (adminContainer) {
         adminContainer.classList.toggle('max-w-4xl', tab !== 'layout');
         adminContainer.classList.toggle('max-w-7xl', tab === 'layout');
       }
       if (tab === 'layout') loadShopLayout();
+    }
+
+    // ============================
+    // BACKUP & RESTORE
+    // ============================
+    async function downloadBackup() {
+      const btn = document.getElementById('backup-download-btn');
+      const status = document.getElementById('backup-status');
+      btn.disabled = true; btn.textContent = 'Downloading...';
+      status.textContent = '';
+      try {
+        const res = await fetch('/api/admin/backup', { headers: { 'X-Admin-Password': adminPw } });
+        if (!res.ok) throw new Error('Backup failed');
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `pong-arena-backup-${new Date().toISOString().slice(0,10)}.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+        status.textContent = 'Backup downloaded!';
+        status.className = 'text-green-400 text-sm ml-3';
+      } catch (err) {
+        status.textContent = 'Failed: ' + err.message;
+        status.className = 'text-red-400 text-sm ml-3';
+      }
+      btn.disabled = false; btn.textContent = 'Download Backup';
+    }
+
+    async function handleRestoreFile(input) {
+      const file = input.files[0];
+      if (!file) return;
+      const status = document.getElementById('restore-status');
+      if (!confirm('This will OVERWRITE all current data. Are you sure?')) { input.value = ''; return; }
+      status.textContent = 'Restoring...';
+      status.className = 'text-yellow-400 text-sm ml-3';
+      try {
+        const text = await file.text();
+        const data = JSON.parse(text);
+        const res = await fetch('/api/admin/restore', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Admin-Password': adminPw },
+          body: text,
+        });
+        const result = await res.json();
+        if (result.error) throw new Error(result.error);
+        status.textContent = 'Restored! ' + JSON.stringify(result.results);
+        status.className = 'text-green-400 text-sm ml-3';
+        loadCrates();
+      } catch (err) {
+        status.textContent = 'Failed: ' + err.message;
+        status.className = 'text-red-400 text-sm ml-3';
+      }
+      input.value = '';
     }
 
     // ============================
