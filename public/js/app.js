@@ -1913,17 +1913,8 @@ socket.on('tournament-joined', (data) => {
 
 // Socket: Escrow required
 socket.on('tournament-escrow-required', async (data) => {
-  if (!window.solana || !window.solana.isPhantom) {
-    return showToast('Phantom wallet not found', 'error');
-  }
   try {
-    const txBuffer = Uint8Array.from(atob(data.escrowTransaction), c => c.charCodeAt(0));
-    const transaction = window.solanaWeb3.Transaction.from(txBuffer);
-    const signed = await window.solana.signTransaction(transaction);
-    const connection = new window.solanaWeb3.Connection(
-      window.solanaWeb3.clusterApiUrl('mainnet-beta'), 'confirmed'
-    );
-    const txSignature = await connection.sendRawTransaction(signed.serialize());
+    const txSignature = await WalletManager.signAndSendTransaction(data.escrowTransaction);
     socket.emit('tournament-escrow-submit', { tournamentId: data.tournamentId, txSignature });
     showToast('Escrow submitted, verifying...');
   } catch (err) {
