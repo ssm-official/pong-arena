@@ -17,6 +17,7 @@ const {
   ASSOCIATED_TOKEN_PROGRAM_ID,
 } = require('@solana/spl-token');
 const bs58 = require('bs58');
+const { incrementStat } = require('../models/Stats');
 
 // Pump.fun tokens use Token-2022 (Token Extensions), NOT the legacy Token Program
 const TOKEN_PROGRAM = TOKEN_2022_PROGRAM_ID;
@@ -272,6 +273,9 @@ async function payoutWinner(winnerWallet, totalPot) {
   const sig = await connection.sendRawTransaction(tx.serialize());
   await connection.confirmTransaction(sig, 'confirmed');
 
+  // Track burned amount
+  incrementStat('totalBurned', burnShare).catch(() => {});
+
   return { payoutTx: sig, winnerShare, burnShare, feeShare };
 }
 
@@ -382,6 +386,10 @@ async function burnSkinRevenue(price) {
 
   const sig = await connection.sendRawTransaction(tx.serialize());
   await connection.confirmTransaction(sig, 'confirmed');
+
+  // Track burned amount
+  incrementStat('totalBurned', burnAmount).catch(() => {});
+
   return sig;
 }
 

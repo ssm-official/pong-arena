@@ -78,17 +78,12 @@ app.use('/api/shop', shopRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/leaderboard', leaderboardRoutes);
 
-// Stats: total burned $PONG (from match payouts)
+// Stats: total burned $PONG (tracked in DB from actual burns)
 const Match = require('./models/Match');
+const { getStat } = require('./models/Stats');
 app.get('/api/stats/burned', async (req, res) => {
   try {
-    const result = await Match.aggregate([
-      { $match: { status: 'completed' } },
-      { $group: { _id: null, totalStaked: { $sum: '$stakeAmount' } } }
-    ]);
-    // Each match: both players stake stakeAmount, total pot = 2x, 8% burned
-    const totalStaked = result.length > 0 ? result[0].totalStaked : 0;
-    const totalBurned = Math.floor(totalStaked * 2 * 0.08);
+    const totalBurned = await getStat('totalBurned');
     res.json({ totalBurned });
   } catch (err) {
     res.json({ totalBurned: 0 });

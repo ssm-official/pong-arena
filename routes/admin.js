@@ -304,6 +304,7 @@ router.get('/all-skins', adminAuth, async (req, res) => {
 const User = require('../models/User');
 const Match = require('../models/Match');
 const Message = require('../models/Message');
+const { Stats } = require('../models/Stats');
 
 // GET /api/admin/backup — download full database as JSON
 router.get('/backup', adminAuth, async (req, res) => {
@@ -316,6 +317,7 @@ router.get('/backup', adminAuth, async (req, res) => {
       matches: await Match.find({}).lean(),
       messages: await Message.find({}).lean(),
       shopLayouts: await ShopLayout.find({}).lean(),
+      stats: await Stats.find({}).lean(),
     };
     const filename = `pong-arena-backup-${new Date().toISOString().slice(0, 10)}.json`;
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
@@ -358,6 +360,10 @@ router.post('/restore', adminAuth, express.json({ limit: '50mb' }), async (req, 
     if (data.shopLayouts?.length) {
       await ShopLayout.deleteMany({});
       results.shopLayouts = (await ShopLayout.insertMany(data.shopLayouts, { ordered: false }).catch(e => [])).length;
+    }
+    if (data.stats?.length) {
+      await Stats.deleteMany({});
+      results.stats = (await Stats.insertMany(data.stats, { ordered: false }).catch(e => [])).length;
     }
     res.json({ status: 'restored', results });
   } catch (err) {
