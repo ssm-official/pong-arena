@@ -32,4 +32,9 @@ const userSchema = new mongoose.Schema({
   createdAt: { type: Date, default: Date.now }
 });
 
-module.exports = mongoose.model('User', userSchema);
+const User = mongoose.model('User', userSchema);
+
+// Sync indexes on startup — drops stale indexes that no longer match the schema
+User.syncIndexes().catch(err => console.warn('User syncIndexes:', err.message));
+
+module.exports = User;

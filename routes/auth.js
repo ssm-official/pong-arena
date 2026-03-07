@@ -93,7 +93,11 @@ router.post('/register', async (req, res) => {
 
     // Check duplicates (handle and username are synced)
     const existing = await User.findOne({
-      $or: [{ wallet }, { handle: { $regex: new RegExp(`^${handleVal}$`, 'i') } }]
+      $or: [
+        { wallet },
+        { handle: { $regex: new RegExp(`^${handleVal}$`, 'i') } },
+        { username: { $regex: new RegExp(`^${handleVal}$`, 'i') } },
+      ]
     });
     if (existing) {
       if (existing.wallet === wallet) return res.status(400).json({ error: 'Wallet already registered' });
@@ -114,7 +118,9 @@ router.post('/register', async (req, res) => {
   } catch (err) {
     console.error('Register error:', err);
     if (err.code === 11000) {
-      return res.status(400).json({ error: 'Wallet or username already exists' });
+      const field = Object.keys(err.keyPattern || {})[0] || 'unknown';
+      console.error('Duplicate key on field:', field, 'value:', err.keyValue);
+      return res.status(400).json({ error: `${field} already exists` });
     }
     res.status(500).json({ error: 'Registration failed' });
   }
