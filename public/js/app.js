@@ -1237,7 +1237,21 @@ async function autocompleteSearch(q) {
   }
 }
 
+function showLoadingSpinner(containerId, text = 'Loading...') {
+  const el = document.getElementById(containerId);
+  if (el) el.innerHTML = `
+    <div class="flex flex-col items-center justify-center py-8">
+      <div class="w-8 h-8 border-3 border-purple-500 border-t-transparent rounded-full animate-spin mb-3"></div>
+      <p class="text-gray-500 text-xs">${text}</p>
+    </div>`;
+}
+
 async function loadFriends() {
+  // Show spinners on first load (not from cache)
+  if (cachedFriends.length === 0) {
+    showLoadingSpinner('friend-list', 'Loading friends...');
+    showLoadingSpinner('friends-opponents-list', 'Loading opponents...');
+  }
   try {
     const auth = getAuthHeader();
     const [friendRes, requestRes] = await Promise.all([
@@ -1256,7 +1270,12 @@ async function loadFriends() {
 function renderFriendList(friends) {
   const container = document.getElementById('friend-list');
   if (friends.length === 0) {
-    container.innerHTML = '<p class="text-gray-500 text-sm">No friends yet.</p>';
+    container.innerHTML = `
+      <div class="flex flex-col items-center justify-center py-8 text-center">
+        <svg class="w-10 h-10 text-gray-700 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+        <p class="text-gray-500 text-sm">No friends yet</p>
+        <p class="text-gray-600 text-xs mt-1">Search to add players!</p>
+      </div>`;
     return;
   }
   // Sort: online first, then alphabetical
@@ -1266,23 +1285,39 @@ function renderFriendList(friends) {
     if (aOn !== bOn) return aOn - bOn;
     return (a.username || '').localeCompare(b.username || '');
   });
+  // Update online count
+  const onlineCount = friends.filter(f => onlineUsers.includes(f.wallet)).length;
+  const countEl = document.getElementById('friends-online-count');
+  if (countEl) countEl.textContent = onlineCount > 0 ? `${onlineCount} online` : '';
+
   container.innerHTML = sorted.map(f => {
     const isOnline = onlineUsers.includes(f.wallet);
     const unread = unreadCounts[f.wallet] || 0;
     return `
-      <div class="bg-arena-card rounded-lg p-3 flex items-center justify-between">
-        <div class="flex items-center gap-2 cursor-pointer" onclick="showProfilePopup('${f.wallet}')">
-          <div class="w-2 h-2 rounded-full ${isOnline ? 'bg-green-400' : 'bg-gray-600'}"></div>
-          <img src="${esc(f.pfp || '')}" class="w-7 h-7 rounded-full bg-gray-700" onerror="this.style.display='none'" />
-          <span class="font-medium">${esc(f.username)}</span>
-          ${unread > 0 ? `<span class="bg-red-500 text-white text-xs rounded-full px-1.5">${unread}</span>` : ''}
+      <div class="group rounded-xl p-2.5 flex items-center justify-between hover:bg-gray-800/50 transition-colors ${isOnline ? 'bg-green-900/5' : ''}">
+        <div class="flex items-center gap-2.5 cursor-pointer min-w-0 flex-1" onclick="showProfilePopup('${f.wallet}')">
+          <div class="relative flex-shrink-0">
+            <img src="${esc(f.pfp || '')}" class="w-8 h-8 rounded-full bg-gray-700" onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22 fill=%22%234b5563%22><path d=%22M12 12c2.7 0 5-2.3 5-5s-2.3-5-5-5-5 2.3-5 5 2.3 5 5 5zm0 2c-3.3 0-10 1.7-10 5v2h20v-2c0-3.3-6.7-5-10-5z%22/></svg>'" />
+            <div class="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-gray-900 ${isOnline ? 'bg-green-400' : 'bg-gray-600'}"></div>
+          </div>
+          <div class="min-w-0">
+            <span class="font-medium text-sm block truncate">${esc(f.username)}</span>
+            <span class="text-[10px] ${isOnline ? 'text-green-400' : 'text-gray-600'}">${isOnline ? 'Online' : 'Offline'}</span>
+          </div>
+          ${unread > 0 ? `<span class="bg-red-500 text-white text-[10px] font-bold rounded-full w-5 h-5 flex items-center justify-center flex-shrink-0">${unread}</span>` : ''}
         </div>
-        <div class="flex gap-2 items-center">
-          <button onclick="openDmPanel('${f.wallet}', '${esc(f.username)}')" class="text-blue-400 hover:text-blue-300 text-xs">Chat</button>
+        <div class="flex gap-1 items-center opacity-60 group-hover:opacity-100 transition-opacity flex-shrink-0">
+          <button onclick="openDmPanel('${f.wallet}', '${esc(f.username)}')" class="text-blue-400 hover:text-blue-300 hover:bg-blue-500/10 p-1.5 rounded-lg transition" title="Chat">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg>
+          </button>
           <button onclick="openDuelModal('${f.wallet}', '${esc(f.username)}')"
-            class="${isOnline ? 'text-yellow-400 hover:text-yellow-300' : 'text-gray-600 cursor-not-allowed'} text-xs"
-            ${isOnline ? '' : 'disabled title="Player is offline"'}>Challenge</button>
-          <button onclick="removeFriend('${f.wallet}')" class="text-red-400 hover:text-red-300 text-xs">Remove</button>
+            class="${isOnline ? 'text-yellow-400 hover:text-yellow-300 hover:bg-yellow-500/10' : 'text-gray-700 cursor-not-allowed'} p-1.5 rounded-lg transition"
+            ${isOnline ? '' : 'disabled title="Player is offline"'} title="Challenge">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+          </button>
+          <button onclick="removeFriend('${f.wallet}')" class="text-red-400/50 hover:text-red-400 hover:bg-red-500/10 p-1.5 rounded-lg transition" title="Remove">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+          </button>
         </div>
       </div>
     `;
@@ -1291,16 +1326,25 @@ function renderFriendList(friends) {
 
 function renderFriendRequests(requests) {
   const container = document.getElementById('friend-requests');
+  const countBadge = document.getElementById('friend-requests-count');
+  if (countBadge) {
+    if (requests.length > 0) {
+      countBadge.textContent = requests.length;
+      countBadge.classList.remove('hidden');
+    } else {
+      countBadge.classList.add('hidden');
+    }
+  }
   if (requests.length === 0) {
-    container.innerHTML = '<p class="text-gray-500 text-sm">No pending requests</p>';
+    container.innerHTML = '<p class="text-gray-600 text-xs text-center py-2">No pending requests</p>';
     return;
   }
   container.innerHTML = requests.map(r => `
-    <div class="bg-arena-card rounded-lg p-3 flex items-center justify-between">
-      <span class="font-medium">${esc(r.fromUsername)}</span>
-      <div class="flex gap-2">
-        <button onclick="acceptFriend('${r.from}')" class="text-green-400 hover:text-green-300 text-sm">Accept</button>
-        <button onclick="declineFriend('${r.from}')" class="text-red-400 hover:text-red-300 text-sm">Decline</button>
+    <div class="rounded-xl p-2.5 flex items-center justify-between bg-yellow-500/5 border border-yellow-500/10">
+      <span class="font-medium text-sm">${esc(r.fromUsername)}</span>
+      <div class="flex gap-1.5">
+        <button onclick="acceptFriend('${r.from}')" class="bg-green-600/20 hover:bg-green-600/40 text-green-400 px-2.5 py-1 rounded-lg text-xs font-medium transition">Accept</button>
+        <button onclick="declineFriend('${r.from}')" class="bg-red-600/10 hover:bg-red-600/20 text-red-400/70 hover:text-red-400 px-2.5 py-1 rounded-lg text-xs transition">Decline</button>
       </div>
     </div>
   `).join('');
@@ -1398,7 +1442,12 @@ async function loadFriendsOpponents() {
     const container = document.getElementById('friends-opponents-list');
     if (!container) return;
     if (!res.matches || res.matches.length === 0) {
-      container.innerHTML = '<p class="text-gray-500 text-sm">No recent opponents yet.</p>';
+      container.innerHTML = `
+        <div class="flex flex-col items-center justify-center py-8 text-center">
+          <svg class="w-10 h-10 text-gray-700 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"/></svg>
+          <p class="text-gray-500 text-sm">No recent opponents</p>
+          <p class="text-gray-600 text-xs mt-1">Play some matches first!</p>
+        </div>`;
       return;
     }
 
@@ -1417,16 +1466,20 @@ async function loadFriendsOpponents() {
     const isFriend = (wallet) => currentUser.friends && currentUser.friends.includes(wallet);
 
     container.innerHTML = opponents.slice(0, 20).map(o => `
-      <div class="bg-arena-card rounded-lg p-3 flex items-center justify-between">
-        <div class="flex items-center gap-3 cursor-pointer" onclick="showProfilePopup('${o.wallet}')">
-          <div class="w-2 h-2 rounded-full ${onlineUsers.includes(o.wallet) ? 'bg-green-400' : 'bg-gray-600'}"></div>
-          <span class="font-medium text-sm">${esc(o.username || 'Unknown')}</span>
-          <span class="text-xs ${o.won ? 'text-green-400' : 'text-red-400'}">${o.won ? 'W' : 'L'}</span>
+      <div class="group rounded-xl p-2.5 flex items-center justify-between hover:bg-gray-800/50 transition-colors">
+        <div class="flex items-center gap-2.5 cursor-pointer min-w-0 flex-1" onclick="showProfilePopup('${o.wallet}')">
+          <div class="flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold ${o.won ? 'bg-green-500/15 text-green-400' : 'bg-red-500/15 text-red-400'}">
+            ${o.won ? 'W' : 'L'}
+          </div>
+          <div class="min-w-0">
+            <span class="font-medium text-sm block truncate">${esc(o.username || 'Unknown')}</span>
+            <span class="text-[10px] text-gray-600">${o.tier || ''}</span>
+          </div>
         </div>
-        <div class="flex gap-2">
+        <div class="flex-shrink-0">
           ${isFriend(o.wallet)
-            ? '<span class="text-green-400 text-xs">Friends</span>'
-            : `<button onclick="addFriend('${o.wallet}')" class="bg-purple-600 hover:bg-purple-700 px-3 py-1 rounded text-xs transition">Add Friend</button>`
+            ? '<span class="text-green-500/60 text-[10px] flex items-center gap-1"><svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>Friends</span>'
+            : `<button onclick="addFriend('${o.wallet}')" class="bg-purple-600/20 hover:bg-purple-600/40 text-purple-400 px-2.5 py-1 rounded-lg text-xs font-medium transition">Add</button>`
           }
         </div>
       </div>
@@ -1475,7 +1528,17 @@ function openDmPanel(wallet, username) {
   clearTimeout(dmTypingTimeout);
   document.getElementById('dm-panel-username').textContent = username;
   document.getElementById('dm-panel-pfp').src = '';
-  document.getElementById('dm-messages').innerHTML = '<p class="text-gray-500 text-xs text-center">Loading...</p>';
+  // Update online status in DM header
+  const isOnline = onlineUsers.includes(wallet);
+  const dotEl = document.getElementById('dm-panel-online-dot');
+  if (dotEl) dotEl.className = `absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-gray-900 ${isOnline ? 'bg-green-400' : 'bg-gray-600'}`;
+  const statusEl = document.getElementById('dm-panel-status');
+  if (statusEl) { statusEl.textContent = isOnline ? 'Online' : 'Offline'; statusEl.className = `text-[10px] ${isOnline ? 'text-green-400' : 'text-gray-500'}`; }
+  document.getElementById('dm-messages').innerHTML = `
+    <div class="flex flex-col items-center justify-center py-8">
+      <div class="w-6 h-6 border-2 border-purple-500 border-t-transparent rounded-full animate-spin mb-2"></div>
+      <p class="text-gray-500 text-xs">Loading messages...</p>
+    </div>`;
   document.getElementById('dm-panel').classList.add('open');
   document.getElementById('dm-input').value = '';
 
@@ -1501,7 +1564,12 @@ async function loadDmHistory(wallet) {
 
     const container = document.getElementById('dm-messages');
     if (!res.messages || res.messages.length === 0) {
-      container.innerHTML = '<p class="text-gray-500 text-xs text-center">No messages yet. Say hi!</p>';
+      container.innerHTML = `
+        <div class="flex flex-col items-center justify-center h-full text-center py-12">
+          <svg class="w-10 h-10 text-gray-700 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg>
+          <p class="text-gray-500 text-sm">No messages yet</p>
+          <p class="text-gray-600 text-xs mt-1">Say hi!</p>
+        </div>`;
       return;
     }
     let lastDate = '';
@@ -1598,8 +1666,9 @@ function formatDateSeparator(dateStr) {
 socket.on('dm-typing', (data) => {
   if (dmOpenWallet !== data.from) return;
   const indicator = document.getElementById('dm-typing-indicator');
-  if (!indicator) return;
-  indicator.textContent = `${data.fromUsername || 'Someone'} is typing...`;
+  const typingText = document.getElementById('dm-typing-text');
+  if (!indicator || !typingText) return;
+  typingText.textContent = `${data.fromUsername || 'Someone'} is typing...`;
   indicator.classList.remove('hidden');
   clearTimeout(dmTypingTimeout);
   dmTypingTimeout = setTimeout(() => indicator.classList.add('hidden'), 3000);

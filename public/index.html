@@ -967,38 +967,59 @@
 
       <!-- ===== FRIENDS TAB ===== -->
       <div id="tab-friends" class="tab-content hidden">
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
           <!-- Left: Search & Requests -->
-          <div class="overflow-y-auto max-h-[calc(100vh-120px)]">
-            <h3 class="text-lg font-bold mb-3">Find Players</h3>
+          <div class="bg-arena-card rounded-2xl border border-gray-800/60 p-4 overflow-y-auto max-h-[calc(100vh-120px)]">
+            <div class="flex items-center gap-2 mb-3">
+              <svg class="w-4 h-4 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+              <h3 class="text-sm font-bold text-purple-400 uppercase tracking-wider">Find Players</h3>
+            </div>
             <div class="relative mb-4">
               <input id="friend-search" type="text" placeholder="Search by username..." autocomplete="off"
-                class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:border-purple-500 focus:outline-none" />
+                class="w-full bg-gray-900/60 border border-gray-700/50 rounded-xl px-3 py-2.5 text-white text-sm placeholder-gray-500 focus:border-purple-500 focus:ring-1 focus:ring-purple-500/30 focus:outline-none transition" />
               <div id="search-dropdown" class="autocomplete-dropdown hidden bg-arena-card border border-gray-700 rounded-lg mt-1 shadow-xl"></div>
             </div>
             <div id="search-results" class="space-y-2"></div>
 
             <!-- Pending Requests -->
-            <h3 class="text-lg font-bold mb-3 mt-6">Friend Requests</h3>
+            <div class="flex items-center gap-2 mb-3 mt-6">
+              <svg class="w-4 h-4 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"/></svg>
+              <h3 class="text-sm font-bold text-yellow-400 uppercase tracking-wider">Requests</h3>
+              <span id="friend-requests-count" class="hidden bg-yellow-500/20 text-yellow-400 text-xs rounded-full px-1.5 py-0.5 font-bold">0</span>
+            </div>
             <div id="friend-requests" class="space-y-2">
-              <p class="text-gray-500 text-sm">No pending requests</p>
+              <p class="text-gray-600 text-xs text-center py-2">No pending requests</p>
             </div>
           </div>
 
           <!-- Middle: Friend List -->
-          <div class="overflow-y-auto max-h-[calc(100vh-120px)]">
-            <h3 class="text-lg font-bold mb-3">Friends</h3>
+          <div class="bg-arena-card rounded-2xl border border-gray-800/60 p-4 overflow-y-auto max-h-[calc(100vh-120px)]">
+            <div class="flex items-center justify-between mb-3">
+              <div class="flex items-center gap-2">
+                <svg class="w-4 h-4 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                <h3 class="text-sm font-bold text-green-400 uppercase tracking-wider">Friends</h3>
+              </div>
+              <span id="friends-online-count" class="text-xs text-gray-500"></span>
+            </div>
             <div id="friend-list" class="space-y-2">
-              <p class="text-gray-500 text-sm">No friends yet. Search to add players!</p>
+              <div class="flex flex-col items-center justify-center py-8">
+                <div class="w-8 h-8 border-3 border-purple-500 border-t-transparent rounded-full animate-spin mb-3"></div>
+                <p class="text-gray-500 text-xs">Loading friends...</p>
+              </div>
             </div>
           </div>
 
           <!-- Right: Recent Opponents -->
-          <div class="overflow-y-auto max-h-[calc(100vh-120px)]">
-            <h3 class="text-lg font-bold mb-3">Recent Opponents</h3>
-            <p class="text-gray-500 text-xs mb-3">Players you've recently faced</p>
+          <div class="bg-arena-card rounded-2xl border border-gray-800/60 p-4 overflow-y-auto max-h-[calc(100vh-120px)]">
+            <div class="flex items-center gap-2 mb-3">
+              <svg class="w-4 h-4 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"/></svg>
+              <h3 class="text-sm font-bold text-red-400 uppercase tracking-wider">Recent Opponents</h3>
+            </div>
             <div id="friends-opponents-list" class="space-y-2">
-              <p class="text-gray-500 text-sm">No recent opponents yet.</p>
+              <div class="flex flex-col items-center justify-center py-8">
+                <div class="w-8 h-8 border-3 border-purple-500 border-t-transparent rounded-full animate-spin mb-3"></div>
+                <p class="text-gray-500 text-xs">Loading opponents...</p>
+              </div>
             </div>
           </div>
         </div>
@@ -1364,21 +1385,36 @@
   </div>
 
   <!-- ============ DM CHAT PANEL (slide-in from right) ============ -->
-  <div id="dm-panel" class="dm-panel bg-arena-card border-l border-gray-800 flex flex-col">
-    <div class="flex items-center justify-between px-4 py-3 border-b border-gray-800">
-      <div class="flex items-center gap-2">
-        <img id="dm-panel-pfp" src="" class="w-8 h-8 rounded-full bg-gray-700" onerror="this.style.display='none'" />
-        <span id="dm-panel-username" class="font-bold text-sm"></span>
+  <div id="dm-panel" class="dm-panel bg-gray-900 border-l border-purple-900/30 flex flex-col shadow-2xl">
+    <div class="flex items-center justify-between px-4 py-3 bg-gray-900/80 border-b border-gray-800/60 backdrop-blur-sm">
+      <div class="flex items-center gap-3">
+        <div class="relative">
+          <img id="dm-panel-pfp" src="" class="w-9 h-9 rounded-full bg-gray-700 ring-2 ring-purple-500/30" onerror="this.style.display='none'" />
+          <div id="dm-panel-online-dot" class="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-gray-900 bg-gray-600"></div>
+        </div>
+        <div>
+          <span id="dm-panel-username" class="font-bold text-sm block"></span>
+          <span id="dm-panel-status" class="text-[10px] text-gray-500">Offline</span>
+        </div>
       </div>
-      <button onclick="closeDmPanel()" class="text-gray-400 hover:text-white text-xl">&times;</button>
+      <button onclick="closeDmPanel()" class="text-gray-500 hover:text-white text-lg transition w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-800">&times;</button>
     </div>
-    <div id="dm-messages" class="flex-1 overflow-y-auto p-3 space-y-2 text-sm"></div>
-    <div id="dm-typing-indicator" class="hidden px-3 pb-1 text-xs text-gray-400 italic"></div>
-    <div class="border-t border-gray-800 p-3 flex gap-2">
+    <div id="dm-messages" class="flex-1 overflow-y-auto p-4 space-y-1.5 text-sm"></div>
+    <div id="dm-typing-indicator" class="hidden px-4 pb-1 text-xs text-purple-400/70 italic flex items-center gap-1.5">
+      <span class="flex gap-0.5">
+        <span class="w-1 h-1 bg-purple-400/60 rounded-full animate-bounce" style="animation-delay:0ms"></span>
+        <span class="w-1 h-1 bg-purple-400/60 rounded-full animate-bounce" style="animation-delay:150ms"></span>
+        <span class="w-1 h-1 bg-purple-400/60 rounded-full animate-bounce" style="animation-delay:300ms"></span>
+      </span>
+      <span id="dm-typing-text"></span>
+    </div>
+    <div class="border-t border-gray-800/60 p-3 flex gap-2 bg-gray-900/50">
       <input id="dm-input" type="text" maxlength="500" placeholder="Type a message..."
-        class="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:border-purple-500 focus:outline-none"
+        class="flex-1 bg-gray-800/60 border border-gray-700/40 rounded-xl px-4 py-2.5 text-white text-sm placeholder-gray-500 focus:border-purple-500 focus:ring-1 focus:ring-purple-500/30 focus:outline-none transition"
         onkeydown="if(event.key==='Enter')sendDm()" oninput="emitDmTyping()" />
-      <button onclick="sendDm()" class="bg-purple-600 hover:bg-purple-700 px-4 py-2 rounded-lg text-sm transition">Send</button>
+      <button onclick="sendDm()" class="bg-purple-600 hover:bg-purple-500 px-4 py-2.5 rounded-xl text-sm font-medium transition shadow-lg shadow-purple-900/20">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/></svg>
+      </button>
     </div>
   </div>
 
