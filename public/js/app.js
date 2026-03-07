@@ -9,6 +9,7 @@ let currentGameId = null;
 let pendingEscrowTx = null;
 let isMirrored = false;
 let chosenSide = 'left';
+let cachedBalancePong = null; // cached PONG amount for USD re-render on price arrival
 
 // --- Rarity config ---
 const RARITY_COLORS = {
@@ -189,6 +190,8 @@ function updateAllUsdDisplays() {
   });
   updateGameStakeDisplay();
   updateTokenPriceCard();
+  // Re-render balance USD if price just arrived and we already have a cached PONG amount
+  updateBalanceUsdFromCache();
 }
 
 function startPriceRefresh() {
@@ -3782,11 +3785,19 @@ async function fetchDashboardBalance() {
   if (!currentUser) return;
   const pongEl = document.getElementById('dash-balance-pong');
   const usdEl = document.getElementById('dash-balance-usd');
+  const refreshBtn = document.getElementById('btn-refresh-balance');
   if (!pongEl) return;
+
+  // Show loading state
+  pongEl.innerHTML = '<span class="inline-block w-3 h-3 border-2 border-gray-500 border-t-purple-400 rounded-full animate-spin"></span>';
+  if (usdEl) usdEl.innerHTML = '<span class="inline-block w-5 h-5 border-2 border-gray-600 border-t-purple-400 rounded-full animate-spin"></span>';
+  if (refreshBtn) { refreshBtn.disabled = true; refreshBtn.classList.add('opacity-50'); }
+
   try {
     const res = await fetch(`/api/balance/${currentUser.wallet}`).then(r => r.json());
     const baseUnits = res.balance || 0;
     const pong = baseUnits / 1e6;
+    cachedBalancePong = pong;
     // PONG display (secondary / small)
     if (pong >= 1e6) pongEl.textContent = (pong / 1e6).toFixed(2) + 'M';
     else if (pong >= 1e3) pongEl.textContent = (pong / 1e3).toFixed(1) + 'K';
@@ -3796,13 +3807,24 @@ async function fetchDashboardBalance() {
       if (pongPriceUsd > 0) {
         usdEl.textContent = formatUsd(pong * pongPriceUsd);
       } else {
-        usdEl.textContent = '--';
+        usdEl.textContent = 'Loading price...';
+        usdEl.classList.add('text-gray-500', 'text-sm');
       }
     }
   } catch (e) {
+    cachedBalancePong = null;
     pongEl.textContent = '--';
-    if (usdEl) usdEl.textContent = '--';
+    if (usdEl) usdEl.textContent = 'Failed to load';
   }
+  if (refreshBtn) { refreshBtn.disabled = false; refreshBtn.classList.remove('opacity-50'); }
+}
+
+function updateBalanceUsdFromCache() {
+  if (cachedBalancePong == null || pongPriceUsd <= 0) return;
+  const usdEl = document.getElementById('dash-balance-usd');
+  if (!usdEl) return;
+  usdEl.textContent = formatUsd(cachedBalancePong * pongPriceUsd);
+  usdEl.classList.remove('text-gray-500', 'text-sm');
 }
 
 // ===========================================
