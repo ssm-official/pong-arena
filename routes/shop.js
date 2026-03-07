@@ -90,12 +90,14 @@ router.get('/crate/:crateId/skins', async (req, res) => {
     const crate = await Crate.findOne({ crateId: req.params.crateId, active: true });
     if (!crate) return res.status(404).json({ error: 'Crate not found' });
     const skins = await Skin.find({ crateId: crate.crateId });
-    const weights = { common: 70, uncommon: 50, rare: 25, super_rare: 12, legendary: 5, mythic: 2, secret: 0.02 };
-    const rarityCounts = { common: 0, uncommon: 0, rare: 0, super_rare: 0, legendary: 0, mythic: 0, secret: 0 };
-    skins.forEach(s => { if (rarityCounts[s.rarity] !== undefined) rarityCounts[s.rarity]++; });
+    // Use the same weights as the actual roll logic in open-crate
+    const weights = { common: 7000, uncommon: 5000, rare: 2500, super_rare: 1200, legendary: 500, mythic: 200, secret: 2 };
+    // Calculate total weight pool (each skin contributes its rarity weight)
+    let totalWeight = 0;
+    skins.forEach(s => { totalWeight += weights[s.rarity] || 7000; });
     const skinsWithChance = skins.map(s => {
-      const count = rarityCounts[s.rarity] || 1;
-      const chance = (weights[s.rarity] || 70) / count;
+      const w = weights[s.rarity] || 7000;
+      const chance = totalWeight > 0 ? (w / totalWeight) * 100 : 0;
       return { ...s.toObject(), chance: Math.round(chance * 100) / 100 };
     });
     res.json({ crate: { crateId: crate.crateId, name: crate.name }, skins: skinsWithChance });
