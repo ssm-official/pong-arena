@@ -177,18 +177,12 @@ function formatPongShort(pong) {
 }
 
 function updateAllUsdDisplays() {
-  // Update all USD-based tier buttons (modal + dashboard quick tiers)
+  // Update all USD-based tier buttons (modal)
   Object.keys(TIER_USD_AMOUNTS).forEach(tier => {
     const el = document.getElementById(`tier-pong-${tier}`);
     if (el) {
       if (priceFetchFailed || pongPriceUsd <= 0) el.textContent = 'Price N/A';
       else el.textContent = formatPongShort(getTierPongAmount(tier)) + ' $PONG';
-    }
-    // Dashboard quick-tier buttons
-    const dashEl = document.getElementById(`dash-tier-pong-${tier}`);
-    if (dashEl) {
-      if (priceFetchFailed || pongPriceUsd <= 0) dashEl.textContent = '-- PONG';
-      else dashEl.textContent = formatPongShort(getTierPongAmount(tier)) + ' PONG';
     }
   });
   updateGameStakeDisplay();
@@ -3913,6 +3907,7 @@ function loadDashboard() {
   updateDashboardStats();
   fetchBurnedTotal();
   fetchDashboardBalance();
+  updateDashboardXp();
 }
 
 async function loadDashboardLeaderboard(sort) {
@@ -3947,11 +3942,13 @@ async function loadDashboardLeaderboard(sort) {
         statVal = (u.totalGames || ((u.stats?.wins || 0) + (u.stats?.losses || 0))) + ' games';
       }
       const medal = i < 3 ? medalColors[i] : 'text-gray-500';
+      const lvl = u.stats?.level || calcLevelFromXp(u.stats?.xp || 0);
       return `
         <div class="flex items-center gap-2 py-1 cursor-pointer hover:bg-gray-800/50 rounded px-1 transition"
           onclick="showProfilePopup('${u.wallet}')">
           <span class="${medal} font-bold text-xs w-5 text-right">#${i + 1}</span>
           <img src="${esc(u.pfp || '')}" class="w-5 h-5 rounded-full bg-gray-700" onerror="this.style.display='none'" />
+          <span class="text-[10px] text-purple-400 font-bold">${lvl}</span>
           <span class="text-sm flex-1 truncate">${esc(u.username)}</span>
           <span class="text-gray-400 text-xs">${statVal}</span>
         </div>
@@ -3964,6 +3961,100 @@ async function loadDashboardLeaderboard(sort) {
 
 function updateDashboardStats() {
   // Stats updated via other dashboard functions (balance, burned, etc.)
+}
+
+// ===========================================
+// Level / XP System — Dashboard Rendering
+// ===========================================
+
+function calcLevelFromXp(xp) {
+  return Math.floor(Math.sqrt(xp / 100)) + 1;
+}
+
+function xpForLevel(level) {
+  return (level - 1) * (level - 1) * 100;
+}
+
+function xpForNextLevel(level) {
+  return level * level * 100;
+}
+
+let cachedSeasonInfo = null;
+
+async function fetchSeasonInfo() {
+  try {
+    const res = await fetch('/api/profile/season').then(r => r.json());
+    cachedSeasonInfo = res.season;
+    return res.season;
+  } catch { return null; }
+}
+
+function getRankForLevel(level, season) {
+  if (!season || !season.ranks || season.ranks.length === 0) return { name: 'Unranked', color: '#9ca3af' };
+  const sorted = [...season.ranks].sort((a, b) => b.minLevel - a.minLevel);
+  return sorted.find(r => level >= r.minLevel) || sorted[sorted.length - 1];
+}
+
+async function updateDashboardXp() {
+  if (!currentUser) return;
+  try {
+    const res = await fetch('/api/profile', {
+      headers: { 'x-wallet': currentUser.wallet, 'x-session': sessionToken }
+    }).then(r => r.json());
+    if (!res.user) return;
+
+    const stats = res.user.stats || {};
+    const xp = stats.xp || 0;
+    const level = stats.level || calcLevelFromXp(xp);
+    const seasonXp = stats.seasonXp || 0;
+    const seasonLevel = stats.seasonLevel || calcLevelFromXp(seasonXp);
+    const winStreak = stats.winStreak || 0;
+
+    // Level badge
+    const levelBadge = document.getElementById('dash-level-badge');
+    if (levelBadge) levelBadge.textContent = 'Lv. ' + level;
+
+    // XP progress bar
+    const currentLevelXp = xpForLevel(level);
+    const nextLevelXp = xpForNextLevel(level);
+    const progress = nextLevelXp > currentLevelXp ? ((xp - currentLevelXp) / (nextLevelXp - currentLevelXp)) * 100 : 100;
+    const xpBar = document.getElementById('dash-xp-bar');
+    if (xpBar) xpBar.style.width = Math.min(100, Math.max(0, progress)) + '%';
+
+    const xpText = document.getElementById('dash-xp-text');
+    if (xpText) xpText.textContent = (xp - currentLevelXp).toLocaleString() + ' / ' + (nextLevelXp - currentLevelXp).toLocaleString() + ' XP';
+
+    // Win streak
+    const streakEl = document.getElementById('dash-win-streak');
+    if (streakEl) {
+      if (winStreak > 0) {
+        streakEl.textContent = winStreak + ' 🔥';
+        streakEl.classList.remove('hidden');
+      } else {
+        streakEl.classList.add('hidden');
+      }
+    }
+
+    // Season + rank
+    if (!cachedSeasonInfo) await fetchSeasonInfo();
+    const rankBadge = document.getElementById('dash-rank-badge');
+    const seasonNameEl = document.getElementById('dash-season-name');
+    if (cachedSeasonInfo) {
+      const rank = getRankForLevel(seasonLevel, cachedSeasonInfo);
+      if (rankBadge) {
+        rankBadge.textContent = rank.name;
+        rankBadge.style.color = rank.color;
+        rankBadge.style.borderColor = rank.color + '4d';
+        rankBadge.style.background = rank.color + '33';
+      }
+      if (seasonNameEl) seasonNameEl.textContent = cachedSeasonInfo.name;
+    } else {
+      if (rankBadge) rankBadge.textContent = 'Unranked';
+      if (seasonNameEl) seasonNameEl.textContent = 'No active season';
+    }
+  } catch (err) {
+    console.error('Dashboard XP update error:', err);
+  }
 }
 
 function updateTopbarBalance() {

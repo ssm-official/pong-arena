@@ -10,6 +10,8 @@ const crypto = require('crypto');
 const User = require('../models/User');
 const Match = require('../models/Match');
 const DiscordLinkCode = require('../models/DiscordLinkCode');
+const Season = require('../models/Season');
+const { calcLevel } = require('../game/PongEngine');
 
 // Multer config — use memory storage so it works on serverless (Vercel).
 // Uploaded images are converted to base64 data URLs and stored in MongoDB.
@@ -264,12 +266,36 @@ router.delete('/discord', async (req, res) => {
  * GET /api/profile/:wallet
  * View another user's public profile.
  */
+/**
+ * GET /api/profile/season
+ * Returns the currently active season info (public).
+ */
+router.get('/season', async (req, res) => {
+  try {
+    const season = await Season.findOne({ active: true });
+    res.json({ season: season || null });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch season' });
+  }
+});
+
 router.get('/:wallet', async (req, res) => {
   try {
     const user = await User.findOne({ wallet: req.params.wallet })
       .select('wallet username handle nickname pfp banner bio stats equippedSkin createdAt');
     if (!user) return res.status(404).json({ error: 'User not found' });
-    res.json({ user });
+
+    // Attach rank from active season
+    const userObj = user.toObject();
+    const season = await Season.findOne({ active: true });
+    if (season && season.ranks && season.ranks.length > 0) {
+      const sorted = [...season.ranks].sort((a, b) => b.minLevel - a.minLevel);
+      const rank = sorted.find(r => (userObj.stats?.seasonLevel || 1) >= r.minLevel) || sorted[sorted.length - 1];
+      userObj.rank = rank;
+      userObj.seasonName = season.name;
+    }
+
+    res.json({ user: userObj });
   } catch (err) {
     res.status(500).json({ error: 'Failed to fetch profile' });
   }

@@ -7,6 +7,7 @@
 const PongSim = require('../public/js/pong-sim');
 const Match = require('../models/Match');
 const User = require('../models/User');
+const Season = require('../models/Season');
 const { payoutWinner, STAKE_TIERS } = require('../solana/utils');
 
 const TICK_RATE = 1000 / 60;
@@ -334,6 +335,7 @@ class PongEngine {
         });
         await User.findOneAndUpdate({ wallet: winnerWallet }, { $inc: { 'stats.wins': 1 } });
         await User.findOneAndUpdate({ wallet: loserWallet }, { $inc: { 'stats.losses': 1 } });
+        await awardXp(winnerWallet, loserWallet, this.tier);
       } catch (err) {
         console.error('Tournament match DB update failed:', err.message);
       }
@@ -367,6 +369,8 @@ class PongEngine {
       await User.findOneAndUpdate({ wallet: loserWallet }, {
         $inc: { 'stats.losses': 1 }
       });
+
+      await awardXp(winnerWallet, loserWallet, this.tier);
 
       this.emit('payout-complete', {
         gameId: this.gameId,
@@ -408,4 +412,72 @@ class PongEngine {
   }
 }
 
-module.exports = { PongEngine, STAKE_TIERS, WIN_SCORE: PongSim.WIN_SCORE, CANVAS_W: PongSim.CANVAS_W, CANVAS_H: PongSim.CANVAS_H, READY_TIMEOUT_MS };
+// ===========================================
+// XP / Leveling helpers
+// ===========================================
+const TIER_XP_MULTIPLIERS = {
+  t5: 1, t10: 1.5, t25: 2, t50: 2.5, t100: 3, t250: 4, t500: 5, t1000: 6,
+};
+const BASE_XP = 100;
+
+function calcLevel(xp) {
+  return Math.floor(Math.sqrt(xp / 100)) + 1;
+}
+
+async function getSeasonMultiplier() {
+  try {
+    const season = await Season.findOne({ active: true });
+    return season ? season.xpMultiplier : 1;
+  } catch { return 1; }
+}
+
+async function awardXp(winnerWallet, loserWallet, tier) {
+  try {
+    const tierMult = TIER_XP_MULTIPLIERS[tier] || 1;
+    const seasonMult = await getSeasonMultiplier();
+
+    // Get winner's current streak
+    const winner = await User.findOne({ wallet: winnerWallet });
+    const newStreak = (winner?.stats?.winStreak || 0) + 1;
+    const streakBonus = Math.min(newStreak * 10, 50);
+    const winnerXp = Math.round((BASE_XP + streakBonus) * tierMult * seasonMult);
+    const loserXp = Math.round(BASE_XP * 0.25 * tierMult);
+
+    // Update winner
+    const updatedWinner = await User.findOneAndUpdate({ wallet: winnerWallet }, {
+      $inc: { 'stats.xp': winnerXp, 'stats.seasonXp': winnerXp },
+      $set: { 'stats.winStreak': newStreak },
+      $max: { 'stats.bestWinStreak': newStreak },
+    }, { new: true });
+
+    if (updatedWinner) {
+      const newLevel = calcLevel(updatedWinner.stats.xp);
+      const newSeasonLevel = calcLevel(updatedWinner.stats.seasonXp);
+      if (newLevel !== updatedWinner.stats.level || newSeasonLevel !== updatedWinner.stats.seasonLevel) {
+        await User.updateOne({ wallet: winnerWallet }, {
+          $set: { 'stats.level': newLevel, 'stats.seasonLevel': newSeasonLevel }
+        });
+      }
+    }
+
+    // Update loser — streak resets to 0
+    const updatedLoser = await User.findOneAndUpdate({ wallet: loserWallet }, {
+      $inc: { 'stats.xp': loserXp, 'stats.seasonXp': loserXp },
+      $set: { 'stats.winStreak': 0 },
+    }, { new: true });
+
+    if (updatedLoser) {
+      const newLevel = calcLevel(updatedLoser.stats.xp);
+      const newSeasonLevel = calcLevel(updatedLoser.stats.seasonXp);
+      if (newLevel !== updatedLoser.stats.level || newSeasonLevel !== updatedLoser.stats.seasonLevel) {
+        await User.updateOne({ wallet: loserWallet }, {
+          $set: { 'stats.level': newLevel, 'stats.seasonLevel': newSeasonLevel }
+        });
+      }
+    }
+  } catch (err) {
+    console.error('XP award error:', err.message);
+  }
+}
+
+module.exports = { PongEngine, STAKE_TIERS, WIN_SCORE: PongSim.WIN_SCORE, CANVAS_W: PongSim.CANVAS_W, CANVAS_H: PongSim.CANVAS_H, READY_TIMEOUT_MS, calcLevel };

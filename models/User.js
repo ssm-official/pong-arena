@@ -27,7 +27,13 @@ const userSchema = new mongoose.Schema({
   stats: {
     wins: { type: Number, default: 0 },
     losses: { type: Number, default: 0 },
-    totalEarnings: { type: Number, default: 0 }  // in $PONG (lamports)
+    totalEarnings: { type: Number, default: 0 },  // in $PONG (lamports)
+    xp: { type: Number, default: 0 },
+    level: { type: Number, default: 1 },
+    winStreak: { type: Number, default: 0 },
+    bestWinStreak: { type: Number, default: 0 },
+    seasonXp: { type: Number, default: 0 },
+    seasonLevel: { type: Number, default: 1 },
   },
   createdAt: { type: Date, default: Date.now }
 });

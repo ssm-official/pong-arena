@@ -9,6 +9,7 @@ const crypto = require('crypto');
 const Crate = require('../models/Crate');
 const Skin = require('../models/Skin');
 const ShopLayout = require('../models/ShopLayout');
+const Season = require('../models/Season');
 
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'P0ngAr3naAdm1n!2024';
 
@@ -402,6 +403,106 @@ router.post('/restore', adminAuth, express.json({ limit: '50mb' }), async (req, 
   } catch (err) {
     console.error('Restore error:', err);
     res.status(500).json({ error: 'Restore failed: ' + err.message });
+  }
+});
+
+// ===========================================
+// Season Management
+// ===========================================
+
+// GET /api/admin/seasons — list all seasons
+router.get('/seasons', adminAuth, async (req, res) => {
+  try {
+    const seasons = await Season.find({}).sort({ seasonNumber: -1 });
+    res.json({ seasons });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch seasons' });
+  }
+});
+
+// POST /api/admin/seasons — create a new season
+router.post('/seasons', adminAuth, async (req, res) => {
+  try {
+    const { name, startDate, endDate, xpMultiplier, ranks } = req.body;
+    if (!name || !startDate) {
+      return res.status(400).json({ error: 'Name and start date are required' });
+    }
+
+    // Determine next season number
+    const last = await Season.findOne({}).sort({ seasonNumber: -1 });
+    const seasonNumber = last ? last.seasonNumber + 1 : 1;
+
+    // Deactivate any currently active season
+    await Season.updateMany({ active: true }, { $set: { active: false } });
+
+    const season = await Season.create({
+      seasonNumber,
+      name,
+      startDate: new Date(startDate),
+      endDate: endDate ? new Date(endDate) : null,
+      xpMultiplier: xpMultiplier || 1,
+      ranks: ranks || [
+        { name: 'Bronze', minLevel: 1, color: '#cd7f32' },
+        { name: 'Silver', minLevel: 5, color: '#c0c0c0' },
+        { name: 'Gold', minLevel: 10, color: '#ffd700' },
+        { name: 'Platinum', minLevel: 20, color: '#00cec9' },
+        { name: 'Diamond', minLevel: 35, color: '#a855f7' },
+        { name: 'Champion', minLevel: 50, color: '#ef4444' },
+      ],
+      active: true,
+    });
+
+    res.json({ season });
+  } catch (err) {
+    console.error('Create season error:', err);
+    res.status(500).json({ error: 'Failed to create season' });
+  }
+});
+
+// PUT /api/admin/seasons/:id — update season
+router.put('/seasons/:id', adminAuth, async (req, res) => {
+  try {
+    const { name, startDate, endDate, xpMultiplier, ranks, active } = req.body;
+    const update = {};
+    if (name !== undefined) update.name = name;
+    if (startDate !== undefined) update.startDate = new Date(startDate);
+    if (endDate !== undefined) update.endDate = endDate ? new Date(endDate) : null;
+    if (xpMultiplier !== undefined) update.xpMultiplier = Number(xpMultiplier);
+    if (ranks !== undefined) update.ranks = ranks;
+    if (active !== undefined) {
+      update.active = !!active;
+      if (active) {
+        // Deactivate others
+        await Season.updateMany({ _id: { $ne: req.params.id }, active: true }, { $set: { active: false } });
+      }
+    }
+
+    const season = await Season.findByIdAndUpdate(req.params.id, { $set: update }, { new: true });
+    if (!season) return res.status(404).json({ error: 'Season not found' });
+    res.json({ season });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to update season' });
+  }
+});
+
+// POST /api/admin/seasons/:id/end — end a season and reset all users' season stats
+router.post('/seasons/:id/end', adminAuth, async (req, res) => {
+  try {
+    const season = await Season.findByIdAndUpdate(req.params.id, {
+      $set: { active: false, endDate: new Date() }
+    }, { new: true });
+
+    if (!season) return res.status(404).json({ error: 'Season not found' });
+
+    // Reset all users' season XP/level
+    await User.updateMany({}, {
+      $set: { 'stats.seasonXp': 0, 'stats.seasonLevel': 1 }
+    });
+
+    res.json({ season, message: 'Season ended, all users season stats reset' });
+  } catch (err) {
+    console.error('End season error:', err);
+    res.status(500).json({ error: 'Failed to end season' });
   }
 });
 
