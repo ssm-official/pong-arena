@@ -1657,6 +1657,8 @@ function cancelLobby() {
 }
 
 function joinLobby(lobbyId) {
+  closeStakePicker();
+  switchTab('play');
   socket.emit('lobby-join', { lobbyId });
 }
 
@@ -1803,6 +1805,8 @@ function leaveTournament() {
 }
 
 function joinTournament(tournamentId) {
+  closeStakePicker();
+  switchTab('play');
   socket.emit('tournament-join', { tournamentId });
 }
 
@@ -3179,6 +3183,19 @@ function showMatchmakingState(state) {
   document.getElementById('escrow-ui').classList.toggle('hidden', state !== 'escrow');
   document.getElementById('game-ui').classList.toggle('hidden', state !== 'game');
   document.getElementById('gameover-ui').classList.toggle('hidden', state !== 'gameover');
+
+  // Auto-close modals that would overlap matchmaking states
+  if (state !== 'select') closeStakePicker();
+
+  // Close bracket modal when game starts (tournament match)
+  if (state === 'game') {
+    const bracketModal = document.getElementById('bracket-modal');
+    if (bracketModal) bracketModal.classList.add('hidden');
+  }
+
+  // Hide side nav during active game, show it otherwise
+  const sideNav = document.getElementById('side-nav');
+  if (sideNav) sideNav.classList.toggle('hidden', state === 'game');
 }
 
 let myPlayerSlot = null;
@@ -3216,6 +3233,7 @@ let currentCustomStake = null;
 
 // Socket: Match found
 socket.on('match-found', (data) => {
+  switchTab('play');
   currentGameId = data.gameId;
   pendingEscrowTx = data.escrowTransaction;
   myPlayerSlot = data.yourSlot;
@@ -3389,6 +3407,7 @@ let pendingP2Skin = null;
 let intermissionCountdownInterval = null;
 
 socket.on('game-countdown', (data) => {
+  switchTab('play');
   showMatchmakingState('game');
   GameClient.setGameInfo(data.gameId, null);
   currentGameId = data.gameId;
