@@ -135,6 +135,9 @@ app.use((err, req, res, next) => {
 io.on('connection', (socket) => {
   console.log(`Socket connected: ${socket.id}`);
 
+  // Send current online count immediately so even unauthenticated clients see it
+  socket.emit('online-users', Array.from(onlineUsers.keys()));
+
   // Client announces who they are after auth
   socket.on('register', ({ wallet, username }) => {
     if (!wallet) return;
