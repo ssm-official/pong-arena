@@ -62,7 +62,12 @@ async function buildPlayerResponse(user) {
   };
 }
 
-module.exports = function (io, onlineUsers, activeGames) {
+function tierToDisplay(tier) {
+  const map = { t5:'$5', t10:'$10', t25:'$25', t50:'$50', t100:'$100', t250:'$250', t500:'$500', t1000:'$1000', low:'$1', medium:'$5', high:'$10', duel:'Duel' };
+  return map[tier] || tier;
+}
+
+module.exports = function (io, onlineUsers, activeGames, queues, openLobbies, openTournaments) {
   const router = express.Router();
 
   // --------------------------------------------------
@@ -304,6 +309,56 @@ module.exports = function (io, onlineUsers, activeGames) {
     } catch (err) {
       res.status(500).json({ error: 'Failed to check Discord link' });
     }
+  });
+
+  // --------------------------------------------------
+  // GET /api/v1/matchmaking — Current matchmaking activity
+  // --------------------------------------------------
+  router.get('/matchmaking', (req, res) => {
+    // Build queues (only non-empty tiers)
+    const queueList = [];
+    for (const [tier, players] of Object.entries(queues)) {
+      if (players.length > 0) {
+        queueList.push({ tier, players: players.length, stakeDisplay: tierToDisplay(tier) });
+      }
+    }
+
+    // Build lobbies
+    const lobbyList = [];
+    for (const [lobbyId, lobby] of openLobbies) {
+      lobbyList.push({
+        lobbyId,
+        creator: lobby.username,
+        stakeAmount: lobby.stakeAmount,
+        stakeDisplay: '$' + (lobby.stakeAmount / 1e6),
+        createdAt: lobby.createdAt,
+      });
+    }
+
+    // Build tournaments (waiting/escrow only)
+    const tournamentList = [];
+    for (const [tid, t] of openTournaments) {
+      if (t.status === 'waiting' || t.status === 'escrow') {
+        tournamentList.push({
+          tournamentId: tid,
+          creator: t.creatorUsername,
+          maxPlayers: t.maxPlayers,
+          currentPlayers: t.players.length,
+          stakeAmount: t.stakeAmount,
+          stakeDisplay: '$' + (t.stakeAmount / 1e6),
+          status: t.status,
+          createdAt: t.createdAt,
+        });
+      }
+    }
+
+    res.json({
+      queues: queueList,
+      lobbies: lobbyList,
+      tournaments: tournamentList,
+      activeGames: activeGames.size,
+      onlinePlayers: onlineUsers.size,
+    });
   });
 
   return router;

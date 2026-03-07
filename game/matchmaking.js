@@ -1358,4 +1358,4 @@ function broadcastBracketUpdate(tournament, io) {
   });
 }
 
-module.exports = { setupMatchmaking, openTournaments };
+module.exports = { setupMatchmaking, openTournaments, queues, openLobbies };

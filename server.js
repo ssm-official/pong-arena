@@ -22,7 +22,7 @@ const adminRoutes = require('./routes/admin');
 const leaderboardRoutes = require('./routes/leaderboard');
 const publicApiRoutes = require('./routes/public-api');
 const { authMiddleware } = require('./middleware/auth');
-const { setupMatchmaking, openTournaments } = require('./game/matchmaking');
+const { setupMatchmaking, openTournaments, queues, openLobbies } = require('./game/matchmaking');
 const { PongEngine } = require('./game/PongEngine');
 const { seedSkins } = require('./models/Skin');
 const Message = require('./models/Message');
@@ -154,7 +154,7 @@ const onlineUsers = new Map();    // wallet -> { socketId, username }
 const activeGames = new Map();    // gameId -> PongEngine instance
 
 // Mount public API (needs access to in-memory state)
-app.use('/api/v1', publicApiRoutes(io, onlineUsers, activeGames));
+app.use('/api/v1', publicApiRoutes(io, onlineUsers, activeGames, queues, openLobbies, openTournaments));
 
 // Catch-all: serve index.html for SPA
 app.get('*', (req, res) => {
