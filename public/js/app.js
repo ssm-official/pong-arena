@@ -2156,7 +2156,7 @@ async function loadShop() {
       fallback.classList.add('hidden');
 
       const sortedSections = [...layout.sections].sort((a, b) => (a.order || 0) - (b.order || 0));
-      let sectionsHtml = '<div style="display:flex;flex-wrap:wrap;gap:16px">';
+      let sectionsHtml = '<div style="display:flex;flex-wrap:wrap;gap:16px;align-items:flex-start">';
       for (const section of sortedSections) {
         sectionsHtml += renderShopSection(section, allSkins, allCrates, ownedCrates);
       }
