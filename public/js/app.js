@@ -231,6 +231,7 @@ socket.on('connect', () => {
   if (currentUser) {
     socket.emit('register', { wallet: currentUser.wallet, username: currentUser.username });
     socket.emit('lobby-list-request');
+    socket.emit('tournament-list-request');
   }
 });
 
@@ -436,6 +437,7 @@ function showApp() {
   history.replaceState({ tab: initialTab }, '', ROUTE_PATHS[initialTab] || '/play');
   socket.emit('register', { wallet: currentUser.wallet, username: currentUser.username });
   socket.emit('lobby-list-request');
+  socket.emit('tournament-list-request');
   const canvas = document.getElementById('game-canvas');
   GameClient.init(canvas, currentUser.wallet);
   startPriceRefresh();
@@ -453,6 +455,7 @@ function initDashboard() {
   startPriceRefresh();
   document.getElementById('online-count').classList.remove('hidden');
   socket.emit('lobby-list-request');
+  socket.emit('tournament-list-request');
   applyWalletLocks();
 }
 
@@ -1758,6 +1761,328 @@ socket.on('lobby-list', (data) => {
 socket.on('lobby-error', (data) => {
   showToast(data.error || 'Lobby error', 'error');
 });
+
+// ===========================================
+// TOURNAMENTS
+// ===========================================
+
+let myTournamentId = null;
+let tournamentList = [];
+let myTournamentBracket = null;
+
+function updateTournamentPongDisplay() {
+  const usdInput = document.getElementById('tournament-usd-input').value;
+  const display = document.getElementById('tournament-pong-display');
+  if (!usdInput || pongPriceUsd <= 0) {
+    display.textContent = pongPriceUsd <= 0 ? 'Price unavailable' : '';
+    return;
+  }
+  const pongAmount = Math.round(parseFloat(usdInput) / pongPriceUsd);
+  display.textContent = `≈ ${pongAmount.toLocaleString()} $PONG per player`;
+}
+
+function createTournament() {
+  if (!requireWallet('create a tournament')) return;
+  const usdInput = parseFloat(document.getElementById('tournament-usd-input').value);
+  const maxPlayers = parseInt(document.getElementById('tournament-players-input').value);
+  if (!usdInput || usdInput <= 0) return alert('Enter a valid USD stake');
+  if (!maxPlayers || maxPlayers < 2) return alert('Need at least 2 players');
+  if (pongPriceUsd <= 0) return alert('Price unavailable. Try again later.');
+
+  const pongAmount = Math.round(usdInput / pongPriceUsd);
+  const baseUnits = pongAmount * 1e6;
+
+  socket.emit('tournament-create', { stakeAmount: baseUnits, maxPlayers });
+}
+
+function leaveTournament() {
+  if (!myTournamentId) return;
+  socket.emit('tournament-leave', { tournamentId: myTournamentId });
+  myTournamentId = null;
+  updateTournamentUI();
+}
+
+function joinTournament(tournamentId) {
+  socket.emit('tournament-join', { tournamentId });
+}
+
+function renderTournaments() {
+  const container = document.getElementById('tournament-list');
+  if (!container) return;
+
+  const available = tournamentList.filter(t => t.status === 'waiting' && t.tournamentId !== myTournamentId);
+
+  if (available.length === 0) {
+    container.innerHTML = '<p class="text-gray-500 text-sm text-center py-4">No open tournaments</p>';
+    return;
+  }
+
+  container.innerHTML = available.map(t => {
+    const pongAmt = t.stakeAmount / 1e6;
+    const usdAmt = pongPriceUsd > 0 ? formatUsd(pongAmt * pongPriceUsd) : '--';
+    const totalPotUsd = pongPriceUsd > 0 ? formatUsd(pongAmt * t.maxPlayers * pongPriceUsd * 0.9) : '--';
+    const isOwn = currentUser && t.creator === currentUser.wallet;
+    const pct = Math.round((t.currentPlayers / t.maxPlayers) * 100);
+    return `
+      <div class="bg-gray-800/60 rounded-lg px-3 py-2">
+        <div class="flex items-center justify-between mb-1">
+          <div class="flex items-center gap-2 min-w-0">
+            <span class="text-sm font-bold text-white truncate">${esc(t.creatorUsername)}'s Tournament</span>
+          </div>
+          <div class="text-right flex-shrink-0 ml-2">
+            <div class="text-sm font-bold text-yellow-400">${usdAmt} /player</div>
+            <div class="text-[10px] text-gray-500">Prize: ~${totalPotUsd}</div>
+          </div>
+        </div>
+        <div class="flex items-center justify-between mt-1.5">
+          <div class="flex-1 mr-3">
+            <div class="flex justify-between text-[10px] text-gray-400 mb-0.5">
+              <span>${t.currentPlayers}/${t.maxPlayers} players</span>
+            </div>
+            <div class="w-full bg-gray-700 rounded-full h-1">
+              <div class="bg-yellow-500 h-1 rounded-full transition-all" style="width:${pct}%"></div>
+            </div>
+          </div>
+          ${isOwn
+            ? '<span class="text-xs text-gray-500">Your tournament</span>'
+            : `<button onclick="joinTournament('${t.tournamentId}')" class="bg-yellow-600 hover:bg-yellow-700 px-3 py-1 rounded text-xs font-medium transition">Join</button>`
+          }
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function updateTournamentUI() {
+  const createSection = document.getElementById('tournament-create-section');
+  const myStatus = document.getElementById('tournament-my-status');
+  if (!createSection || !myStatus) return;
+
+  if (myTournamentId) {
+    createSection.classList.add('hidden');
+    myStatus.classList.remove('hidden');
+
+    const t = tournamentList.find(tt => tt.tournamentId === myTournamentId);
+    if (t) {
+      const pongAmt = t.stakeAmount / 1e6;
+      const usdAmt = pongPriceUsd > 0 ? formatUsd(pongAmt * pongPriceUsd) : '';
+      document.getElementById('tournament-my-stake').textContent = `${usdAmt} per player — ${t.maxPlayers} players`;
+      document.getElementById('tournament-player-count').textContent = `${t.currentPlayers}/${t.maxPlayers} players`;
+      document.getElementById('tournament-progress-bar').style.width = `${(t.currentPlayers / t.maxPlayers) * 100}%`;
+
+      const statusMap = { waiting: 'Waiting for players...', escrow: 'Escrow phase', 'in-progress': 'In Progress' };
+      document.getElementById('tournament-status-label').textContent = statusMap[t.status] || t.status;
+      document.getElementById('tournament-my-status-text').textContent = statusMap[t.status] || 'In tournament';
+
+      // Hide leave button if not in waiting phase
+      document.getElementById('btn-leave-tournament').classList.toggle('hidden', t.status !== 'waiting');
+    }
+  } else {
+    createSection.classList.remove('hidden');
+    myStatus.classList.add('hidden');
+  }
+}
+
+// Socket: Tournament created
+socket.on('tournament-created', (data) => {
+  myTournamentId = data.tournamentId;
+  document.getElementById('tournament-usd-input').value = '';
+  document.getElementById('tournament-players-input').value = '';
+  document.getElementById('tournament-pong-display').textContent = '';
+  updateTournamentUI();
+});
+
+// Socket: Tournament update (broadcast)
+socket.on('tournament-update', (data) => {
+  tournamentList = data.tournaments || [];
+  renderTournaments();
+  updateTournamentUI();
+});
+
+// Socket: Tournament list
+socket.on('tournament-list', (data) => {
+  tournamentList = data.tournaments || [];
+  renderTournaments();
+  updateTournamentUI();
+});
+
+// Socket: Joined tournament
+socket.on('tournament-joined', (data) => {
+  if (!myTournamentId) myTournamentId = data.tournamentId;
+});
+
+// Socket: Escrow required
+socket.on('tournament-escrow-required', async (data) => {
+  if (!window.solana || !window.solana.isPhantom) {
+    return showToast('Phantom wallet not found', 'error');
+  }
+  try {
+    const txBuffer = Uint8Array.from(atob(data.escrowTransaction), c => c.charCodeAt(0));
+    const transaction = window.solanaWeb3.Transaction.from(txBuffer);
+    const signed = await window.solana.signTransaction(transaction);
+    const connection = new window.solanaWeb3.Connection(
+      window.solanaWeb3.clusterApiUrl('mainnet-beta'), 'confirmed'
+    );
+    const txSignature = await connection.sendRawTransaction(signed.serialize());
+    socket.emit('tournament-escrow-submit', { tournamentId: data.tournamentId, txSignature });
+    showToast('Escrow submitted, verifying...');
+  } catch (err) {
+    showToast('Escrow failed: ' + err.message, 'error');
+  }
+});
+
+// Socket: Escrow status
+socket.on('tournament-escrow-status', (data) => {
+  // Could show per-player escrow status — for now just toast
+  if (data.wallet === currentUser?.wallet) {
+    if (data.status === 'confirmed') showToast('Your escrow confirmed!');
+    if (data.status === 'failed') showToast('Escrow verification failed', 'error');
+  }
+});
+
+// Socket: Tournament starting
+socket.on('tournament-starting', (data) => {
+  myTournamentBracket = data.bracket;
+  showToast('Tournament starting!');
+  openBracketModal(data.bracket, data.currentRound, data.tournamentId);
+});
+
+// Socket: Bracket update
+socket.on('tournament-bracket-update', (data) => {
+  myTournamentBracket = data.bracket;
+  // Update bracket modal if open
+  const modal = document.getElementById('bracket-modal');
+  if (modal && !modal.classList.contains('hidden')) {
+    renderBracket(data.bracket, data.currentRound);
+  }
+});
+
+// Socket: Tournament waiting (between rounds)
+socket.on('tournament-waiting', (data) => {
+  showToast(data.message);
+});
+
+// Socket: Tournament complete
+socket.on('tournament-complete', (data) => {
+  myTournamentBracket = data.bracket;
+  const won = data.winner === currentUser?.wallet;
+  const pongAmt = data.winnerShare / 1e6;
+  const usdAmt = pongPriceUsd > 0 ? ` (${formatUsd(pongAmt * pongPriceUsd)})` : '';
+
+  if (won) {
+    showToast(`You won the tournament! ${formatPongAmount(data.winnerShare)} $PONG${usdAmt}`);
+  } else {
+    showToast(`Tournament over. ${data.winnerUsername || 'Someone'} won!`);
+  }
+
+  myTournamentId = null;
+  updateTournamentUI();
+  refreshUserData();
+
+  // Show final bracket
+  openBracketModal(data.bracket, data.bracket.length - 1);
+});
+
+// Socket: Tournament cancelled
+socket.on('tournament-cancelled', (data) => {
+  showToast(data.reason || 'Tournament cancelled', 'error');
+  if (data.tournamentId === myTournamentId) {
+    myTournamentId = null;
+    updateTournamentUI();
+  }
+});
+
+// Socket: Tournament error
+socket.on('tournament-error', (data) => {
+  showToast(data.error || 'Tournament error', 'error');
+});
+
+// === BRACKET MODAL ===
+
+function viewMyTournamentBracket() {
+  if (myTournamentBracket) {
+    const t = tournamentList.find(tt => tt.tournamentId === myTournamentId);
+    openBracketModal(myTournamentBracket, t ? undefined : 0);
+  }
+}
+
+function openBracketModal(bracket, currentRound, tournamentId) {
+  document.getElementById('bracket-modal').classList.remove('hidden');
+  renderBracket(bracket, currentRound);
+}
+
+function closeBracketModal() {
+  document.getElementById('bracket-modal').classList.add('hidden');
+}
+
+function renderBracket(bracket, currentRound) {
+  const container = document.getElementById('bracket-rounds');
+  if (!container || !bracket) return;
+
+  const roundNames = [];
+  const totalRounds = bracket.length;
+  for (let i = 0; i < totalRounds; i++) {
+    if (i === totalRounds - 1) roundNames.push('Finals');
+    else if (i === totalRounds - 2) roundNames.push('Semis');
+    else if (i === totalRounds - 3) roundNames.push('Quarters');
+    else roundNames.push(`Round ${i + 1}`);
+  }
+
+  container.innerHTML = bracket.map((round, roundIndex) => {
+    const isCurrentRound = roundIndex === currentRound;
+    const roundLabel = roundNames[roundIndex] || `Round ${roundIndex + 1}`;
+
+    return `
+      <div class="bracket-round">
+        <div class="text-xs font-bold text-gray-400 mb-2 text-center ${isCurrentRound ? 'text-yellow-400' : ''}">
+          ${roundLabel}${isCurrentRound ? ' (Live)' : ''}
+        </div>
+        ${round.map(match => {
+          let matchClass = 'bracket-match';
+          if (match.status === 'in-progress') matchClass += ' match-live';
+          else if (match.status === 'completed') matchClass += ' match-complete';
+          else if (match.status === 'bye') matchClass += ' match-bye';
+
+          const p1Class = match.winner === match.player1Wallet ? 'winner' :
+                          (match.winner && match.winner !== match.player1Wallet ? 'loser' :
+                          (!match.player1Wallet ? 'bye' : ''));
+          const p2Class = match.winner === match.player2Wallet ? 'winner' :
+                          (match.winner && match.winner !== match.player2Wallet ? 'loser' :
+                          (!match.player2Wallet ? 'bye' : ''));
+
+          return `
+            <div class="${matchClass}">
+              <div class="bracket-player ${p1Class}">
+                <span>${esc(match.player1Username || 'TBD')}</span>
+                ${match.winner === match.player1Wallet ? '<span class="text-green-400 text-[10px]">W</span>' : ''}
+              </div>
+              <div class="border-t border-gray-700 my-1"></div>
+              <div class="bracket-player ${p2Class}">
+                <span>${esc(match.player2Username || 'TBD')}</span>
+                ${match.winner === match.player2Wallet ? '<span class="text-green-400 text-[10px]">W</span>' : ''}
+              </div>
+            </div>
+          `;
+        }).join('')}
+      </div>
+    `;
+  }).join('');
+
+  // Status text
+  const statusEl = document.getElementById('bracket-status-text');
+  if (statusEl) {
+    const allComplete = bracket.every(r => r.every(m => m.status === 'completed' || m.status === 'bye'));
+    if (allComplete) {
+      const finalWinner = bracket[bracket.length - 1][0]?.winner;
+      const isMe = finalWinner === currentUser?.wallet;
+      statusEl.textContent = isMe ? 'You are the champion!' : 'Tournament complete';
+      statusEl.className = `text-sm font-bold ${isMe ? 'text-yellow-400' : 'text-gray-400'}`;
+    } else {
+      statusEl.textContent = `Round ${(currentRound || 0) + 1} of ${bracket.length}`;
+      statusEl.className = 'text-sm text-gray-400';
+    }
+  }
+}
 
 // ===========================================
 // IN-GAME CHAT
@@ -3262,6 +3587,17 @@ socket.on('game-over', (data) => {
   if (banner) banner.classList.add('hidden');
   if (disconnectCountdownInterval) { clearInterval(disconnectCountdownInterval); disconnectCountdownInterval = null; }
   const won = data.winner === currentUser.wallet;
+
+  // Tournament match — show advancing message instead of normal payout
+  if (data.tournamentId) {
+    document.getElementById('gameover-title').textContent = won ? 'MATCH WON!' : 'ELIMINATED';
+    document.getElementById('gameover-title').className = `text-2xl font-bold mb-2 ${won ? 'text-yellow-400' : 'text-red-400'}`;
+    document.getElementById('gameover-score').textContent = `Score: ${data.score.p1} - ${data.score.p2}`;
+    document.getElementById('gameover-payout').textContent = won ? 'Advancing to next round...' : 'Better luck next time!';
+    document.getElementById('gameover-add-friend').classList.add('hidden');
+    showMatchmakingState('gameover');
+    return;
+  }
 
   document.getElementById('gameover-title').textContent = won ? 'VICTORY!' : 'DEFEAT';
   document.getElementById('gameover-title').className = `text-2xl font-bold mb-2 ${won ? 'text-green-400' : 'text-red-400'}`;

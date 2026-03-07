@@ -6,7 +6,8 @@ const matchSchema = new mongoose.Schema({
   player2: { type: String, required: true },
   player1Username: String,
   player2Username: String,
-  tier: { type: String, enum: ['low', 'medium', 'high', 'duel', 't5', 't10', 't25', 't50', 't100', 't250', 't500', 't1000'], required: true },
+  tier: { type: String, enum: ['low', 'medium', 'high', 'duel', 'tournament', 't5', 't10', 't25', 't50', 't100', 't250', 't500', 't1000'], required: true },
+  tournamentId: { type: String, default: null },
   stakeAmount: { type: Number, required: true },  // lamports of $PONG
   score: {
     player1: { type: Number, default: 0 },

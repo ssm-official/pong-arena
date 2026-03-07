@@ -22,7 +22,7 @@ const adminRoutes = require('./routes/admin');
 const leaderboardRoutes = require('./routes/leaderboard');
 const publicApiRoutes = require('./routes/public-api');
 const { authMiddleware } = require('./middleware/auth');
-const { setupMatchmaking } = require('./game/matchmaking');
+const { setupMatchmaking, openTournaments } = require('./game/matchmaking');
 const { PongEngine } = require('./game/PongEngine');
 const { seedSkins } = require('./models/Skin');
 const Message = require('./models/Message');
@@ -183,6 +183,12 @@ io.on('connection', (socket) => {
     socket.wallet = wallet;
     socket.username = username;
     io.emit('online-users', Array.from(onlineUsers.keys()));
+
+    // Update socketId in any active tournament
+    for (const [tournamentId, t] of openTournaments) {
+      const player = t.players.find(p => p.wallet === wallet);
+      if (player) player.socketId = socket.id;
+    }
 
     // Update socketId in any active game (handles reconnection)
     for (const [gameId, game] of activeGames) {

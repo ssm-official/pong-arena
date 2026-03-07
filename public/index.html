@@ -129,6 +129,17 @@
     .toast-notification { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); z-index: 100; background: #16a34a; color: white; padding: 12px 24px; border-radius: 8px; font-size: 14px; font-weight: 500; opacity: 0; transition: opacity 0.3s ease; pointer-events: none; }
     .toast-notification.show { opacity: 1; }
 
+    /* Tournament bracket */
+    .bracket-round { display: flex; flex-direction: column; justify-content: center; gap: 8px; min-width: 180px; }
+    .bracket-match { background: #1a1a3e; border: 1px solid #2d2d5e; border-radius: 8px; padding: 8px 12px; }
+    .bracket-match.match-live { border-color: #eab308; animation: pulse-glow 2s infinite; }
+    .bracket-match.match-complete { border-color: #22c55e; opacity: 0.8; }
+    .bracket-match.match-bye { border-color: #4b5563; opacity: 0.5; }
+    .bracket-player { display: flex; justify-content: space-between; align-items: center; padding: 2px 0; font-size: 12px; }
+    .bracket-player.winner { color: #22c55e; font-weight: 600; }
+    .bracket-player.loser { color: #6b7280; text-decoration: line-through; }
+    .bracket-player.bye { color: #4b5563; font-style: italic; }
+
     /* === Pong-themed hero animations === */
     @keyframes pong-bounce {
       0%, 100% { transform: translate(-60px, -50%); }
@@ -1590,6 +1601,80 @@
             <p class="text-gray-500 text-sm text-center py-4">No open lobbies. Create one!</p>
           </div>
         </div>
+
+        <!-- Tournaments -->
+        <div class="border-t border-gray-800 pt-5 mt-5">
+          <div class="flex items-center justify-between mb-4">
+            <h4 class="text-sm font-bold text-gray-300">Tournaments</h4>
+            <span class="text-[10px] text-gray-500 bg-gray-800/80 px-2 py-0.5 rounded">Single Elimination</span>
+          </div>
+
+          <!-- Create Tournament Form -->
+          <div id="tournament-create-section" class="mb-4">
+            <div class="flex gap-2">
+              <div class="flex-1">
+                <input id="tournament-usd-input" type="number" min="0" step="0.01" placeholder="Stake per player (USD)"
+                  class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2.5 text-white text-sm focus:border-purple-500 focus:outline-none transition"
+                  oninput="updateTournamentPongDisplay()" />
+                <p id="tournament-pong-display" class="text-gray-500 text-xs mt-1 ml-1"></p>
+              </div>
+              <input id="tournament-players-input" type="number" min="2" step="1" placeholder="Players"
+                class="w-20 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2.5 text-white text-sm focus:border-purple-500 focus:outline-none transition text-center" />
+              <button id="btn-create-tournament" onclick="createTournament()"
+                class="bg-yellow-600 hover:bg-yellow-700 px-4 py-2.5 rounded-lg text-sm font-bold transition whitespace-nowrap">
+                Create
+              </button>
+            </div>
+            <p class="text-gray-600 text-[10px] mt-1 ml-1">Winner takes 90% of total pot (8% burn, 2% fee)</p>
+          </div>
+
+          <!-- My Tournament Status -->
+          <div id="tournament-my-status" class="hidden mb-4">
+            <div class="bg-yellow-900/30 border border-yellow-700/50 rounded-lg p-3">
+              <div class="flex items-center justify-between">
+                <div>
+                  <p class="text-sm text-yellow-300 font-medium" id="tournament-my-status-text">In tournament</p>
+                  <p id="tournament-my-stake" class="text-xs text-gray-400 mt-0.5"></p>
+                </div>
+                <div class="flex gap-2">
+                  <button onclick="viewMyTournamentBracket()" class="bg-gray-700 hover:bg-gray-600 px-3 py-1.5 rounded-lg text-xs font-medium transition">Bracket</button>
+                  <button id="btn-leave-tournament" onclick="leaveTournament()" class="bg-red-600 hover:bg-red-700 px-3 py-1.5 rounded-lg text-xs font-medium transition">Leave</button>
+                </div>
+              </div>
+              <!-- Player progress bar -->
+              <div class="mt-2">
+                <div class="flex justify-between text-[10px] text-gray-400 mb-1">
+                  <span id="tournament-player-count">0/0 players</span>
+                  <span id="tournament-status-label">Waiting...</span>
+                </div>
+                <div class="w-full bg-gray-800 rounded-full h-1.5">
+                  <div id="tournament-progress-bar" class="bg-yellow-500 h-1.5 rounded-full transition-all" style="width:0%"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Tournament List -->
+          <div id="tournament-list" class="space-y-2 max-h-60 overflow-y-auto">
+            <p class="text-gray-500 text-sm text-center py-4">No open tournaments</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ TOURNAMENT BRACKET MODAL ============ -->
+  <div id="bracket-modal" class="hidden fixed inset-0 bg-black/80 z-50 flex items-center justify-center" onclick="if(event.target===this)closeBracketModal()">
+    <div class="bg-arena-card rounded-2xl max-w-4xl w-full mx-4 glow-border overflow-hidden max-h-[90vh] overflow-y-auto">
+      <div class="flex items-center justify-between p-5 border-b border-gray-800">
+        <h3 class="text-lg font-bold text-white">Tournament Bracket</h3>
+        <button onclick="closeBracketModal()" class="text-gray-400 hover:text-white text-xl leading-none">&times;</button>
+      </div>
+      <div id="bracket-content" class="p-5 overflow-x-auto">
+        <div id="bracket-rounds" class="flex gap-6 min-w-max"></div>
+      </div>
+      <div class="p-4 border-t border-gray-800 text-center">
+        <p id="bracket-status-text" class="text-sm text-gray-400"></p>
       </div>
     </div>
   </div>

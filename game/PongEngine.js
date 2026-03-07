@@ -14,7 +14,7 @@ const READY_TIMEOUT_MS = 30000; // 30 seconds to ready up
 const INPUT_RATE_LIMIT = 30;    // max direction changes/sec per player
 
 class PongEngine {
-  constructor(gameId, player1, player2, tier, io, activeGames, customStake) {
+  constructor(gameId, player1, player2, tier, io, activeGames, customStake, options) {
     this.gameId = gameId;
     this.player1 = player1;
     this.player2 = player2;
@@ -22,6 +22,12 @@ class PongEngine {
     this.io = io;
     this.activeGames = activeGames;
     this.customStake = customStake || null;
+
+    // Tournament options
+    const opts = options || {};
+    this.skipPayout = opts.skipPayout || false;
+    this.tournamentId = opts.tournamentId || null;
+    this.onTournamentMatchEnd = opts.onTournamentMatchEnd || null;
     this.tickCount = 0;
     this.broadcastInterval = 1; // broadcast every tick = 60Hz
     this.pendingSounds = [];
@@ -314,7 +320,33 @@ class PongEngine {
       score: this.simState.score,
       player1: { wallet: this.player1.wallet, username: this.player1.username },
       player2: { wallet: this.player2.wallet, username: this.player2.username },
+      tournamentId: this.tournamentId || null,
     });
+
+    if (this.skipPayout) {
+      // Tournament match — skip payout, just update stats and match record
+      try {
+        await Match.findOneAndUpdate({ gameId: this.gameId }, {
+          winner: winnerWallet,
+          score: { player1: this.simState.score.p1, player2: this.simState.score.p2 },
+          status: 'completed',
+          completedAt: new Date(),
+        });
+        await User.findOneAndUpdate({ wallet: winnerWallet }, { $inc: { 'stats.wins': 1 } });
+        await User.findOneAndUpdate({ wallet: loserWallet }, { $inc: { 'stats.losses': 1 } });
+      } catch (err) {
+        console.error('Tournament match DB update failed:', err.message);
+      }
+
+      // Notify tournament system
+      if (this.onTournamentMatchEnd) {
+        this.onTournamentMatchEnd(winnerWallet, this.gameId);
+      }
+
+      // Clean up immediately (no post-game chat for tournament matches)
+      setTimeout(() => { this.activeGames.delete(this.gameId); }, 10000);
+      return;
+    }
 
     try {
       const stakeAmount = this.getStakeAmount();
