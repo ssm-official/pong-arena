@@ -1340,11 +1340,11 @@ function renderFriendRequests(requests) {
     return;
   }
   container.innerHTML = requests.map(r => `
-    <div class="rounded-xl p-2.5 flex items-center justify-between bg-yellow-500/5 border border-yellow-500/10">
+    <div class="rounded-xl p-2.5 flex items-center justify-between bg-gray-800/50 hover:bg-gray-800 transition-colors">
       <span class="font-medium text-sm">${esc(r.fromUsername)}</span>
       <div class="flex gap-1.5">
-        <button onclick="acceptFriend('${r.from}')" class="bg-green-600/20 hover:bg-green-600/40 text-green-400 px-2.5 py-1 rounded-lg text-xs font-medium transition">Accept</button>
-        <button onclick="declineFriend('${r.from}')" class="bg-red-600/10 hover:bg-red-600/20 text-red-400/70 hover:text-red-400 px-2.5 py-1 rounded-lg text-xs transition">Decline</button>
+        <button onclick="acceptFriend('${r.from}')" class="bg-purple-600 hover:bg-purple-500 text-white px-2.5 py-1 rounded-lg text-xs font-medium transition">Accept</button>
+        <button onclick="declineFriend('${r.from}')" class="text-gray-500 hover:text-gray-300 px-2.5 py-1 rounded-lg text-xs transition">Decline</button>
       </div>
     </div>
   `).join('');
@@ -1406,7 +1406,8 @@ async function loadRecentOpponents() {
       if (!seen.has(oppWallet)) {
         seen.add(oppWallet);
         const won = m.winner === currentUser.wallet;
-        opponents.push({ wallet: oppWallet, username: oppName, won, score: m.score, tier: m.tier });
+        const oppPfp = m.player1 === currentUser.wallet ? (m.player2Pfp || '') : (m.player1Pfp || '');
+        opponents.push({ wallet: oppWallet, username: oppName, won, score: m.score, tier: m.tier, pfp: oppPfp });
       }
     }
 
@@ -1415,6 +1416,7 @@ async function loadRecentOpponents() {
     container.innerHTML = opponents.slice(0, 30).map(o => `
       <div class="bg-arena-card rounded-lg p-3 flex items-center justify-between">
         <div class="flex items-center gap-3 cursor-pointer" onclick="showProfilePopup('${o.wallet}')">
+          <img src="${esc(o.pfp || '')}" class="w-7 h-7 rounded-full bg-gray-700" onerror="this.style.display='none'" />
           <div class="w-2 h-2 rounded-full ${onlineUsers.includes(o.wallet) ? 'bg-green-400' : 'bg-gray-600'}"></div>
           <span class="font-medium">${esc(o.username || 'Unknown')}</span>
           <span class="text-xs ${o.won ? 'text-green-400' : 'text-red-400'}">${o.won ? 'W' : 'L'}</span>
@@ -1459,21 +1461,27 @@ async function loadFriendsOpponents() {
       if (!seen.has(oppWallet)) {
         seen.add(oppWallet);
         const won = m.winner === currentUser.wallet;
-        opponents.push({ wallet: oppWallet, username: oppName, won, score: m.score, tier: m.tier });
+        const oppPfp = m.player1 === currentUser.wallet ? (m.player2Pfp || '') : (m.player1Pfp || '');
+        opponents.push({ wallet: oppWallet, username: oppName, won, score: m.score, tier: m.tier, pfp: oppPfp });
       }
     }
 
     const isFriend = (wallet) => currentUser.friends && currentUser.friends.includes(wallet);
+    const defaultAvatar = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%234b5563'%3E%3Cpath d='M12 12c2.7 0 5-2.3 5-5s-2.3-5-5-5-5 2.3-5 5 2.3 5 5 5zm0 2c-3.3 0-10 1.7-10 5v2h20v-2c0-3.3-6.7-5-10-5z'/%3E%3C/svg%3E";
 
     container.innerHTML = opponents.slice(0, 20).map(o => `
       <div class="group rounded-xl p-2.5 flex items-center justify-between hover:bg-gray-800/50 transition-colors">
         <div class="flex items-center gap-2.5 cursor-pointer min-w-0 flex-1" onclick="showProfilePopup('${o.wallet}')">
-          <div class="flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold ${o.won ? 'bg-green-500/15 text-green-400' : 'bg-red-500/15 text-red-400'}">
-            ${o.won ? 'W' : 'L'}
+          <div class="relative flex-shrink-0">
+            <img src="${esc(o.pfp || '')}" class="w-8 h-8 rounded-full bg-gray-700" onerror="this.src='${defaultAvatar}'" />
+            <div class="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-gray-900 ${onlineUsers.includes(o.wallet) ? 'bg-green-400' : 'bg-gray-600'}"></div>
           </div>
           <div class="min-w-0">
             <span class="font-medium text-sm block truncate">${esc(o.username || 'Unknown')}</span>
-            <span class="text-[10px] text-gray-600">${o.tier || ''}</span>
+            <div class="flex items-center gap-1.5">
+              <span class="text-[10px] font-bold ${o.won ? 'text-green-400' : 'text-red-400'}">${o.won ? 'WIN' : 'LOSS'}</span>
+              ${o.tier ? `<span class="text-[10px] text-gray-600">${o.tier}</span>` : ''}
+            </div>
           </div>
         </div>
         <div class="flex-shrink-0">

@@ -143,7 +143,26 @@ router.get('/history', async (req, res) => {
       status: 'completed'
     })
     .sort({ completedAt: -1 })
-    .limit(50);
+    .limit(50)
+    .lean();
+
+    // Collect unique opponent wallets and batch-fetch their pfps
+    const opponentWallets = new Set();
+    for (const m of matches) {
+      opponentWallets.add(m.player1 === req.wallet ? m.player2 : m.player1);
+    }
+    const users = await User.find(
+      { wallet: { $in: [...opponentWallets] } },
+      { wallet: 1, pfp: 1 }
+    ).lean();
+    const pfpMap = {};
+    for (const u of users) pfpMap[u.wallet] = u.pfp || '';
+
+    // Attach pfps to matches
+    for (const m of matches) {
+      m.player1Pfp = pfpMap[m.player1] || '';
+      m.player2Pfp = pfpMap[m.player2] || '';
+    }
 
     res.json({ matches });
   } catch (err) {
