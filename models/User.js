@@ -8,7 +8,7 @@ const userSchema = new mongoose.Schema({
   pfp: { type: String, default: '' },           // profile pic URL
   banner: { type: String, default: '' },        // profile banner URL
   bio: { type: String, default: '', maxlength: 160 },
-  discordId: { type: String, default: null, sparse: true, unique: true, index: true },
+  discordId: { type: String, sparse: true, unique: true, index: true },
   friends: [{ type: String }],                  // array of wallet addresses
   friendRequests: [{                             // pending incoming requests
     from: String,                                // wallet address
@@ -34,7 +34,23 @@ const userSchema = new mongoose.Schema({
 
 const User = mongoose.model('User', userSchema);
 
-// Sync indexes on startup — drops stale indexes that no longer match the schema
-User.syncIndexes().catch(err => console.warn('User syncIndexes:', err.message));
+// Clean up stale indexes on startup (especially discordId null duplicates)
+(async () => {
+  try {
+    // Drop the problematic discordId index if it exists, then let syncIndexes rebuild it
+    const collection = User.collection;
+    const indexes = await collection.indexes().catch(() => []);
+    for (const idx of indexes) {
+      if (idx.key && idx.key.discordId !== undefined && idx.name !== '_id_') {
+        await collection.dropIndex(idx.name).catch(() => {});
+      }
+    }
+    // Also clear any null discordId values so they don't conflict
+    await User.updateMany({ discordId: null }, { $unset: { discordId: 1 } }).catch(() => {});
+    await User.syncIndexes();
+  } catch (err) {
+    console.warn('User index cleanup:', err.message);
+  }
+})();
 
 module.exports = User;
