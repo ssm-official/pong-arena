@@ -63,14 +63,6 @@ const publicApiLimiter = rateLimit({
 });
 app.use('/api/v1/', publicApiLimiter);
 
-// Return 503 if MongoDB isn't connected yet
-app.use('/api/', (req, res, next) => {
-  if (mongoose.connection.readyState !== 1) {
-    return res.status(503).json({ error: 'Database connecting, please retry in a moment.' });
-  }
-  next();
-});
-
 // --------------- Maintenance Mode ---------------
 let maintenanceCache = { enabled: false, allowedWallets: [], lastRefresh: 0 };
 
@@ -87,7 +79,7 @@ async function refreshMaintenanceCache() {
 // Refresh cache every 30s
 setInterval(refreshMaintenanceCache, 30000);
 
-// Public endpoint — no auth needed
+// Public endpoint — no auth, no DB required (uses cache)
 app.get('/api/server-status', async (req, res) => {
   if (Date.now() - maintenanceCache.lastRefresh > 30000) await refreshMaintenanceCache();
   res.json({
@@ -96,13 +88,21 @@ app.get('/api/server-status', async (req, res) => {
   });
 });
 
+// Return 503 if MongoDB isn't connected yet
+app.use('/api/', (req, res, next) => {
+  if (mongoose.connection.readyState !== 1) {
+    return res.status(503).json({ error: 'Database connecting, please retry in a moment.' });
+  }
+  next();
+});
+
 // Maintenance middleware — block most API routes when in maintenance mode
 app.use('/api/', (req, res, next) => {
   if (!maintenanceCache.enabled) return next();
   const p = req.path;
-  // Allow admin, server-status, auth/login, profile through
+  // Allow admin, server-status, auth, profile through
   if (p.startsWith('/admin') || p.startsWith('/server-status') ||
-      p.startsWith('/auth/login') || p.startsWith('/profile')) {
+      p.startsWith('/auth') || p.startsWith('/profile')) {
     return next();
   }
   return res.status(503).json({ error: 'Maintenance mode' });
