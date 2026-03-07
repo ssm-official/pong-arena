@@ -2156,7 +2156,7 @@ async function loadShop() {
       fallback.classList.add('hidden');
 
       const sortedSections = [...layout.sections].sort((a, b) => (a.order || 0) - (b.order || 0));
-      let sectionsHtml = '<div style="display:flex;flex-wrap:wrap;row-gap:16px;column-gap:0;align-items:flex-start">';
+      let sectionsHtml = '<div style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-start">';
       for (const section of sortedSections) {
         sectionsHtml += renderShopSection(section, allSkins, allCrates, ownedCrates);
       }
@@ -2226,12 +2226,12 @@ function renderShopSection(section, allSkins, allCrates, ownedCrates) {
   // Skip expired sections
   if (section.expiresAt && new Date(section.expiresAt) <= new Date()) return '';
 
-  const widthStyle = { half: 'width:50%', third: 'width:33.333%' };
+  const widthStyle = { half: 'width:calc(50% - 6px)', third: 'width:calc(33.333% - 8px)' };
   const ws = widthStyle[section.width] || 'width:100%';
 
   if (section.type === 'banner') {
     if (!section.bannerImage) return '';
-    return `<div class="mb-4 rounded-2xl overflow-hidden" style="${ws}"><img src="${esc(section.bannerImage)}" class="w-full" /></div>`;
+    return `<div class="rounded-2xl overflow-hidden" style="${ws}"><img src="${esc(section.bannerImage)}" class="w-full" /></div>`;
   }
 
   const items = (section.items || []).sort((a, b) => (a.order || 0) - (b.order || 0));
@@ -2257,10 +2257,14 @@ function renderShopSection(section, allSkins, allCrates, ownedCrates) {
     countdownHtml = `<span class="shop-countdown text-xs text-yellow-400 ml-2" data-expires="${esc(section.expiresAt)}"></span>`;
   }
 
+  const titleClass = isFeatured
+    ? 'text-xl font-bold bg-gradient-to-r from-yellow-400 to-purple-400 bg-clip-text text-transparent'
+    : 'text-lg font-bold text-white';
+
   return `
-    <div class="mb-4" style="${ws}" ${section.expiresAt ? `data-section-expires="${esc(section.expiresAt)}"` : ''}>
+    <div class="rounded-xl border border-gray-800 p-4" style="${ws}" ${section.expiresAt ? `data-section-expires="${esc(section.expiresAt)}"` : ''}>
       <div class="flex items-center mb-3">
-        ${section.title ? `<h3 class="text-lg font-bold text-white ${isFeatured ? 'text-xl bg-gradient-to-r from-yellow-400 to-purple-400 bg-clip-text text-transparent' : ''}">${esc(section.title)}</h3>` : ''}
+        ${section.title ? `<h3 class="${titleClass}">${esc(section.title)}</h3>` : ''}
         ${countdownHtml}
       </div>
       <div class="grid ${gridCols} gap-3">${tilesHtml}</div>
