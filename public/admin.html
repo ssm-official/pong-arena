@@ -1147,15 +1147,15 @@
         return;
       }
       const sorted = [...layoutSections].sort((a, b) => (a.order || 0) - (b.order || 0));
-      const widthClass = { full: 'w-full', half: 'w-[calc(50%-6px)]', third: 'w-[calc(33.333%-8px)]' };
-      let html = '<div class="flex flex-wrap gap-3">';
+      const widthMap = { full: 'width:100%', half: 'width:calc(50% - 6px)', third: 'width:calc(33.333% - 8px)' };
+      let html = '<div style="display:flex;flex-wrap:wrap;gap:12px">';
       for (const section of sorted) {
         const isSel = section.id === selectedSectionId && !selectedItemId;
         const sectionBorder = isSel ? 'border-purple-500 ring-1 ring-purple-500/30' : 'border-gray-800 hover:border-gray-700';
-        const wc = widthClass[section.width] || 'w-full';
+        const wStyle = widthMap[section.width] || 'width:100%';
 
         if (section.type === 'banner') {
-          html += `<div class="${wc} rounded-xl border-2 ${sectionBorder} overflow-hidden cursor-pointer transition-all" onclick="selectSection('${section.id}')">`;
+          html += `<div style="${wStyle}" class="rounded-xl border-2 ${sectionBorder} overflow-hidden cursor-pointer transition-all" onclick="selectSection('${section.id}')">`;
           if (section.bannerImage) {
             html += `<img src="${esc(section.bannerImage)}" class="w-full" />`;
           } else {
@@ -1169,7 +1169,7 @@
         const gridCols = isFeatured ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3' : 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-4';
         const titleClass = isFeatured ? 'text-xl bg-gradient-to-r from-yellow-400 to-purple-400 bg-clip-text text-transparent' : 'text-lg text-white';
 
-        html += `<div class="${wc} rounded-xl border-2 ${sectionBorder} p-3 transition-all">`;
+        html += `<div style="${wStyle}" class="rounded-xl border-2 ${sectionBorder} p-3 transition-all">`;
         html += `<div class="cursor-pointer mb-2" onclick="selectSection('${section.id}')">`;
         html += `<h3 class="font-bold ${titleClass}">${esc(section.title || 'Untitled')}</h3>`;
         const expiry = section.expiresAt ? `&middot; <span class="text-yellow-400">expires ${new Date(section.expiresAt).toLocaleDateString()}</span>` : '';
