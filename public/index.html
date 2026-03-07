@@ -63,6 +63,7 @@
     @keyframes shop-rainbow { 0% { filter: hue-rotate(0deg) drop-shadow(0 0 8px rgba(168,85,247,0.6)); } 100% { filter: hue-rotate(360deg) drop-shadow(0 0 8px rgba(168,85,247,0.6)); } }
     @keyframes shop-shake { 0%, 100% { transform: translateX(0); } 20% { transform: translateX(-3px) rotate(-1deg); } 40% { transform: translateX(3px) rotate(1deg); } 60% { transform: translateX(-2px); } 80% { transform: translateX(2px); } }
     @keyframes shop-zoom { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.15); } }
+    @keyframes shop-orbit { 0% { filter: drop-shadow(8px 0 14px rgba(168,85,247,0.9)) drop-shadow(-8px 0 14px rgba(96,165,250,0.3)); } 25% { filter: drop-shadow(0 8px 14px rgba(96,165,250,0.9)) drop-shadow(0 -8px 14px rgba(236,72,153,0.3)); } 50% { filter: drop-shadow(-8px 0 14px rgba(236,72,153,0.9)) drop-shadow(8px 0 14px rgba(234,179,8,0.3)); } 75% { filter: drop-shadow(0 -8px 14px rgba(234,179,8,0.9)) drop-shadow(0 8px 14px rgba(168,85,247,0.3)); } 100% { filter: drop-shadow(8px 0 14px rgba(168,85,247,0.9)) drop-shadow(-8px 0 14px rgba(96,165,250,0.3)); } }
     @keyframes shop-underline-pulse { 0%, 100% { opacity: 0.4; transform: scaleX(0.8); } 50% { opacity: 1; transform: scaleX(1.1); } }
     .shop-anim-glow { animation: shop-glow 2s ease-in-out infinite; }
     .shop-anim-float { animation: shop-float 2.5s ease-in-out infinite; }
@@ -74,6 +75,7 @@
     .shop-anim-rainbow { animation: shop-rainbow 3s linear infinite; }
     .shop-anim-shake { animation: shop-shake 0.6s ease-in-out infinite; }
     .shop-anim-zoom { animation: shop-zoom 2s ease-in-out infinite; }
+    .shop-anim-orbit { animation: shop-orbit 3s linear infinite; }
     .shop-anim-underline { width: 50px; height: 4px; border-radius: 2px; margin: 4px auto 0; animation: shop-underline-pulse 2s ease-in-out infinite; }
     .shop-anim-underline.shop-ul-glow { background: rgba(168,85,247,0.6); }
     .shop-anim-underline.shop-ul-float { background: rgba(96,165,250,0.6); }
@@ -85,6 +87,7 @@
     .shop-anim-underline.shop-ul-rainbow { background: linear-gradient(90deg, #ef4444, #eab308, #22c55e, #3b82f6, #a855f7); }
     .shop-anim-underline.shop-ul-shake { background: rgba(239,68,68,0.6); }
     .shop-anim-underline.shop-ul-zoom { background: rgba(168,85,247,0.6); }
+    .shop-anim-underline.shop-ul-orbit { background: linear-gradient(90deg, #a855f7, #3b82f6, #ec4899, #eab308, #a855f7); background-size: 300% 100%; }
     .shop-countdown { font-variant-numeric: tabular-nums; }
     /* === SECRET CUTSCENE === */
     #secret-cutscene { background: #000; }

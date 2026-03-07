@@ -24,6 +24,7 @@
     @keyframes k-rainbow { 0% { filter: hue-rotate(0deg) drop-shadow(0 0 8px rgba(168,85,247,0.6)); } 100% { filter: hue-rotate(360deg) drop-shadow(0 0 8px rgba(168,85,247,0.6)); } }
     @keyframes k-shake { 0%, 100% { transform: translateX(0); } 20% { transform: translateX(-3px) rotate(-1deg); } 40% { transform: translateX(3px) rotate(1deg); } 60% { transform: translateX(-2px); } 80% { transform: translateX(2px); } }
     @keyframes k-zoom { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.15); } }
+    @keyframes k-orbit { 0% { filter: drop-shadow(8px 0 14px rgba(168,85,247,0.9)) drop-shadow(-8px 0 14px rgba(96,165,250,0.3)); } 25% { filter: drop-shadow(0 8px 14px rgba(96,165,250,0.9)) drop-shadow(0 -8px 14px rgba(236,72,153,0.3)); } 50% { filter: drop-shadow(-8px 0 14px rgba(236,72,153,0.9)) drop-shadow(8px 0 14px rgba(234,179,8,0.3)); } 75% { filter: drop-shadow(0 -8px 14px rgba(234,179,8,0.9)) drop-shadow(0 8px 14px rgba(168,85,247,0.3)); } 100% { filter: drop-shadow(8px 0 14px rgba(168,85,247,0.9)) drop-shadow(-8px 0 14px rgba(96,165,250,0.3)); } }
     .anim-glow { animation: k-glow 2s ease-in-out infinite; }
     .anim-float { animation: k-float 2.5s ease-in-out infinite; }
     .anim-pulse { animation: k-pulse 1.5s ease-in-out infinite; }
@@ -34,6 +35,7 @@
     .anim-rainbow { animation: k-rainbow 3s linear infinite; }
     .anim-shake { animation: k-shake 0.6s ease-in-out infinite; }
     .anim-zoom { animation: k-zoom 2s ease-in-out infinite; }
+    .anim-orbit { animation: k-orbit 3s linear infinite; }
     .anim-underline { width: 40px; height: 4px; border-radius: 2px; margin-top: 2px; }
     .anim-underline.anim-glow { background: rgba(168,85,247,0.5); animation: k-glow 2s ease-in-out infinite; }
     .anim-underline.anim-float { background: rgba(96,165,250,0.5); animation: k-pulse 2s ease-in-out infinite; }
@@ -45,6 +47,7 @@
     .anim-underline.anim-rainbow { background: linear-gradient(90deg, #ef4444, #eab308, #22c55e, #3b82f6, #a855f7); background-size: 200% 100%; animation: k-shimmer 2s ease-in-out infinite; }
     .anim-underline.anim-shake { background: rgba(239,68,68,0.5); animation: k-pulse 1s ease-in-out infinite; }
     .anim-underline.anim-zoom { background: rgba(168,85,247,0.5); animation: k-zoom 2s ease-in-out infinite; }
+    .anim-underline.anim-orbit { background: linear-gradient(90deg, #a855f7, #3b82f6, #ec4899, #eab308, #a855f7); background-size: 300% 100%; animation: k-shimmer 2s ease-in-out infinite; }
   </style>
 </head>
 <body class="text-gray-100 min-h-screen">
@@ -1191,7 +1194,7 @@
     }
 
     function animClass(anim) {
-      const map = { glow: 'anim-glow', float: 'anim-float', pulse: 'anim-pulse', shimmer: 'anim-shimmer', fire: 'anim-fire', spin: 'anim-spin', bounce: 'anim-bounce', rainbow: 'anim-rainbow', shake: 'anim-shake', zoom: 'anim-zoom' };
+      const map = { glow: 'anim-glow', float: 'anim-float', pulse: 'anim-pulse', shimmer: 'anim-shimmer', fire: 'anim-fire', spin: 'anim-spin', bounce: 'anim-bounce', rainbow: 'anim-rainbow', shake: 'anim-shake', zoom: 'anim-zoom', orbit: 'anim-orbit' };
       return map[anim] || '';
     }
 
@@ -1318,6 +1321,7 @@
               <option value="rainbow" ${anim==='rainbow'?'selected':''}>Rainbow</option>
               <option value="shake" ${anim==='shake'?'selected':''}>Shake</option>
               <option value="zoom" ${anim==='zoom'?'selected':''}>Zoom</option>
+              <option value="orbit" ${anim==='orbit'?'selected':''}>Orbit Glow</option>
             </select>
           </div>
           <button onclick="openItemPickerForChange()" class="w-full bg-gray-700 hover:bg-gray-600 text-white px-3 py-2 rounded-lg font-medium">Change Item</button>
