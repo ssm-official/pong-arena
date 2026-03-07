@@ -3811,15 +3811,67 @@ function closeLegalModal() {
 // ===========================================
 
 async function loadTokenomics() {
+  // Burned amount
   const burnedEl = document.getElementById('tokenomics-burned');
-  if (!burnedEl) return;
-  try {
-    const res = await fetch('/api/stats/burned').then(r => r.json());
-    const burned = res.totalBurned || 0;
-    burnedEl.textContent = Number(burned).toLocaleString() + ' $PONG';
-  } catch {
-    burnedEl.textContent = '—';
+  if (burnedEl) {
+    try {
+      const res = await fetch('/api/stats/burned').then(r => r.json());
+      const burned = res.totalBurned || 0;
+      const pong = burned / 1e6;
+      burnedEl.textContent = pong.toLocaleString(undefined, { maximumFractionDigits: 0 }) + ' $PONG';
+    } catch {
+      burnedEl.textContent = '0 $PONG';
+    }
   }
+
+  // Animate charts
+  animateTokenomicsCharts();
+}
+
+function animateTokenomicsCharts() {
+  // Animate donut segments
+  document.querySelectorAll('.donut-segment').forEach((seg, i) => {
+    const dash = seg.getAttribute('data-dash');
+    if (dash) {
+      seg.style.transition = 'none';
+      seg.setAttribute('stroke-dasharray', '0 100');
+      setTimeout(() => {
+        seg.style.transition = 'stroke-dasharray 1.2s cubic-bezier(0.4,0,0.2,1)';
+        seg.setAttribute('stroke-dasharray', dash);
+      }, 150 + i * 200);
+    }
+  });
+
+  // Animate bar fills
+  document.querySelectorAll('.bar-fill').forEach((bar, i) => {
+    const target = bar.getAttribute('data-width');
+    if (target) {
+      bar.style.width = '0%';
+      setTimeout(() => {
+        bar.style.transition = 'width 1s cubic-bezier(0.4,0,0.2,1)';
+        bar.style.width = target;
+      }, 300 + i * 150);
+    }
+  });
+
+  // Animate counter numbers
+  document.querySelectorAll('[data-count-to]').forEach(el => {
+    const target = parseFloat(el.getAttribute('data-count-to'));
+    const suffix = el.getAttribute('data-suffix') || '';
+    const decimals = parseInt(el.getAttribute('data-decimals') || '0');
+    let start = 0;
+    const duration = 1500;
+    const startTime = performance.now();
+    function tick(now) {
+      const elapsed = now - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+      const eased = 1 - Math.pow(1 - progress, 3);
+      const current = start + (target - start) * eased;
+      el.textContent = current.toFixed(decimals) + suffix;
+      if (progress < 1) requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
+  });
 }
 
 // ===========================================

@@ -1102,30 +1102,214 @@
 
       <!-- ===== TOKENOMICS TAB ===== -->
       <div id="tab-tokenomics" class="tab-content hidden">
-        <div class="max-w-2xl mx-auto">
-          <h2 class="text-2xl font-black bg-gradient-to-r from-yellow-400 to-purple-400 bg-clip-text text-transparent mb-6">Tokenomics</h2>
+        <div class="max-w-3xl mx-auto">
+          <h2 class="text-3xl font-black bg-gradient-to-r from-yellow-400 via-orange-400 to-purple-400 bg-clip-text text-transparent mb-2 text-center">Tokenomics</h2>
+          <p class="text-gray-500 text-sm text-center mb-8">How $PONG flows through the ecosystem</p>
 
-          <!-- Burn Stats -->
-          <div class="bg-arena-card rounded-2xl border border-purple-900/20 p-5 mb-4">
-            <h3 class="text-sm font-bold text-gray-300 uppercase tracking-wider mb-3">Burn Mechanism</h3>
-            <p class="text-gray-400 text-sm mb-3">8% of every match pot and 100% of all shop revenue is permanently burned.</p>
-            <div class="bg-gray-800/50 rounded-lg p-4 text-center">
-              <p class="text-xs text-gray-500 uppercase mb-1">Total $PONG Burned</p>
-              <p id="tokenomics-burned" class="text-2xl font-black text-orange-400">Loading...</p>
+          <!-- Top Stats Row -->
+          <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+            <div class="bg-arena-card rounded-xl border border-purple-900/20 p-4 text-center">
+              <p class="text-[10px] text-gray-500 uppercase tracking-wider mb-1">Total Supply</p>
+              <p class="text-lg font-black text-white">1B</p>
+              <p class="text-[10px] text-gray-600">$PONG</p>
+            </div>
+            <div class="bg-arena-card rounded-xl border border-orange-900/30 p-4 text-center">
+              <p class="text-[10px] text-gray-500 uppercase tracking-wider mb-1">Total Burned</p>
+              <p id="tokenomics-burned" class="text-lg font-black text-orange-400">0 $PONG</p>
+              <p class="text-[10px] text-orange-600">Forever gone</p>
+            </div>
+            <div class="bg-arena-card rounded-xl border border-green-900/30 p-4 text-center">
+              <p class="text-[10px] text-gray-500 uppercase tracking-wider mb-1">Match Fee</p>
+              <p class="text-lg font-black text-green-400">10%</p>
+              <p class="text-[10px] text-gray-600">Per match pot</p>
+            </div>
+            <div class="bg-arena-card rounded-xl border border-red-900/30 p-4 text-center">
+              <p class="text-[10px] text-gray-500 uppercase tracking-wider mb-1">Shop Burn</p>
+              <p class="text-lg font-black text-red-400">100%</p>
+              <p class="text-[10px] text-gray-600">All revenue burned</p>
             </div>
           </div>
 
-          <!-- Token Distribution -->
-          <div class="bg-arena-card rounded-2xl border border-purple-900/20 p-5 mb-4">
-            <h3 class="text-sm font-bold text-gray-300 uppercase tracking-wider mb-3">Token Distribution</h3>
-            <p class="text-gray-500 text-sm">More details coming soon.</p>
+          <!-- Match Fee Breakdown — Donut Chart -->
+          <div class="bg-arena-card rounded-2xl border border-purple-900/20 p-6 mb-4">
+            <h3 class="text-sm font-bold text-gray-300 uppercase tracking-wider mb-4 flex items-center gap-2">
+              <svg class="w-4 h-4 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+              Match Fee Breakdown (10% of pot)
+            </h3>
+            <div class="flex flex-col sm:flex-row items-center gap-6">
+              <!-- Donut Chart -->
+              <div class="relative w-44 h-44 flex-shrink-0">
+                <svg viewBox="0 0 42 42" class="w-full h-full transform -rotate-90">
+                  <!-- Background circle -->
+                  <circle cx="21" cy="21" r="15.915" fill="transparent" stroke="#1a1a2e" stroke-width="5"/>
+                  <!-- 80% Winner (purple) -->
+                  <circle class="donut-segment" cx="21" cy="21" r="15.915" fill="transparent" stroke="#a855f7" stroke-width="5" stroke-dasharray="0 100" data-dash="80 20" stroke-linecap="round"/>
+                  <!-- 8% Burn (orange) -->
+                  <circle class="donut-segment" cx="21" cy="21" r="15.915" fill="transparent" stroke="#f97316" stroke-width="5" stroke-dasharray="0 100" data-dash="8 92" stroke-dashoffset="-80" stroke-linecap="round"/>
+                  <!-- 2% Dev (cyan) -->
+                  <circle class="donut-segment" cx="21" cy="21" r="15.915" fill="transparent" stroke="#06b6d4" stroke-width="5" stroke-dasharray="0 100" data-dash="2 98" stroke-dashoffset="-88" stroke-linecap="round"/>
+                  <!-- 10% Loser loss (gray, implied) -->
+                  <circle class="donut-segment" cx="21" cy="21" r="15.915" fill="transparent" stroke="#374151" stroke-width="5" stroke-dasharray="0 100" data-dash="10 90" stroke-dashoffset="-90" stroke-linecap="round"/>
+                </svg>
+                <div class="absolute inset-0 flex flex-col items-center justify-center">
+                  <span class="text-2xl font-black text-white" data-count-to="10" data-suffix="%">0%</span>
+                  <span class="text-[9px] text-gray-500 uppercase">Total Fee</span>
+                </div>
+              </div>
+              <!-- Legend -->
+              <div class="flex-1 space-y-3 w-full">
+                <div class="flex items-center justify-between bg-gray-800/40 rounded-lg px-4 py-2.5">
+                  <div class="flex items-center gap-2"><span class="w-3 h-3 rounded-full bg-purple-500"></span><span class="text-sm text-gray-300">Winner Payout</span></div>
+                  <span class="text-sm font-bold text-purple-400">90%</span>
+                </div>
+                <div class="flex items-center justify-between bg-gray-800/40 rounded-lg px-4 py-2.5">
+                  <div class="flex items-center gap-2"><span class="w-3 h-3 rounded-full bg-orange-500"></span><span class="text-sm text-gray-300">Burned Forever</span></div>
+                  <span class="text-sm font-bold text-orange-400">8%</span>
+                </div>
+                <div class="flex items-center justify-between bg-gray-800/40 rounded-lg px-4 py-2.5">
+                  <div class="flex items-center gap-2"><span class="w-3 h-3 rounded-full bg-cyan-500"></span><span class="text-sm text-gray-300">Dev Revenue</span></div>
+                  <span class="text-sm font-bold text-cyan-400">2%</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Shop Revenue Breakdown -->
+          <div class="bg-arena-card rounded-2xl border border-purple-900/20 p-6 mb-4">
+            <h3 class="text-sm font-bold text-gray-300 uppercase tracking-wider mb-4 flex items-center gap-2">
+              <svg class="w-4 h-4 text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 18.657A8 8 0 016.343 7.343S7 9 9 10c0-2 .5-5 2.986-7C14 5 16.09 5.777 17.656 7.343A7.975 7.975 0 0120 13a7.975 7.975 0 01-2.343 5.657z"/></svg>
+              Shop Revenue — 100% Burned
+            </h3>
+            <div class="space-y-4">
+              <!-- Bar: Crate Purchases -->
+              <div>
+                <div class="flex justify-between text-xs mb-1.5">
+                  <span class="text-gray-400">Crate Purchases</span>
+                  <span class="text-orange-400 font-bold">100% Burned</span>
+                </div>
+                <div class="w-full h-3 bg-gray-800 rounded-full overflow-hidden">
+                  <div class="bar-fill h-full rounded-full bg-gradient-to-r from-orange-600 to-red-500" data-width="100%" style="width:0%"></div>
+                </div>
+              </div>
+              <!-- Bar: Skin Purchases -->
+              <div>
+                <div class="flex justify-between text-xs mb-1.5">
+                  <span class="text-gray-400">Direct Skin Purchases</span>
+                  <span class="text-orange-400 font-bold">100% Burned</span>
+                </div>
+                <div class="w-full h-3 bg-gray-800 rounded-full overflow-hidden">
+                  <div class="bar-fill h-full rounded-full bg-gradient-to-r from-orange-600 to-red-500" data-width="100%" style="width:0%"></div>
+                </div>
+              </div>
+              <div class="bg-orange-900/20 border border-orange-800/30 rounded-lg p-3 mt-2">
+                <p class="text-xs text-orange-300/80 flex items-center gap-2">
+                  <svg class="w-3.5 h-3.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/></svg>
+                  Every $PONG spent in the shop is permanently removed from circulation. Zero revenue kept.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <!-- How Money Flows -->
+          <div class="bg-arena-card rounded-2xl border border-purple-900/20 p-6 mb-4">
+            <h3 class="text-sm font-bold text-gray-300 uppercase tracking-wider mb-4 flex items-center gap-2">
+              <svg class="w-4 h-4 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+              Revenue Model
+            </h3>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div class="bg-gradient-to-br from-cyan-900/30 to-cyan-900/10 border border-cyan-800/30 rounded-xl p-4">
+                <div class="flex items-center gap-2 mb-2">
+                  <div class="w-8 h-8 rounded-lg bg-cyan-500/20 flex items-center justify-center">
+                    <svg class="w-4 h-4 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+                  </div>
+                  <h4 class="text-sm font-bold text-cyan-300">Match Fees</h4>
+                </div>
+                <p class="text-xs text-gray-400 mb-3">Dev team earns 2% of every match pot. This funds development, servers, and new features.</p>
+                <div class="flex items-center gap-2">
+                  <span class="text-lg font-black text-cyan-400" data-count-to="2" data-suffix="%" data-decimals="0">0%</span>
+                  <span class="text-[10px] text-gray-500">of each match</span>
+                </div>
+              </div>
+              <div class="bg-gradient-to-br from-orange-900/30 to-orange-900/10 border border-orange-800/30 rounded-xl p-4">
+                <div class="flex items-center gap-2 mb-2">
+                  <div class="w-8 h-8 rounded-lg bg-orange-500/20 flex items-center justify-center">
+                    <svg class="w-4 h-4 text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 18.657A8 8 0 016.343 7.343S7 9 9 10c0-2 .5-5 2.986-7C14 5 16.09 5.777 17.656 7.343A7.975 7.975 0 0120 13a7.975 7.975 0 01-2.343 5.657z"/></svg>
+                  </div>
+                  <h4 class="text-sm font-bold text-orange-300">Deflationary Burn</h4>
+                </div>
+                <p class="text-xs text-gray-400 mb-3">8% of matches + 100% of shop revenue is burned. Supply shrinks every single day.</p>
+                <div class="flex items-center gap-2">
+                  <span class="text-lg font-black text-orange-400" data-count-to="100" data-suffix="%" data-decimals="0">0%</span>
+                  <span class="text-[10px] text-gray-500">shop burn rate</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Token Flow Visualization -->
+          <div class="bg-arena-card rounded-2xl border border-purple-900/20 p-6 mb-4">
+            <h3 class="text-sm font-bold text-gray-300 uppercase tracking-wider mb-4 flex items-center gap-2">
+              <svg class="w-4 h-4 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+              Where Every $PONG Goes
+            </h3>
+            <!-- Match flow -->
+            <div class="mb-5">
+              <p class="text-xs text-gray-500 uppercase tracking-wider mb-2">Match (2 players stake)</p>
+              <div class="space-y-2">
+                <div>
+                  <div class="flex justify-between text-xs mb-1"><span class="text-purple-300">Winner Takes</span><span class="text-gray-400">90%</span></div>
+                  <div class="w-full h-2.5 bg-gray-800 rounded-full overflow-hidden"><div class="bar-fill h-full rounded-full bg-gradient-to-r from-purple-600 to-purple-400" data-width="90%" style="width:0%"></div></div>
+                </div>
+                <div>
+                  <div class="flex justify-between text-xs mb-1"><span class="text-orange-300">Burned</span><span class="text-gray-400">8%</span></div>
+                  <div class="w-full h-2.5 bg-gray-800 rounded-full overflow-hidden"><div class="bar-fill h-full rounded-full bg-gradient-to-r from-orange-600 to-red-500" data-width="8%" style="width:0%"></div></div>
+                </div>
+                <div>
+                  <div class="flex justify-between text-xs mb-1"><span class="text-cyan-300">Dev Team</span><span class="text-gray-400">2%</span></div>
+                  <div class="w-full h-2.5 bg-gray-800 rounded-full overflow-hidden"><div class="bar-fill h-full rounded-full bg-gradient-to-r from-cyan-600 to-cyan-400" data-width="2%" style="width:0%"></div></div>
+                </div>
+              </div>
+            </div>
+            <!-- Shop flow -->
+            <div>
+              <p class="text-xs text-gray-500 uppercase tracking-wider mb-2">Shop Purchase</p>
+              <div>
+                <div class="flex justify-between text-xs mb-1"><span class="text-orange-300">Burned</span><span class="text-gray-400">100%</span></div>
+                <div class="w-full h-2.5 bg-gray-800 rounded-full overflow-hidden"><div class="bar-fill h-full rounded-full bg-gradient-to-r from-orange-600 via-red-500 to-pink-500" data-width="100%" style="width:0%"></div></div>
+              </div>
+            </div>
           </div>
 
           <!-- Supply Info -->
-          <div class="bg-arena-card rounded-2xl border border-purple-900/20 p-5">
-            <h3 class="text-sm font-bold text-gray-300 uppercase tracking-wider mb-3">Supply Info</h3>
-            <p class="text-gray-500 text-sm">More details coming soon.</p>
+          <div class="bg-arena-card rounded-2xl border border-purple-900/20 p-6">
+            <h3 class="text-sm font-bold text-gray-300 uppercase tracking-wider mb-4 flex items-center gap-2">
+              <svg class="w-4 h-4 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+              Token Info
+            </h3>
+            <div class="grid grid-cols-2 gap-3">
+              <div class="bg-gray-800/40 rounded-lg p-3">
+                <p class="text-[10px] text-gray-500 uppercase mb-0.5">Network</p>
+                <p class="text-sm font-bold text-white">Solana</p>
+              </div>
+              <div class="bg-gray-800/40 rounded-lg p-3">
+                <p class="text-[10px] text-gray-500 uppercase mb-0.5">Token Standard</p>
+                <p class="text-sm font-bold text-white">SPL (Token-2022)</p>
+              </div>
+              <div class="bg-gray-800/40 rounded-lg p-3">
+                <p class="text-[10px] text-gray-500 uppercase mb-0.5">Decimals</p>
+                <p class="text-sm font-bold text-white">6</p>
+              </div>
+              <div class="bg-gray-800/40 rounded-lg p-3">
+                <p class="text-[10px] text-gray-500 uppercase mb-0.5">Supply Model</p>
+                <p class="text-sm font-bold text-orange-400">Deflationary</p>
+              </div>
+            </div>
+            <div class="mt-3 bg-gray-800/40 rounded-lg p-3">
+              <p class="text-[10px] text-gray-500 uppercase mb-0.5">Contract Address</p>
+              <p class="text-xs font-mono text-purple-400 break-all">GVLfSudckNc8L1MGWUJP5vXUgFNtYJqjytLR7xm3pump</p>
+            </div>
           </div>
+
         </div>
       </div>
 
