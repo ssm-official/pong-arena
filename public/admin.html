@@ -981,6 +981,7 @@
         title: type === 'banner' ? '' : 'New Section',
         type,
         order: layoutSections.length,
+        width: 'full',
         bannerImage: null,
         items: [],
       };
@@ -1146,13 +1147,15 @@
         return;
       }
       const sorted = [...layoutSections].sort((a, b) => (a.order || 0) - (b.order || 0));
-      let html = '';
+      const widthClass = { full: 'w-full', half: 'w-[calc(50%-6px)]', third: 'w-[calc(33.333%-8px)]' };
+      let html = '<div class="flex flex-wrap gap-3">';
       for (const section of sorted) {
         const isSel = section.id === selectedSectionId && !selectedItemId;
         const sectionBorder = isSel ? 'border-purple-500 ring-1 ring-purple-500/30' : 'border-gray-800 hover:border-gray-700';
+        const wc = widthClass[section.width] || 'w-full';
 
         if (section.type === 'banner') {
-          html += `<div class="rounded-xl border-2 ${sectionBorder} overflow-hidden cursor-pointer transition-all" onclick="selectSection('${section.id}')">`;
+          html += `<div class="${wc} rounded-xl border-2 ${sectionBorder} overflow-hidden cursor-pointer transition-all" onclick="selectSection('${section.id}')">`;
           if (section.bannerImage) {
             html += `<img src="${esc(section.bannerImage)}" class="w-full" />`;
           } else {
@@ -1166,7 +1169,7 @@
         const gridCols = isFeatured ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3' : 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-4';
         const titleClass = isFeatured ? 'text-xl bg-gradient-to-r from-yellow-400 to-purple-400 bg-clip-text text-transparent' : 'text-lg text-white';
 
-        html += `<div class="rounded-xl border-2 ${sectionBorder} p-3 transition-all">`;
+        html += `<div class="${wc} rounded-xl border-2 ${sectionBorder} p-3 transition-all">`;
         html += `<div class="cursor-pointer mb-2" onclick="selectSection('${section.id}')">`;
         html += `<h3 class="font-bold ${titleClass}">${esc(section.title || 'Untitled')}</h3>`;
         const expiry = section.expiresAt ? `&middot; <span class="text-yellow-400">expires ${new Date(section.expiresAt).toLocaleDateString()}</span>` : '';
@@ -1190,6 +1193,7 @@
         }
         html += '</div>';
       }
+      html += '</div>'; // close flex-wrap
       container.innerHTML = html;
     }
 
@@ -1348,6 +1352,15 @@
           <option value="banner" ${section.type==='banner'?'selected':''}>Banner</option>
         </select>
       </div>`;
+      const w = section.width || 'full';
+      html += `<div>
+        <label class="text-gray-500">Width</label>
+        <select onchange="updateSectionProp('width',this.value)" class="w-full bg-gray-800 border border-gray-700 rounded px-1.5 py-1 text-white">
+          <option value="full" ${w==='full'?'selected':''}>Full</option>
+          <option value="half" ${w==='half'?'selected':''}>Half (1/2)</option>
+          <option value="third" ${w==='third'?'selected':''}>Third (1/3)</option>
+        </select>
+      </div>`;
 
       if (section.type === 'banner') {
         html += `<div>
@@ -1443,6 +1456,7 @@
       try {
         const cleaned = layoutSections.map(s => ({
           id: s.id, title: s.title, type: s.type, order: s.order,
+          width: s.width || 'full',
           bannerImage: s.bannerImage || null,
           expiresAt: s.expiresAt || null,
           items: (s.items || []).map(i => ({

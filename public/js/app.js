@@ -1831,9 +1831,12 @@ async function loadShop() {
       fallback.classList.add('hidden');
 
       const sortedSections = [...layout.sections].sort((a, b) => (a.order || 0) - (b.order || 0));
+      let sectionsHtml = '<div class="flex flex-wrap gap-4">';
       for (const section of sortedSections) {
-        layoutContainer.innerHTML += renderShopSection(section, allSkins, allCrates, ownedCrates);
+        sectionsHtml += renderShopSection(section, allSkins, allCrates, ownedCrates);
       }
+      sectionsHtml += '</div>';
+      layoutContainer.innerHTML = sectionsHtml;
     } else {
       // Fallback: legacy crate layout
       layoutContainer.innerHTML = '';
@@ -1898,9 +1901,12 @@ function renderShopSection(section, allSkins, allCrates, ownedCrates) {
   // Skip expired sections
   if (section.expiresAt && new Date(section.expiresAt) <= new Date()) return '';
 
+  const widthStyle = { half: 'width:calc(50% - 8px)', third: 'width:calc(33.333% - 11px)' };
+  const ws = widthStyle[section.width] || 'width:100%';
+
   if (section.type === 'banner') {
     if (!section.bannerImage) return '';
-    return `<div class="mb-6 rounded-2xl overflow-hidden"><img src="${esc(section.bannerImage)}" class="w-full" /></div>`;
+    return `<div class="mb-4 rounded-2xl overflow-hidden" style="${ws}"><img src="${esc(section.bannerImage)}" class="w-full" /></div>`;
   }
 
   const items = (section.items || []).sort((a, b) => (a.order || 0) - (b.order || 0));
@@ -1927,7 +1933,7 @@ function renderShopSection(section, allSkins, allCrates, ownedCrates) {
   }
 
   return `
-    <div class="mb-6" ${section.expiresAt ? `data-section-expires="${esc(section.expiresAt)}"` : ''}>
+    <div class="mb-4" style="${ws}" ${section.expiresAt ? `data-section-expires="${esc(section.expiresAt)}"` : ''}>
       <div class="flex items-center mb-3">
         ${section.title ? `<h3 class="text-lg font-bold text-white ${isFeatured ? 'text-xl bg-gradient-to-r from-yellow-400 to-purple-400 bg-clip-text text-transparent' : ''}">${esc(section.title)}</h3>` : ''}
         ${countdownHtml}
