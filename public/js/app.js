@@ -2118,12 +2118,21 @@ socket.on('game-chat-msg', (data) => {
 
 async function loadShop() {
   try {
+    // Show loading indicator while shop data loads
+    const layoutContainer = document.getElementById('shop-layout-container');
+    const fallback = document.getElementById('shop-fallback');
+    if (layoutContainer) layoutContainer.innerHTML = `
+      <div class="flex flex-col items-center justify-center py-16">
+        <div class="w-10 h-10 border-4 border-purple-500 border-t-transparent rounded-full animate-spin mb-4"></div>
+        <p class="text-gray-400 text-sm">Loading shop...</p>
+      </div>`;
+    if (fallback) fallback.classList.add('hidden');
+
     const auth = getAuthHeader();
     const resp = await fetch('/api/shop', { headers: { Authorization: auth } });
     const res = await resp.json();
     if (res.error) {
-      const fallback = document.getElementById('shop-fallback');
-      if (fallback) fallback.innerHTML = '<p class="text-red-400 text-sm text-center py-8">Failed to load shop.</p>';
+      if (layoutContainer) layoutContainer.innerHTML = '<p class="text-red-400 text-sm text-center py-8">Failed to load shop.</p>';
       return;
     }
     const ownedCrates = res.ownedCrates || {};
@@ -2131,8 +2140,6 @@ async function loadShop() {
     const allSkins = res.skins || [];
     const allCrates = [...(res.limited || []), ...(res.standard || [])];
 
-    const layoutContainer = document.getElementById('shop-layout-container');
-    const fallback = document.getElementById('shop-fallback');
     const ownedSkinIds = (res.inventory || []).map(s => s.skinId);
 
     // Canvas layout (new)
@@ -2173,6 +2180,8 @@ async function loadShop() {
     startShopCountdowns();
   } catch (err) {
     console.error('Failed to load shop:', err);
+    const layoutContainer = document.getElementById('shop-layout-container');
+    if (layoutContainer) layoutContainer.innerHTML = '<p class="text-red-400 text-sm text-center py-8">Failed to load shop. Try again.</p>';
   }
 }
 
@@ -3670,6 +3679,9 @@ socket.on('online-users', (users) => {
   if (dashCount) dashCount.textContent = users.length;
   const dashPlayers = document.getElementById('dash-players-ingame');
   if (dashPlayers) dashPlayers.textContent = users.length;
+  // Re-render friend list so online dots update in real-time
+  const friendTab = document.getElementById('tab-friends');
+  if (friendTab && !friendTab.classList.contains('hidden')) loadFriends();
 });
 
 // Socket: Errors
