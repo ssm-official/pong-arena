@@ -967,9 +967,9 @@
 
       <!-- ===== FRIENDS TAB ===== -->
       <div id="tab-friends" class="tab-content hidden">
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <!-- Search & Add -->
-          <div>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <!-- Left: Search & Requests -->
+          <div class="overflow-y-auto max-h-[calc(100vh-120px)]">
             <h3 class="text-lg font-bold mb-3">Find Players</h3>
             <div class="relative mb-4">
               <input id="friend-search" type="text" placeholder="Search by username..." autocomplete="off"
@@ -985,23 +985,28 @@
             </div>
           </div>
 
-          <!-- Friend List -->
-          <div>
+          <!-- Middle: Friend List -->
+          <div class="overflow-y-auto max-h-[calc(100vh-120px)]">
             <h3 class="text-lg font-bold mb-3">Friends</h3>
             <div id="friend-list" class="space-y-2">
               <p class="text-gray-500 text-sm">No friends yet. Search to add players!</p>
             </div>
           </div>
+
+          <!-- Right: Recent Opponents -->
+          <div class="overflow-y-auto max-h-[calc(100vh-120px)]">
+            <h3 class="text-lg font-bold mb-3">Recent Opponents</h3>
+            <p class="text-gray-500 text-xs mb-3">Players you've recently faced</p>
+            <div id="friends-opponents-list" class="space-y-2">
+              <p class="text-gray-500 text-sm">No recent opponents yet.</p>
+            </div>
+          </div>
         </div>
       </div>
 
-      <!-- ===== RECENT OPPONENTS TAB ===== -->
+      <!-- Legacy opponents-list container (kept for backwards compat) -->
       <div id="tab-opponents" class="tab-content hidden">
-        <h2 class="text-xl font-bold mb-4">Recent Opponents</h2>
-        <p class="text-gray-500 text-xs mb-4">Players you've recently faced. Add them as friends!</p>
-        <div id="opponents-list" class="space-y-2">
-          <p class="text-gray-500 text-sm">No recent opponents yet.</p>
-        </div>
+        <div id="opponents-list" class="space-y-2"></div>
       </div>
 
       <!-- ===== SHOP TAB (Full-Page Layout-Driven Item Shop) ===== -->
@@ -1368,10 +1373,11 @@
       <button onclick="closeDmPanel()" class="text-gray-400 hover:text-white text-xl">&times;</button>
     </div>
     <div id="dm-messages" class="flex-1 overflow-y-auto p-3 space-y-2 text-sm"></div>
+    <div id="dm-typing-indicator" class="hidden px-3 pb-1 text-xs text-gray-400 italic"></div>
     <div class="border-t border-gray-800 p-3 flex gap-2">
       <input id="dm-input" type="text" maxlength="500" placeholder="Type a message..."
         class="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:border-purple-500 focus:outline-none"
-        onkeydown="if(event.key==='Enter')sendDm()" />
+        onkeydown="if(event.key==='Enter')sendDm()" oninput="emitDmTyping()" />
       <button onclick="sendDm()" class="bg-purple-600 hover:bg-purple-700 px-4 py-2 rounded-lg text-sm transition">Send</button>
     </div>
   </div>

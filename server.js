@@ -281,6 +281,16 @@ io.on('connection', (socket) => {
     }
   });
 
+  socket.on('dm-typing', ({ to }) => {
+    if (!socket.wallet || !to) return;
+    const recipient = onlineUsers.get(to);
+    if (recipient) {
+      io.to(recipient.socketId).emit('dm-typing', {
+        from: socket.wallet, fromUsername: socket.username
+      });
+    }
+  });
+
   // --- Disconnect ---
   socket.on('disconnect', () => {
     if (socket.wallet) {

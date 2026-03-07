@@ -10,6 +10,9 @@ let pendingEscrowTx = null;
 let isMirrored = false;
 let chosenSide = 'left';
 let cachedBalancePong = null; // cached PONG amount for USD re-render on price arrival
+let cachedFriends = []; // cached friends list for instant re-render on online status change
+let dmTypingTimeout = null; // typing indicator timeout
+let dmTypingEmitTimeout = null; // debounce for emitting typing events
 
 // --- Rarity config ---
 const RARITY_COLORS = {
@@ -216,7 +219,7 @@ const TAB_ROUTES = {
   '/leaderboard': 'leaderboard',
   '/profile': 'profile',
   '/friends': 'friends',
-  '/opponents': 'opponents',
+  '/opponents': 'friends',
   '/cosmetics': 'cosmetics',
   '/shop': 'shop',
   '/history': 'history',
@@ -571,7 +574,7 @@ function switchTab(tab, pushState) {
   if (tab === 'shop') loadShop();
   if (tab === 'history') loadHistory();
   if (tab === 'leaderboard') loadLeaderboard(currentLbSort);
-  if (tab === 'opponents') loadRecentOpponents();
+  // opponents tab removed — now integrated into friends tab
   if (tab === 'settings') loadSettings();
   if (tab === 'tokenomics') loadTokenomics();
 }
@@ -1241,8 +1244,10 @@ async function loadFriends() {
       fetch('/api/friends', { headers: { Authorization: auth } }).then(r => r.json()),
       fetch('/api/friends/requests', { headers: { Authorization: auth } }).then(r => r.json()),
     ]);
-    renderFriendList(friendRes.friends || []);
+    cachedFriends = friendRes.friends || [];
+    renderFriendList(cachedFriends);
     renderFriendRequests(requestRes.requests || []);
+    loadFriendsOpponents();
   } catch (err) {
     console.error('Failed to load friends:', err);
   }
@@ -1254,7 +1259,14 @@ function renderFriendList(friends) {
     container.innerHTML = '<p class="text-gray-500 text-sm">No friends yet.</p>';
     return;
   }
-  container.innerHTML = friends.map(f => {
+  // Sort: online first, then alphabetical
+  const sorted = [...friends].sort((a, b) => {
+    const aOn = onlineUsers.includes(a.wallet) ? 0 : 1;
+    const bOn = onlineUsers.includes(b.wallet) ? 0 : 1;
+    if (aOn !== bOn) return aOn - bOn;
+    return (a.username || '').localeCompare(b.username || '');
+  });
+  container.innerHTML = sorted.map(f => {
     const isOnline = onlineUsers.includes(f.wallet);
     const unread = unreadCounts[f.wallet] || 0;
     return `
@@ -1267,7 +1279,9 @@ function renderFriendList(friends) {
         </div>
         <div class="flex gap-2 items-center">
           <button onclick="openDmPanel('${f.wallet}', '${esc(f.username)}')" class="text-blue-400 hover:text-blue-300 text-xs">Chat</button>
-          ${isOnline ? `<button onclick="openDuelModal('${f.wallet}', '${esc(f.username)}')" class="text-yellow-400 hover:text-yellow-300 text-xs">Challenge</button>` : ''}
+          <button onclick="openDuelModal('${f.wallet}', '${esc(f.username)}')"
+            class="${isOnline ? 'text-yellow-400 hover:text-yellow-300' : 'text-gray-600 cursor-not-allowed'} text-xs"
+            ${isOnline ? '' : 'disabled title="Player is offline"'}>Challenge</button>
           <button onclick="removeFriend('${f.wallet}')" class="text-red-400 hover:text-red-300 text-xs">Remove</button>
         </div>
       </div>
@@ -1375,6 +1389,53 @@ async function loadRecentOpponents() {
   }
 }
 
+async function loadFriendsOpponents() {
+  try {
+    const res = await fetch('/api/profile/history', {
+      headers: { Authorization: getAuthHeader() }
+    }).then(r => r.json());
+
+    const container = document.getElementById('friends-opponents-list');
+    if (!container) return;
+    if (!res.matches || res.matches.length === 0) {
+      container.innerHTML = '<p class="text-gray-500 text-sm">No recent opponents yet.</p>';
+      return;
+    }
+
+    const seen = new Set();
+    const opponents = [];
+    for (const m of res.matches) {
+      const oppWallet = m.player1 === currentUser.wallet ? m.player2 : m.player1;
+      const oppName = m.player1 === currentUser.wallet ? m.player2Username : m.player1Username;
+      if (!seen.has(oppWallet)) {
+        seen.add(oppWallet);
+        const won = m.winner === currentUser.wallet;
+        opponents.push({ wallet: oppWallet, username: oppName, won, score: m.score, tier: m.tier });
+      }
+    }
+
+    const isFriend = (wallet) => currentUser.friends && currentUser.friends.includes(wallet);
+
+    container.innerHTML = opponents.slice(0, 20).map(o => `
+      <div class="bg-arena-card rounded-lg p-3 flex items-center justify-between">
+        <div class="flex items-center gap-3 cursor-pointer" onclick="showProfilePopup('${o.wallet}')">
+          <div class="w-2 h-2 rounded-full ${onlineUsers.includes(o.wallet) ? 'bg-green-400' : 'bg-gray-600'}"></div>
+          <span class="font-medium text-sm">${esc(o.username || 'Unknown')}</span>
+          <span class="text-xs ${o.won ? 'text-green-400' : 'text-red-400'}">${o.won ? 'W' : 'L'}</span>
+        </div>
+        <div class="flex gap-2">
+          ${isFriend(o.wallet)
+            ? '<span class="text-green-400 text-xs">Friends</span>'
+            : `<button onclick="addFriend('${o.wallet}')" class="bg-purple-600 hover:bg-purple-700 px-3 py-1 rounded text-xs transition">Add Friend</button>`
+          }
+        </div>
+      </div>
+    `).join('');
+  } catch (err) {
+    console.error('Failed to load friends opponents:', err);
+  }
+}
+
 // ===========================================
 // DIRECT MESSAGES (DM Panel)
 // ===========================================
@@ -1408,6 +1469,10 @@ function updateFriendsBadge() {
 function openDmPanel(wallet, username) {
   dmOpenWallet = wallet;
   dmOpenUsername = username;
+  // Clear typing indicator from previous chat
+  const typingEl = document.getElementById('dm-typing-indicator');
+  if (typingEl) typingEl.classList.add('hidden');
+  clearTimeout(dmTypingTimeout);
   document.getElementById('dm-panel-username').textContent = username;
   document.getElementById('dm-panel-pfp').src = '';
   document.getElementById('dm-messages').innerHTML = '<p class="text-gray-500 text-xs text-center">Loading...</p>';
@@ -1439,11 +1504,18 @@ async function loadDmHistory(wallet) {
       container.innerHTML = '<p class="text-gray-500 text-xs text-center">No messages yet. Say hi!</p>';
       return;
     }
+    let lastDate = '';
     container.innerHTML = res.messages.map(m => {
       const isMe = m.from === currentUser.wallet;
-      return `
+      const msgDate = new Date(m.createdAt).toDateString();
+      let separator = '';
+      if (msgDate !== lastDate) {
+        lastDate = msgDate;
+        separator = `<div class="text-center text-[10px] text-gray-600 my-2">${formatDateSeparator(m.createdAt)}</div>`;
+      }
+      return `${separator}
         <div class="flex ${isMe ? 'justify-end' : 'justify-start'}">
-          <div class="max-w-[80%] px-3 py-1.5 rounded-lg text-sm ${isMe ? 'bg-purple-600/40' : 'bg-gray-700'}">
+          <div class="max-w-[80%] px-3 py-1.5 text-sm ${isMe ? 'bg-purple-600/40 rounded-2xl rounded-br-sm' : 'bg-gray-700 rounded-2xl rounded-bl-sm'}">
             ${esc(m.text)}
             <div class="text-[10px] text-gray-500 mt-0.5">${formatTime(m.createdAt)}</div>
           </div>
@@ -1469,7 +1541,7 @@ function sendDm() {
   if (emptyMsg) emptyMsg.remove();
   container.innerHTML += `
     <div class="flex justify-end">
-      <div class="max-w-[80%] px-3 py-1.5 rounded-lg text-sm bg-purple-600/40">
+      <div class="max-w-[80%] px-3 py-1.5 text-sm bg-purple-600/40 rounded-2xl rounded-br-sm">
         ${esc(text)}
         <div class="text-[10px] text-gray-500 mt-0.5">now</div>
       </div>
@@ -1482,12 +1554,17 @@ function sendDm() {
 socket.on('dm-receive', (data) => {
   // If DM panel is open for this sender, add message
   if (dmOpenWallet === data.from) {
+    // Hide typing indicator when message arrives
+    const typingEl = document.getElementById('dm-typing-indicator');
+    if (typingEl) typingEl.classList.add('hidden');
+    clearTimeout(dmTypingTimeout);
+
     const container = document.getElementById('dm-messages');
     const emptyMsg = container.querySelector('p.text-gray-500');
     if (emptyMsg) emptyMsg.remove();
     container.innerHTML += `
       <div class="flex justify-start">
-        <div class="max-w-[80%] px-3 py-1.5 rounded-lg text-sm bg-gray-700">
+        <div class="max-w-[80%] px-3 py-1.5 text-sm bg-gray-700 rounded-2xl rounded-bl-sm">
           ${esc(data.text)}
           <div class="text-[10px] text-gray-500 mt-0.5">now</div>
         </div>
@@ -1505,6 +1582,33 @@ socket.on('dm-receive', (data) => {
 function formatTime(dateStr) {
   const d = new Date(dateStr);
   return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
+function formatDateSeparator(dateStr) {
+  const d = new Date(dateStr);
+  const today = new Date();
+  const yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
+  if (d.toDateString() === today.toDateString()) return 'Today';
+  if (d.toDateString() === yesterday.toDateString()) return 'Yesterday';
+  return d.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+// --- DM Typing Indicator ---
+socket.on('dm-typing', (data) => {
+  if (dmOpenWallet !== data.from) return;
+  const indicator = document.getElementById('dm-typing-indicator');
+  if (!indicator) return;
+  indicator.textContent = `${data.fromUsername || 'Someone'} is typing...`;
+  indicator.classList.remove('hidden');
+  clearTimeout(dmTypingTimeout);
+  dmTypingTimeout = setTimeout(() => indicator.classList.add('hidden'), 3000);
+});
+
+function emitDmTyping() {
+  if (!dmOpenWallet || dmTypingEmitTimeout) return;
+  socket.emit('dm-typing', { to: dmOpenWallet });
+  dmTypingEmitTimeout = setTimeout(() => { dmTypingEmitTimeout = null; }, 2000);
 }
 
 // ===========================================
@@ -3701,9 +3805,11 @@ socket.on('online-users', (users) => {
   if (dashCount) dashCount.textContent = users.length;
   const dashPlayers = document.getElementById('dash-players-ingame');
   if (dashPlayers) dashPlayers.textContent = users.length;
-  // Re-render friend list so online dots update in real-time
+  // Re-render friend list from cache (no API refetch, instant update)
   const friendTab = document.getElementById('tab-friends');
-  if (friendTab && !friendTab.classList.contains('hidden')) loadFriends();
+  if (friendTab && !friendTab.classList.contains('hidden') && cachedFriends.length > 0) {
+    renderFriendList(cachedFriends);
+  }
 });
 
 // Socket: Errors
