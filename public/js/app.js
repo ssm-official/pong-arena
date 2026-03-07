@@ -449,6 +449,8 @@ function showApp() {
   startPriceRefresh();
   // Show online count
   document.getElementById('online-count').classList.remove('hidden');
+  // Show top-right balance bar
+  showTopbarBalance();
   // Fetch unread DM counts
   fetchUnreadCounts();
 }
@@ -3964,6 +3966,33 @@ function updateDashboardStats() {
   // Stats updated via other dashboard functions (balance, burned, etc.)
 }
 
+function updateTopbarBalance() {
+  const topUsd = document.getElementById('topbar-usd');
+  const topPong = document.getElementById('topbar-pong');
+  if (!topUsd || !topPong) return;
+  if (cachedBalancePong == null) {
+    topUsd.textContent = '--';
+    topPong.textContent = '-- PONG';
+    return;
+  }
+  if (pongPriceUsd > 0) {
+    topUsd.textContent = formatUsd(cachedBalancePong * pongPriceUsd);
+  } else {
+    topUsd.textContent = '--';
+  }
+  topPong.textContent = formatPongShort(cachedBalancePong) + ' PONG';
+}
+
+function showTopbarBalance() {
+  const el = document.getElementById('topbar-balance');
+  if (el && currentUser) el.classList.remove('hidden');
+}
+
+function hideTopbarBalance() {
+  const el = document.getElementById('topbar-balance');
+  if (el) el.classList.add('hidden');
+}
+
 async function fetchDashboardBalance() {
   if (!currentUser) return;
   const pongEl = document.getElementById('dash-balance-pong');
@@ -3994,16 +4023,19 @@ async function fetchDashboardBalance() {
         usdEl.classList.add('text-gray-500', 'text-sm');
       }
     }
+    updateTopbarBalance();
   } catch (e) {
     cachedBalancePong = null;
     pongEl.textContent = '--';
     if (usdEl) usdEl.textContent = 'Failed to load';
+    updateTopbarBalance();
   }
   if (refreshBtn) { refreshBtn.disabled = false; refreshBtn.classList.remove('opacity-50'); }
 }
 
 function updateBalanceUsdFromCache() {
   if (cachedBalancePong == null || pongPriceUsd <= 0) return;
+  updateTopbarBalance();
   const usdEl = document.getElementById('dash-balance-usd');
   if (!usdEl) return;
   usdEl.textContent = formatUsd(cachedBalancePong * pongPriceUsd);
